@@ -1,35 +1,24 @@
 {
   "expo": {
-    "name": "ChatUp",
+    "name": "ChatUP",
     "slug": "chatup",
     "version": "1.0.0",
     "orientation": "portrait",
-    "icon": "./assets/icon.png",
-    "userInterfaceStyle": "light",
-    "splash": {
-      "image": "./assets/splash.png",
-      "resizeMode": "contain",
-      "backgroundColor": "#ffffff"
-    },
+    "userInterfaceStyle": "automatic",
     "assetBundlePatterns": [
       "**/*"
     ],
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "com.yourname.chatup"
+      "bundleIdentifier": "com.borrisahabwamukama.chatup"
     },
     "android": {
-      "adaptiveIcon": {
-        "foregroundImage": "./assets/adaptive-icon.png",
-        "backgroundColor": "#ffffff"
-      },
-      "package": "com.yourname.chatup"
+      "package": "com.borrisahabwamukama.chatup"
     },
-    "web": {
-      "favicon": "./assets/favicon.png"
-    },
-    "experiments": {
-      "tsconfigPaths": true
+    "extra": {
+      "eas": {
+        "projectId": "399109ca-5901-49fe-bf1b-f88a6e04fa7f"
+      }
     }
   }
 }

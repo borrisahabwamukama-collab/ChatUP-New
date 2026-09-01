@@ -1,27 +1,24 @@
-import React, { useState, useEffect } from 'react';
-import { View, Text, FlatList, TouchableOpacity, StyleSheet, Image } from 'react-native';
-import { MOCK_CHATS } from '../data/mockData'; // use capital D if your file is mockData.js
+import React, { useState } from 'react';
+import { View, Text, FlatList, TouchableOpacity, StyleSheet } from 'react-native';
+
+const MOCK_GROUPS = [
+  { id: '1', name: 'Kampala Sunday Prayer Cell', avatar: '🙏', lastMessage: 'Let us remember to pray for the upcoming outreach.', time: '10:45 AM', unread: 3, isPining: true },
+  { id: '2', name: 'ChatUp Dev Team', avatar: '💻', lastMessage: 'Supabase table policies updated successfully.', time: '9:12 AM', unread: 0, isPining: false },
+  { id: '3', name: 'Worship & Media Hub', avatar: '🎥', lastMessage: 'Camera angles for Sunday service are set.', time: 'Yesterday', unread: 1, isPining: false },
+];
 
 export default function GroupListScreen({ navigation }) {
-  const [chats, setChats] = useState(MOCK_CHATS);
-
-  // This simulates typing in the list. Later we will link it to ChatScreen
-  // For now it just uses the isTyping from mockData
-  useEffect(() => {
-    // You can add logic here later to update isTyping from a global state
-  }, []);
+  const [chats, setChats] = useState(MOCK_GROUPS);
 
   const renderItem = ({ item }) => (
     <TouchableOpacity 
       style={styles.chatItem}
-      onPress={() => navigation.navigate('ChatScreen', { chatId: item.id, name: item.name })}
+      onPress={() => navigation.navigate('ChurchLiveScreen')}
     >
-      {/* Avatar */}
       <View style={styles.avatar}>
         <Text style={styles.avatarText}>{item.avatar}</Text>
       </View>
 
-      {/* Chat Info */}
       <View style={styles.chatInfo}>
         <View style={styles.topRow}>
           <Text style={styles.name}>{item.name}</Text>
@@ -29,11 +26,8 @@ export default function GroupListScreen({ navigation }) {
         </View>
         
         <View style={styles.bottomRow}>
-          <Text 
-            style={[styles.lastMsg, item.isTyping && styles.typingText]} 
-            numberOfLines={1}
-          >
-            {item.isTyping ? 'typing...' : item.lastMessage}
+          <Text style={styles.lastMsg} numberOfLines={1}>
+            {item.lastMessage}
           </Text>
           
           {item.unread > 0 && (
@@ -54,6 +48,13 @@ export default function GroupListScreen({ navigation }) {
         keyExtractor={item => item.id}
         ItemSeparatorComponent={() => <View style={styles.separator} />}
       />
+
+      <TouchableOpacity 
+        style={styles.fab}
+        onPress={() => navigation.navigate('CreateGroupScreen')}
+      >
+        <Text style={styles.fabText}>+</Text>
+      </TouchableOpacity>
     </View>
   );
 }
@@ -72,15 +73,13 @@ const styles = StyleSheet.create({
     width: 52,
     height: 52,
     borderRadius: 26,
-    backgroundColor: '#25D366',
+    backgroundColor: '#2563eb',
     justifyContent: 'center',
     alignItems: 'center',
     marginRight: 12,
   },
   avatarText: {
-    color: 'white',
-    fontSize: 20,
-    fontWeight: 'bold',
+    fontSize: 22,
   },
   chatInfo: {
     flex: 1,
@@ -94,7 +93,7 @@ const styles = StyleSheet.create({
   name: {
     fontSize: 17,
     fontWeight: '600',
-    color: 'black',
+    color: '#0f172a',
   },
   time: {
     fontSize: 12,
@@ -111,13 +110,8 @@ const styles = StyleSheet.create({
     flex: 1,
     marginRight: 8,
   },
-  typingText: {
-    color: '#25D366', // green like whatsapp
-    fontStyle: 'italic',
-    fontWeight: '500',
-  },
   unreadBadge: {
-    backgroundColor: '#25D366',
+    backgroundColor: '#2563eb',
     borderRadius: 12,
     minWidth: 20,
     height: 20,
@@ -134,5 +128,27 @@ const styles = StyleSheet.create({
     height: 1,
     backgroundColor: '#F0F0F0',
     marginLeft: 76,
+  },
+  fab: {
+    position: 'absolute',
+    bottom: 24,
+    right: 24,
+    width: 56,
+    height: 56,
+    borderRadius: 28,
+    backgroundColor: '#2563eb',
+    justifyContent: 'center',
+    alignItems: 'center',
+    elevation: 4,
+    shadowColor: '#000',
+    shadowOpacity: 0.3,
+    shadowRadius: 4,
+    shadowOffset: { width: 0, height: 2 },
+  },
+  fabText: {
+    color: 'white',
+    fontSize: 28,
+    fontWeight: 'bold',
+    marginTop: -2,
   },
 });
