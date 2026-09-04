@@ -1,5 +1,6 @@
 import React, { useState, createContext, useContext } from 'react';
-import { StyleSheet, View, Text, TouchableOpacity, ScrollView, Modal, Pressable, Alert } from 'react-native';
+import { StyleSheet, View, Text, TouchableOpacity, ScrollView, Modal, Pressable, TextInput, Alert } from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
 
 // Core Screens
 import ChatRoomScreen from './src/screens/ChatRoomScreen';
@@ -7,12 +8,14 @@ import SecurityHubScreen from './src/screens/Security/SecurityHubScreen';
 import ReactionsAndBubbles from './src/screens/ReactionsAndBubbles';
 import VoiceAndTranslationScreen from './src/screens/VoiceAndTranslationScreen';
 import DiscoveryWalletScreen from './src/screens/DiscoveryWalletScreen';
-import InChatWalletScreen from './src/screens/InChatWalletScreen';
+import WalletScreen from './src/screens/WalletScreen'; // 🪙 Updated with Financial Treasury, Saved Bank & Mobile Money Accounts
 import LiveStreamScreen from './src/screens/LiveStreamScreen';
+import ReferralRewardsScreen from './src/screens/ReferralRewardsScreen';
 
-// Master Super-Admin Control Panel & Monetization Treasury
+// Master Super-Admin Control Panel, Monetization Treasury & Global AI Supervisor
 import AdminControlPanelScreen from './src/screens/AdminControlPanelScreen';
 import MonetizationTreasuryScreen from './src/screens/MonetizationTreasuryScreen';
+import GlobalAISupervisorScreen from './src/screens/GlobalAISupervisorScreen';
 
 // New Community, Groups, Church & Games Screens
 import GroupListScreen from './src/screens/GroupListScreen';
@@ -43,15 +46,55 @@ export function useMeshNetwork() {
   return useContext(MeshNetworkContext);
 }
 
+// --- INITIAL LOGIN / ONBOARDING SCREEN FOR TESTERS ---
+function LoginScreen({ onLoginSuccess, isDarkMode }) {
+  const [username, setUsername] = useState('');
+
+  const handleLogin = () => {
+    if (!username.trim()) {
+      Alert.alert('Error', 'Please enter your name or tester handle to continue.');
+      return;
+    }
+    onLoginSuccess(username.trim());
+  };
+
+  return (
+    <View style={[styles.loginContainer, isDarkMode && { backgroundColor: '#1a202c' }]}>
+      <View style={[styles.loginCard, isDarkMode && styles.darkHeader]}>
+        <Text style={[styles.loginLogo, isDarkMode && styles.darkText]}>💬 ChatUP</Text>
+        <Text style={[styles.loginSubtitle, isDarkMode && { color: '#a0aec0' }]}>
+          Welcome to your feedback & testing preview! Enter your name to start exploring.
+        </Text>
+
+        <TextInput
+          style={[styles.loginInput, isDarkMode && styles.darkInput]}
+          placeholder="Enter your name or handle..."
+          placeholderTextColor={isDarkMode ? '#718096' : '#a0aec0'}
+          value={username}
+          onChangeText={setUsername}
+        />
+
+        <TouchableOpacity style={styles.loginButton} onPress={handleLogin}>
+          <Text style={styles.loginButtonText}>Start Exploring 🚀</Text>
+        </TouchableOpacity>
+      </View>
+    </View>
+  );
+}
+
 export default function App() {
+  // Authentication & Tester Session State
+  const [isAuthenticated, setIsAuthenticated] = useState(false);
+  const [currentUserHandle, setCurrentUserHandle] = useState('Borris');
+
   const [activeScreen, setActiveScreen] = useState('ChatRoom');
   const [isDarkMode, setIsDarkMode] = useState(false);
   const [coins, setCoins] = useState(2500);
   const [menuVisible, setMenuVisible] = useState(false);
   const [unreadCount, setUnreadCount] = useState(2);
 
-  // Master Super-Admin Master Kill-Switch State
-  const [superAdminAccessEnabled, setSuperAdminAccessEnabled] = useState(true);
+  // Master Super-Admin Master Kill-Switch State (Defaults to false for security)
+  const [superAdminAccessEnabled, setSuperAdminAccessEnabled] = useState(false);
 
   // Global Zero-Net Mesh & Ghost Vault States
   const [meshNodeActive, setMeshNodeActive] = useState(true);
@@ -76,7 +119,7 @@ export default function App() {
     return true;
   };
 
-  // Helper navigation function that passes navigation support via props or state handlers
+  // Helper navigation function
   const navigation = {
     navigate: (screenName, params) => setActiveScreen(screenName),
     goBack: () => setActiveScreen('GroupList'),
@@ -101,6 +144,10 @@ export default function App() {
             setSuperAdminAccessEnabled={setSuperAdminAccessEnabled} 
           />
         ) : <ChatRoomScreen isDarkMode={isDarkMode} />;
+      case 'GlobalAISupervisor':
+        return superAdminAccessEnabled ? (
+          <GlobalAISupervisorScreen isDarkMode={isDarkMode} />
+        ) : <ChatRoomScreen isDarkMode={isDarkMode} />;
       case 'MonetizationTreasury': 
         return superAdminAccessEnabled ? (
           <MonetizationTreasuryScreen isDarkMode={isDarkMode} coins={coins} setCoins={setCoins} />
@@ -110,7 +157,8 @@ export default function App() {
       case 'Reactions': return <ReactionsAndBubbles isDarkMode={isDarkMode} />;
       case 'Voice': return <VoiceAndTranslationScreen isDarkMode={isDarkMode} />;
       case 'Discovery': return <DiscoveryWalletScreen isDarkMode={isDarkMode} />;
-      case 'Wallet': return <InChatWalletScreen isDarkMode={isDarkMode} coins={coins} setCoins={setCoins} />;
+      case 'Wallet': return <WalletScreen isDarkMode={isDarkMode} coins={coins} setCoins={setCoins} />;
+      case 'Referrals': return <ReferralRewardsScreen isDarkMode={isDarkMode} currentUser={{ id: 'borris_01', name: currentUserHandle }} />;
       case 'LiveStream': return <LiveStreamScreen isDarkMode={isDarkMode} coins={coins} setCoins={setCoins} />;
       case 'Analytics': return <AnalyticsScreen isDarkMode={isDarkMode} />;
       case 'Cinema': return <CinemaScreen isDarkMode={isDarkMode} />;
@@ -118,7 +166,15 @@ export default function App() {
       case 'VirtualTVScreen': return <VirtualTVScreen isDarkMode={isDarkMode} coins={coins} setCoins={setCoins} />;
       case 'MeshHub': return <MeshHubScreen isDarkMode={isDarkMode} />;
       case 'DRMHub': return <DRMProtectionScreen isDarkMode={isDarkMode} />;
-      case 'Settings': return <SettingsScreen isDarkMode={isDarkMode} setIsDarkMode={setIsDarkMode} />;
+      case 'Settings': 
+        return (
+          <SettingsScreen 
+            isDarkMode={isDarkMode} 
+            setIsDarkMode={setIsDarkMode} 
+            superAdminAccessEnabled={superAdminAccessEnabled}
+            setSuperAdminAccessEnabled={setSuperAdminAccessEnabled}
+          />
+        );
       case 'Profile': return <ProfileScreen isDarkMode={isDarkMode} coins={coins} />;
       case 'Interpreter': return <UniversalInterpreterModal isDarkMode={isDarkMode} onClose={() => setActiveScreen('ChatRoom')} />;
       default: return <ChatRoomScreen isDarkMode={isDarkMode} />;
@@ -133,6 +189,19 @@ export default function App() {
     }
   };
 
+  // If user hasn't logged in / entered name yet, render the Login Screen
+  if (!isAuthenticated) {
+    return (
+      <LoginScreen 
+        isDarkMode={isDarkMode} 
+        onLoginSuccess={(name) => {
+          setCurrentUserHandle(name);
+          setIsAuthenticated(true);
+        }} 
+      />
+    );
+  }
+
   return (
     <MeshNetworkContext.Provider value={{
       meshNodeActive,
@@ -145,7 +214,7 @@ export default function App() {
     }}>
       <View style={[styles.container, isDarkMode && { backgroundColor: '#1a202c' }]}>
         
-        {/* Top Header Bar with Dynamic Back / Hamburger Button */}
+        {/* Top Header Bar with Clean Unclickable Title */}
         <View style={[styles.headerBar, isDarkMode && styles.darkHeader]}>
           {activeScreen !== 'ChatRoom' ? (
             <TouchableOpacity style={styles.hamburgerButton} onPress={() => setActiveScreen('ChatRoom')}>
@@ -167,8 +236,12 @@ export default function App() {
              activeScreen === 'InteractiveGames' ? '🎮 Live & In-Chat Games' :
              activeScreen === 'GameArena' ? '🏆 Competitive Game Arena' :
              activeScreen === 'CameraHub' ? '🎥 Multi-Camera Hub' :
+             activeScreen === 'Discovery' ? '🔍 Discovery Feed' :
+             activeScreen === 'LiveStream' ? '🔴 Live Stream & Video' :
              activeScreen === 'AdminControl' ? '👑 Master Super-Admin Panel' : 
+             activeScreen === 'GlobalAISupervisor' ? '🤖 Global AI Supervisor & SOC' : 
              activeScreen === 'MonetizationTreasury' ? '🪙 Monetization & Escrow' : 
+             activeScreen === 'Referrals' ? '🎁 Referrals & Rewards QR' : 
              activeScreen === 'Interpreter' ? '🌐 Global AI Interpreter' : 
              activeScreen === 'MeshHub' ? '🛰️ Zero-Net & Ghost Vault' : 
              activeScreen === 'DRMHub' ? '🛡️ DRM & Copyright' : 
@@ -192,6 +265,35 @@ export default function App() {
           </View>
         </View>
 
+        {/* Top Secondary Sub-Nav Bar (Discovery & Video Only for Regular Users) */}
+        <View style={[styles.topSubBar, isDarkMode && styles.darkTopSubBar]}>
+          <TouchableOpacity 
+            style={[styles.subTabItem, activeScreen === 'Discovery' && styles.activeSubTab]} 
+            onPress={() => setActiveScreen('Discovery')}
+          >
+            <Ionicons name="compass-outline" size={15} color={activeScreen === 'Discovery' ? '#007AFF' : (isDarkMode ? '#a0aec0' : '#4a5568')} />
+            <Text style={[styles.subTabText, activeScreen === 'Discovery' && styles.activeSubTabText, isDarkMode && styles.darkText]}>Discovery</Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity 
+            style={[styles.subTabItem, activeScreen === 'LiveStream' && styles.activeSubTab]} 
+            onPress={() => setActiveScreen('LiveStream')}
+          >
+            <Ionicons name="videocam-outline" size={15} color={activeScreen === 'LiveStream' ? '#007AFF' : (isDarkMode ? '#a0aec0' : '#4a5568')} />
+            <Text style={[styles.subTabText, activeScreen === 'LiveStream' && styles.activeSubTabText, isDarkMode && styles.darkText]}>Video / Live</Text>
+          </TouchableOpacity>
+
+          {superAdminAccessEnabled && (
+            <TouchableOpacity 
+              style={[styles.subTabItem, activeScreen === 'GlobalAISupervisor' && styles.activeSubTab]} 
+              onPress={() => setActiveScreen('GlobalAISupervisor')}
+            >
+              <Ionicons name="shield-checkmark-outline" size={15} color={activeScreen === 'GlobalAISupervisor' ? '#38a169' : (isDarkMode ? '#a0aec0' : '#4a5568')} />
+              <Text style={[styles.subTabText, activeScreen === 'GlobalAISupervisor' && styles.activeSubTabText, isDarkMode && styles.darkText]}>AI Ops</Text>
+            </TouchableOpacity>
+          )}
+        </View>
+
         {/* Navigation Drawer Modal */}
         <Modal visible={menuVisible} animationType="fade" transparent={true}>
           <Pressable style={styles.modalOverlay} onPress={() => setMenuVisible(false)}>
@@ -204,12 +306,14 @@ export default function App() {
               </View>
 
               <ScrollView style={{ marginTop: 10 }}>
-                {/* CONDITIONAL RENDER: ONLY DISPLAY ADMIN SECTION IF MASTER SWITCH IS ENABLED */}
                 {superAdminAccessEnabled && (
                   <>
                     <Text style={styles.sectionLabel}>MASTER ADMIN</Text>
                     <TouchableOpacity style={styles.drawerItem} onPress={() => handleSelectScreen('AdminControl')}>
                       <Text style={[styles.drawerItemText, { color: '#3182ce', fontWeight: 'bold' }]}>👑 Super-Admin Panel</Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity style={styles.drawerItem} onPress={() => handleSelectScreen('GlobalAISupervisor')}>
+                      <Text style={[styles.drawerItemText, { color: '#38a169', fontWeight: 'bold' }]}>🤖 Global AI Supervisor & SOC</Text>
                     </TouchableOpacity>
                   </>
                 )}
@@ -262,7 +366,10 @@ export default function App() {
 
                 <Text style={styles.sectionLabel}>WALLET & TOOLS</Text>
                 <TouchableOpacity style={styles.drawerItem} onPress={() => handleSelectScreen('Wallet')}>
-                  <Text style={styles.drawerItemText}>🪙 Wallet</Text>
+                  <Text style={styles.drawerItemText}>🪙 Wallet & Treasury</Text>
+                </TouchableOpacity>
+                <TouchableOpacity style={styles.drawerItem} onPress={() => handleSelectScreen('Referrals')}>
+                  <Text style={[styles.drawerItemText, { color: '#d69e2e', fontWeight: 'bold' }]}>🎁 Referrals & QR Rewards</Text>
                 </TouchableOpacity>
                 
                 {superAdminAccessEnabled && (
@@ -307,6 +414,49 @@ export default function App() {
           {renderCurrentScreen()}
         </View>
 
+        {/* Professional Bottom Tab Navigation Bar (TikTok / Facebook Style) */}
+        <View style={[styles.bottomTabBar, isDarkMode && styles.darkBottomBar]}>
+          <TouchableOpacity 
+            style={styles.tabItem} 
+            onPress={() => setActiveScreen('ChatRoom')}
+          >
+            <Ionicons name={activeScreen === 'ChatRoom' ? 'chatbubbles' : 'chatbubbles-outline'} size={22} color={activeScreen === 'ChatRoom' ? '#007AFF' : (isDarkMode ? '#a0aec0' : 'gray')} />
+            <Text style={[styles.tabText, activeScreen === 'ChatRoom' && styles.activeTabText, isDarkMode && styles.darkText]} numberOfLines={1}>Chats</Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity 
+            style={styles.tabItem} 
+            onPress={() => setActiveScreen('GroupList')}
+          >
+            <Ionicons name={activeScreen === 'GroupList' ? 'people' : 'people-outline'} size={22} color={activeScreen === 'GroupList' ? '#007AFF' : (isDarkMode ? '#a0aec0' : 'gray')} />
+            <Text style={[styles.tabText, activeScreen === 'GroupList' && styles.activeTabText, isDarkMode && styles.darkText]} numberOfLines={1}>Communities</Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity 
+            style={styles.tabItem} 
+            onPress={() => setActiveScreen('ChurchLiveScreen')}
+          >
+            <Ionicons name={activeScreen === 'ChurchLiveScreen' ? 'tv' : 'tv-outline'} size={22} color={activeScreen === 'ChurchLiveScreen' ? '#007AFF' : (isDarkMode ? '#a0aec0' : 'gray')} />
+            <Text style={[styles.tabText, activeScreen === 'ChurchLiveScreen' && styles.activeTabText, isDarkMode && styles.darkText]} numberOfLines={1}>Church & TV</Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity 
+            style={styles.tabItem} 
+            onPress={() => setActiveScreen('Wallet')}
+          >
+            <Ionicons name={activeScreen === 'Wallet' ? 'wallet' : 'wallet-outline'} size={22} color={activeScreen === 'Wallet' ? '#007AFF' : (isDarkMode ? '#a0aec0' : 'gray')} />
+            <Text style={[styles.tabText, activeScreen === 'Wallet' && styles.activeTabText, isDarkMode && styles.darkText]} numberOfLines={1}>Wallet</Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity 
+            style={styles.tabItem} 
+            onPress={() => setActiveScreen('Profile')}
+          >
+            <Ionicons name={activeScreen === 'Profile' ? 'person' : 'person-outline'} size={22} color={activeScreen === 'Profile' ? '#007AFF' : (isDarkMode ? '#a0aec0' : 'gray')} />
+            <Text style={[styles.tabText, activeScreen === 'Profile' && styles.activeTabText, isDarkMode && styles.darkText]} numberOfLines={1}>Profile</Text>
+          </TouchableOpacity>
+        </View>
+
       </View>
     </MeshNetworkContext.Provider>
   );
@@ -314,8 +464,14 @@ export default function App() {
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#f7fafc', paddingTop: 35 },
-  headerBar: { height: 50, backgroundColor: '#fff', borderBottomWidth: 1, borderBottomColor: '#e2e8f0', flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 15 },
+  headerBar: { height: 48, backgroundColor: '#fff', borderBottomWidth: 1, borderBottomColor: '#e2e8f0', flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 15 },
   darkHeader: { backgroundColor: '#2d3748', borderBottomColor: '#4a5568' },
+  topSubBar: { height: 38, backgroundColor: '#f8fafc', borderBottomWidth: 1, borderBottomColor: '#e2e8f0', flexDirection: 'row', justifyContent: 'space-around', alignItems: 'center', paddingHorizontal: 5 },
+  darkTopSubBar: { backgroundColor: '#1a202c', borderBottomColor: '#4a5568' },
+  subTabItem: { flexDirection: 'row', alignItems: 'center', paddingVertical: 4, paddingHorizontal: 8, borderRadius: 10 },
+  activeSubTab: { backgroundColor: '#e2e8f0' },
+  subTabText: { fontSize: 11, marginLeft: 4, color: '#4a5568', fontWeight: '600' },
+  activeSubTabText: { color: '#007AFF', fontWeight: 'bold' },
   hamburgerButton: { padding: 4 },
   hamburgerText: { fontSize: 22, fontWeight: 'bold', color: '#3182ce' },
   headerTitle: { fontSize: 13, fontWeight: 'bold', color: '#2d3748', flex: 1, textAlign: 'center', marginHorizontal: 10 },
@@ -333,4 +489,18 @@ const styles = StyleSheet.create({
   sectionLabel: { fontSize: 9, fontWeight: 'bold', color: '#a0aec0', marginTop: 12, marginBottom: 4, letterSpacing: 1 },
   drawerItem: { paddingVertical: 8, borderBottomWidth: 1, borderBottomColor: '#edf2f7' },
   drawerItemText: { fontSize: 13, fontWeight: 'bold', color: '#4a5568' },
+  bottomTabBar: { height: 60, backgroundColor: '#fff', borderTopWidth: 1, borderTopColor: '#e2e8f0', flexDirection: 'row', justifyContent: 'space-around', alignItems: 'center', paddingBottom: 5 },
+  darkBottomBar: { backgroundColor: '#2d3748', borderTopColor: '#4a5568' },
+  tabItem: { flex: 1, alignItems: 'center', justifyContent: 'center' },
+  tabText: { fontSize: 10, color: 'gray', marginTop: 2 },
+  activeTabText: { color: '#007AFF', fontWeight: 'bold' },
+  // Login Screen Styles
+  loginContainer: { flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#f7fafc', padding: 20 },
+  loginCard: { width: '100%', maxWidth: 380, backgroundColor: '#fff', padding: 25, borderRadius: 16, shadowColor: '#000', shadowOpacity: 0.1, shadowRadius: 10, elevation: 5, alignItems: 'center' },
+  loginLogo: { fontSize: 28, fontWeight: 'bold', color: '#007AFF', marginBottom: 10 },
+  loginSubtitle: { fontSize: 14, color: '#4a5568', textAlign: 'center', marginBottom: 20 },
+  loginInput: { width: '100%', height: 48, borderWidth: 1, borderColor: '#cbd5e0', borderRadius: 8, paddingHorizontal: 15, fontSize: 15, backgroundColor: '#fff', marginBottom: 15, color: '#2d3748' },
+  darkInput: { backgroundColor: '#2d3748', borderColor: '#4a5568', color: '#fff' },
+  loginButton: { width: '100%', height: 48, backgroundColor: '#007AFF', justifyContent: 'center', alignItems: 'center', borderRadius: 8 },
+  loginButtonText: { color: '#fff', fontSize: 16, fontWeight: 'bold' }
 });
