@@ -17,8 +17,10 @@
       "supportsTablet": true,
       "bundleIdentifier": "com.borrisahabwamukama.chatup",
       "infoPlist": {
-        "NSCameraUsageDescription": "Allow ChatUP to access your camera to record video tours and capture wildlife clips.",
-        "NSMicrophoneUsageDescription": "Allow ChatUP to access your microphone for recording video audio."
+        "NSCameraUsageDescription": "Allow ChatUP to access your camera to record video tours and capture clips.",
+        "NSMicrophoneUsageDescription": "Allow ChatUP to access your microphone for recording audio.",
+        "NSLocationWhenInUseUsageDescription": "Allow ChatUP to access your location for mapping and emergency dispatch.",
+        "NSContactsUsageDescription": "Allow ChatUP to access your contacts for messaging and connections."
       }
     },
     "android": {
@@ -27,11 +29,17 @@
         "CAMERA",
         "RECORD_AUDIO",
         "READ_EXTERNAL_STORAGE",
-        "WRITE_EXTERNAL_STORAGE"
+        "WRITE_EXTERNAL_STORAGE",
+        "ACCESS_FINE_LOCATION",
+        "ACCESS_COARSE_LOCATION",
+        "READ_CONTACTS",
+        "WRITE_CONTACTS"
       ]
     },
     "plugins": [
-      "expo-camera"
+      "expo-camera",
+      "expo-location",
+      "expo-contacts"
     ],
     "extra": {
       "eas": {
