@@ -5,21 +5,43 @@
     "version": "1.0.0",
     "orientation": "portrait",
     "userInterfaceStyle": "automatic",
-    "splash": {
-      "image": "./assets/splash.png",
-      "resizeMode": "contain",
-      "backgroundColor": "#ffffff"
-    },
     "assetBundlePatterns": [
       "**/*"
     ],
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "com.borrisahabwamukama.chatup"
+      "bundleIdentifier": "com.borrisahabwamukama.chatup",
+      "infoPlist": {
+        "NSCameraUsageDescription": "Allow ChatUP to access your camera to record video tours and capture wildlife clips.",
+        "NSMicrophoneUsageDescription": "Allow ChatUP to access your microphone for recording video audio."
+      }
     },
     "android": {
-      "package": "com.borrisahabwamukama.chatup"
+      "package": "com.borrisahabwamukama.chatup",
+      "permissions": [
+        "CAMERA",
+        "RECORD_AUDIO",
+        "READ_EXTERNAL_STORAGE",
+        "WRITE_EXTERNAL_STORAGE"
+      ]
     },
+    "plugins": [
+      [
+        "expo-camera",
+        {
+          "cameraPermission": "Allow ChatUP to access your camera to record video tours."
+        }
+      ],
+      [
+        "expo-splash-screen",
+        {
+          "image": "./assets/splash.png",
+          "imageWidth": 200,
+          "resizeMode": "contain",
+          "backgroundColor": "#ffffff"
+        }
+      ]
+    ],
     "extra": {
       "eas": {
         "projectId": "399109ca-5901-49fe-bf1b-f88a6e04fa7f"
