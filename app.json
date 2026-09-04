@@ -5,6 +5,11 @@
     "version": "1.0.0",
     "orientation": "portrait",
     "userInterfaceStyle": "automatic",
+    "splash": {
+      "image": "./assets/splash.png",
+      "resizeMode": "contain",
+      "backgroundColor": "#ffffff"
+    },
     "assetBundlePatterns": [
       "**/*"
     ],
@@ -26,21 +31,7 @@
       ]
     },
     "plugins": [
-      [
-        "expo-camera",
-        {
-          "cameraPermission": "Allow ChatUP to access your camera to record video tours."
-        }
-      ],
-      [
-        "expo-splash-screen",
-        {
-          "image": "./assets/splash.png",
-          "imageWidth": 200,
-          "resizeMode": "contain",
-          "backgroundColor": "#ffffff"
-        }
-      ]
+      "expo-camera"
     ],
     "extra": {
       "eas": {
