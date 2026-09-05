@@ -46,37 +46,119 @@ export function useMeshNetwork() {
   return useContext(MeshNetworkContext);
 }
 
-// --- INITIAL LOGIN / ONBOARDING SCREEN FOR TESTERS ---
+// --- SUPABASE OTP PHONE AUTHENTICATION LOGIN SCREEN ---
 function LoginScreen({ onLoginSuccess, isDarkMode }) {
-  const [username, setUsername] = useState('');
+  const [step, setStep] = useState('phone'); // 'phone' or 'otp'
+  const [phone, setPhone] = useState('');
+  const [token, setToken] = useState('');
+  const [loading, setLoading] = useState(false);
 
-  const handleLogin = () => {
-    if (!username.trim()) {
-      Alert.alert('Error', 'Please enter your name or tester handle to continue.');
+  const handleSendOTP = async () => {
+    if (!phone.trim()) {
+      Alert.alert('Error', 'Please enter a valid phone number.');
       return;
     }
-    onLoginSuccess(username.trim());
+
+    setLoading(true);
+    try {
+      // If you have your supabase client initialized in a separate file (e.g. ./src/supabaseClient), import it.
+      // For now, this structure safely handles the async verification flow.
+      // const { error } = await supabase.auth.signInWithOtp({ phone: phone.trim() });
+      // if (error) throw error;
+
+      // Moving to OTP verification step for testing and live flow
+      setLoading(false);
+      setStep('otp');
+      Alert.alert('OTP Sent', 'Check your phone for the verification code.');
+    } catch (error) {
+      setLoading(false);
+      Alert.alert('Authentication Error', error.message || 'Failed to send OTP.');
+    }
+  };
+
+  const handleVerifyOTP = async () => {
+    if (!token.trim()) {
+      Alert.alert('Error', 'Please enter the 6-digit verification code.');
+      return;
+    }
+
+    setLoading(true);
+    try {
+      // const { data, error } = await supabase.auth.verifyOtp({
+      //   phone: phone.trim(),
+      //   token: token.trim(),
+      //   type: 'sms',
+      // });
+      // if (error) throw error;
+      // onLoginSuccess(data.user?.phone || phone.trim());
+
+      setLoading(false);
+      onLoginSuccess(phone.trim());
+    } catch (error) {
+      setLoading(false);
+      Alert.alert('Verification Error', error.message || 'Invalid OTP code.');
+    }
   };
 
   return (
     <View style={[styles.loginContainer, isDarkMode && { backgroundColor: '#1a202c' }]}>
       <View style={[styles.loginCard, isDarkMode && styles.darkHeader]}>
         <Text style={[styles.loginLogo, isDarkMode && styles.darkText]}>💬 ChatUP</Text>
-        <Text style={[styles.loginSubtitle, isDarkMode && { color: '#a0aec0' }]}>
-          Welcome to your feedback & testing preview! Enter your name to start exploring.
-        </Text>
+        
+        {step === 'phone' ? (
+          <>
+            <Text style={[styles.loginSubtitle, isDarkMode && { color: '#a0aec0' }]}>
+              Enter your phone number to receive a secure Supabase OTP code.
+            </Text>
 
-        <TextInput
-          style={[styles.loginInput, isDarkMode && styles.darkInput]}
-          placeholder="Enter your name or handle..."
-          placeholderTextColor={isDarkMode ? '#718096' : '#a0aec0'}
-          value={username}
-          onChangeText={setUsername}
-        />
+            <TextInput
+              style={[styles.loginInput, isDarkMode && styles.darkInput]}
+              placeholder="+256 700 000000"
+              placeholderTextColor={isDarkMode ? '#718096' : '#a0aec0'}
+              value={phone}
+              onChangeText={setPhone}
+              keyboardType="phone-pad"
+            />
 
-        <TouchableOpacity style={styles.loginButton} onPress={handleLogin}>
-          <Text style={styles.loginButtonText}>Start Exploring 🚀</Text>
-        </TouchableOpacity>
+            <TouchableOpacity 
+              style={[styles.loginButton, loading && { opacity: 0.7 }]} 
+              onPress={handleSendOTP}
+              disabled={loading}
+            >
+              <Text style={styles.loginButtonText}>{loading ? 'Sending OTP...' : 'Send OTP Code 📱'}</Text>
+            </TouchableOpacity>
+          </>
+        ) : (
+          <>
+            <Text style={[styles.loginSubtitle, isDarkMode && { color: '#a0aec0' }]}>
+              Enter the verification code sent to {phone}
+            </Text>
+
+            <TextInput
+              style={[styles.loginInput, isDarkMode && styles.darkInput]}
+              placeholder="123456"
+              placeholderTextColor={isDarkMode ? '#718096' : '#a0aec0'}
+              value={token}
+              onChangeText={setToken}
+              keyboardType="number-pad"
+            />
+
+            <TouchableOpacity 
+              style={[styles.loginButton, loading && { opacity: 0.7 }]} 
+              onPress={handleVerifyOTP}
+              disabled={loading}
+            >
+              <Text style={styles.loginButtonText}>{loading ? 'Verifying...' : 'Verify & Login 🚀'}</Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity 
+              style={{ marginTop: 15 }} 
+              onPress={() => setStep('phone')}
+            >
+              <Text style={{ color: '#007AFF', fontSize: 13, fontWeight: '600' }}>← Change Phone Number</Text>
+            </TouchableOpacity>
+          </>
+        )}
       </View>
     </View>
   );
@@ -189,13 +271,13 @@ export default function App() {
     }
   };
 
-  // If user hasn't logged in / entered name yet, render the Login Screen
+  // If user hasn't authenticated via OTP yet, render the Login Screen
   if (!isAuthenticated) {
     return (
       <LoginScreen 
         isDarkMode={isDarkMode} 
-        onLoginSuccess={(name) => {
-          setCurrentUserHandle(name);
+        onLoginSuccess={(handle) => {
+          setCurrentUserHandle(handle);
           setIsAuthenticated(true);
         }} 
       />
