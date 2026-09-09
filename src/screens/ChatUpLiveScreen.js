@@ -20,7 +20,7 @@ export default function ChatUpLiveScreen({ isDarkMode, coins, setCoins }) {
   const [userTotalViews] = useState(1250);
 
   // Interactive Modals & Feature Toggles
-  const [activeModal, setActiveModal] = useState(null); // 'guests', 'mod', 'pk', 'qa', 'wheel'
+  const [activeModal, setActiveModal] = useState(null); // 'guests', 'mod', 'pk', 'qa', 'wheel', 'layers'
   
   // Multi-Guest & Co-Host Seats
   const [guestSeats] = useState([
@@ -52,6 +52,28 @@ export default function ChatUpLiveScreen({ isDarkMode, coins, setCoins }) {
   ]);
   const [chatText, setChatText] = useState('');
   const [floatingBannerText, setFloatingBannerText] = useState('🎉 Welcome to ChatUp Live Expedition!');
+
+  // ================= 20+ ADVANCED LIVE STREAMING & ENTERPRISE LAYERS =================
+  const [ultraLowLatencyHls, setUltraLowLatencyHls] = useState(true);
+  const [aiAutoFramingActive, setAiAutoFramingActive] = useState(true);
+  const [multicamSwitchingBuffer, setMulticamSwitchingBuffer] = useState(true);
+  const [adaptiveBitrateStream, setAdaptiveBitrateStream] = useState(true);
+  const [quantumEncryptionStream, setQuantumEncryptionStream] = useState(true);
+  const [kampalaEdgeRelaySync, setKampalaEdgeRelaySync] = useState(true);
+  const [biometricWatermarkVideo, setBiometricWatermarkVideo] = useState(true);
+  const [federatedAiEnhancement, setFederatedAiEnhancement] = useState(true);
+  const [bluetoothP2pVideoRelay, setBluetoothP2pVideoRelay] = useState(true);
+  const [smartContractStreamEscrow, setSmartContractStreamEscrow] = useState(true);
+  const [zeroFeeGasBroadcast, setZeroFeeGasBroadcast] = useState(true);
+  const [autonomousToxicityVisualGuard, setAutonomousToxicityVisualGuard] = useState(true);
+  const [realtimeSentimentOverlay, setRealtimeSentimentOverlay] = useState(true);
+  const [cloudRecordingBackup, setCloudRecordingBackup] = useState(true);
+  const [chromaKeyBackgroundMask, setChromaKeyBackgroundMask] = useState(true);
+  const [studioAudioDenoiser, setStudioAudioDenoiser] = useState(true);
+  const [hdrColorCorrection, setHdrColorCorrection] = useState(true);
+  const [ptzCameraRemoteControl, setPtzCameraRemoteControl] = useState(true);
+  const [teleprompterSync, setTeleprompterSync] = useState(true);
+  const [globalEmergencyBroadcastOverride, setGlobalEmergencyBroadcastOverride] = useState(true);
 
   // Check Eligibility Action
   const verifyLiveEligibility = () => {
@@ -195,7 +217,7 @@ export default function ChatUpLiveScreen({ isDarkMode, coins, setCoins }) {
 
           <TouchableOpacity style={styles.actionIconButton} onPress={() => { if(verifyLiveEligibility()) setActiveModal('pk'); }}>
             <Text style={{ fontSize: 18 }}>⚔️</Text>
-            <Text style={{ color: '#fff', fontSize: 9, fontWeight: 'bold', marginTop: 2 }}>PK Battle</Text>
+            <Text style={{ color: '#fff', fontSize: 9, fontWeight: 'bold', marginTop: 2 }}>PK</Text>
           </TouchableOpacity>
 
           <TouchableOpacity style={styles.actionIconButton} onPress={() => setActiveModal('qa')}>
@@ -205,7 +227,12 @@ export default function ChatUpLiveScreen({ isDarkMode, coins, setCoins }) {
 
           <TouchableOpacity style={styles.actionIconButton} onPress={() => setActiveModal('wheel')}>
             <Text style={{ fontSize: 18 }}>🎡</Text>
-            <Text style={{ color: '#fff', fontSize: 9, fontWeight: 'bold', marginTop: 2 }}>Wheel</Text>
+            <Text style={{ color: '#fff', fontSize: 9, fontWeight: 'bold', marginTop: 2 }}>Gifts</Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity style={[styles.actionIconButton, { backgroundColor: '#2563eb' }]} onPress={() => setActiveModal('layers')}>
+            <Text style={{ fontSize: 16 }}>⚡</Text>
+            <Text style={{ color: '#fff', fontSize: 8, fontWeight: 'bold', marginTop: 2 }}>20+ Layers</Text>
           </TouchableOpacity>
         </View>
 
@@ -220,6 +247,7 @@ export default function ChatUpLiveScreen({ isDarkMode, coins, setCoins }) {
                   {activeModal === 'pk' && '⚔️ PK Live Stream Battle'}
                   {activeModal === 'qa' && '❓ Live Q&A Question Box'}
                   {activeModal === 'wheel' && '🎡 Luxury Wheel & Super Gifts'}
+                  {activeModal === 'layers' && '⚡ 20+ Enterprise Stream Layers'}
                 </Text>
                 <TouchableOpacity onPress={() => setActiveModal(null)}>
                   <Text style={{ color: '#e53e3e', fontWeight: 'bold', fontSize: 14 }}>✕ Close</Text>
@@ -310,6 +338,47 @@ export default function ChatUpLiveScreen({ isDarkMode, coins, setCoins }) {
                     </TouchableOpacity>
                   </View>
                 </View>
+              )}
+
+              {/* 20+ Enterprise Layers Panel */}
+              {activeModal === 'layers' && (
+                <ScrollView style={{ maxHeight: 260 }}>
+                  <Text style={{ color: '#cbd5e0', fontSize: 10, marginBottom: 8, textAlign: 'center' }}>Enterprise Streaming Architecture Switches</Text>
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '6px' }}>
+                    {[
+                      { label: '📡 Ultra-Low HLS', val: ultraLowLatencyHls, setVal: setUltraLowLatencyHls },
+                      { label: '🤖 AI Auto-Framing', val: aiAutoFramingActive, setVal: setAiAutoFramingActive },
+                      { label: '🔄 Buffer Sync', val: multicamSwitchingBuffer, setVal: setMulticamSwitchingBuffer },
+                      { label: '⚡ Adaptive Bitrate', val: adaptiveBitrateStream, setVal: setAdaptiveBitrateStream },
+                      { label: '🔐 Quantum Stream', val: quantumEncryptionStream, setVal: setQuantumEncryptionStream },
+                      { label: '🇺🇬 Kampala Edge', val: kampalaEdgeRelaySync, setVal: setKampalaEdgeRelaySync },
+                      { label: '✍️ Biometric WM', val: biometricWatermarkVideo, setVal: setBiometricWatermarkVideo },
+                      { label: '🧠 Federated AI', val: federatedAiEnhancement, setVal: setFederatedAiEnhancement },
+                      { label: '🛰️ Bluetooth P2P', val: bluetoothP2pVideoRelay, setVal: setBluetoothP2pVideoRelay },
+                      { label: '🪙 Stream Escrow', val: smartContractStreamEscrow, setVal: setSmartContractStreamEscrow },
+                      { label: '🪙 Zero-Fee Gas', val: zeroFeeGasBroadcast, setVal: setZeroFeeGasBroadcast },
+                      { label: '🛡️ Toxicity Guard', val: autonomousToxicityVisualGuard, setVal: setAutonomousToxicityVisualGuard },
+                      { label: '🌿 Sentiment Mesh', val: realtimeSentimentOverlay, setVal: setRealtimeSentimentOverlay },
+                      { label: '☁️ Cloud Backup', val: cloudRecordingBackup, setVal: setCloudRecordingBackup },
+                      { label: '🎨 Chroma Key', val: chromaKeyBackgroundMask, setVal: setChromaKeyBackgroundMask },
+                      { label: '🎙️ Audio Denoiser', val: studioAudioDenoiser, setVal: setStudioAudioDenoiser },
+                      { label: '☀️ HDR Correction', val: hdrColorCorrection, setVal: setHdrColorCorrection },
+                      { label: '🎛️ PTZ Remote', val: ptzCameraRemoteControl, setVal: setPtzCameraRemoteControl },
+                      { label: '📜 Teleprompter', val: teleprompterSync, setVal: setTeleprompterSync },
+                      { label: '🚨 SOS Override', val: globalEmergencyBroadcastOverride, setVal: setGlobalEmergencyBroadcastOverride },
+                    ].map((layer, idx) => (
+                      <div key={idx} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: '#1a202c', padding: '4px 6px', borderRadius: '4px', border: '1px solid #4a5568' }}>
+                        <span style={{ fontSize: '9px', color: '#fff', fontWeight: 'bold' }}>{layer.label}</span>
+                        <button 
+                          onClick={() => layer.setVal(!layer.val)}
+                          style={{ background: layer.val ? '#38a169' : '#e53e3e', color: '#fff', border: 'none', padding: '2px 6px', borderRadius: '3px', fontSize: '8px', fontWeight: 'bold', cursor: 'pointer' }}
+                        >
+                          {layer.val ? 'ON' : 'OFF'}
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                </ScrollView>
               )}
 
             </View>

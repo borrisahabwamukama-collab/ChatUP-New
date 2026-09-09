@@ -23,7 +23,7 @@ export default function UniversalInterpreterModal({ isDarkMode, onClose }) {
   const handleSaveUniversalConfig = () => {
     Alert.alert(
       'Global Interpreter Protocol Updated 🌍',
-      `Universal AI translation & audio routing now active across ChatRoom, Virtual TV, LiveStream, and Studio tabs.`
+      'Universal AI translation & audio routing now active across ChatRoom, Virtual TV, LiveStream, and Studio tabs.'
     );
     if (onClose) onClose();
   };

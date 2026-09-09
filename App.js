@@ -1,6 +1,8 @@
-import React, { useState, createContext, useContext } from 'react';
-import { StyleSheet, View, Text, TouchableOpacity, ScrollView, Modal, Pressable, TextInput, Alert } from 'react-native';
+import React, { useState, useEffect, createContext, useContext } from 'react';
+import { StyleSheet, View, Text, TouchableOpacity, ScrollView, Modal, Pressable, TextInput, Alert, ActivityIndicator } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import { supabase } from './Services/supabaseClient'; // Adjusted path to your Supabase client
 
 // Core Screens
 import ChatRoomScreen from './src/screens/ChatRoomScreen';
@@ -8,7 +10,7 @@ import SecurityHubScreen from './src/screens/Security/SecurityHubScreen';
 import ReactionsAndBubbles from './src/screens/ReactionsAndBubbles';
 import VoiceAndTranslationScreen from './src/screens/VoiceAndTranslationScreen';
 import DiscoveryWalletScreen from './src/screens/DiscoveryWalletScreen';
-import WalletScreen from './src/screens/WalletScreen'; // 🪙 Updated with Financial Treasury, Saved Bank & Mobile Money Accounts
+import WalletScreen from './src/screens/WalletScreen'; 
 import LiveStreamScreen from './src/screens/LiveStreamScreen';
 import ReferralRewardsScreen from './src/screens/ReferralRewardsScreen';
 
@@ -26,6 +28,7 @@ import CameraHubScreen from './src/screens/CameraHubScreen';
 import ChurchRegistrationScreen from './src/screens/ChurchRegistrationScreen';
 import InteractiveGamesHub from './src/screens/InteractiveGamesHub';
 import GameArenaScreen from './src/screens/GameArenaScreen';
+import SignupScreen from './src/screens/SignupScreen';
 
 // Additional Feature & Entertainment Screens
 import AnalyticsScreen from './src/screens/AnalyticsScreen';
@@ -46,57 +49,55 @@ export function useMeshNetwork() {
   return useContext(MeshNetworkContext);
 }
 
-// --- BULLETPROOF STABLE LOGIN SCREEN ---
-function LoginScreen({ onLoginSuccess, isDarkMode }) {
-  const [step, setStep] = useState('phone'); // 'phone' or 'otp'
-  const [phone, setPhone] = useState('');
+// --- STABLE LOGIN SCREEN WITH SUPABASE EMAIL OTP ---
+function LoginScreen({ onLoginSuccess, onNavigateSignup, isDarkMode }) {
+  const [step, setStep] = useState('email'); 
+  const [email, setEmail] = useState('');
   const [token, setToken] = useState('');
   const [loading, setLoading] = useState(false);
 
   const handleSendOTP = async () => {
-    try {
-      if (!phone.trim()) {
-        Alert.alert('Error', 'Please enter a valid phone number.');
-        return;
-      }
+    if (!email.trim()) {
+      Alert.alert('Error', 'Please enter a valid email address.');
+      return;
+    }
+    setLoading(true);
+    const { error } = await supabase.auth.signInWithOtp({ email: email.trim() });
+    setLoading(false);
 
-      setLoading(true);
-
-      // Simulating backend call safely with timeout protection
-      setTimeout(() => {
-        setLoading(false);
-        setStep('otp');
-        Alert.alert('OTP Sent', 'Check your phone for the verification code.');
-      }, 600);
-
-    } catch (error) {
-      setLoading(false);
-      Alert.alert('Authentication Error', error?.message || 'Failed to send OTP.');
+    if (error) {
+      Alert.alert('Login Error', error.message);
+    } else {
+      setStep('otp');
+      Alert.alert('Code Sent 📩', `A 6-digit verification code has been sent to ${email}.`);
     }
   };
 
   const handleVerifyOTP = async () => {
-    try {
-      if (!token.trim()) {
-        Alert.alert('Error', 'Please enter the 6-digit verification code.');
-        return;
-      }
+    if (!token.trim()) {
+      Alert.alert('Error', 'Please enter the verification code.');
+      return;
+    }
+    setLoading(true);
 
-      setLoading(true);
+    const { data, error } = await supabase.auth.verifyOtp({
+      email: email.trim(),
+      token: token.trim(),
+      type: 'email',
+    });
 
-      setTimeout(() => {
-        setLoading(false);
-        // Safely validate token to prevent app crashes on incorrect codes
-        if (token.trim() === '000000') {
-          Alert.alert('Verification Failed', 'Invalid OTP code entered. Please try again.');
-          return;
-        }
-        onLoginSuccess(phone.trim());
-      }, 600);
+    setLoading(false);
 
-    } catch (error) {
-      setLoading(false);
-      Alert.alert('Verification Error', error?.message || 'Invalid OTP code.');
+    if (error) {
+      Alert.alert('Verification Failed', error.message);
+    } else {
+      const userSession = {
+        id: data.user.id,
+        email: data.user.email,
+        loggedInAt: new Date().toISOString(),
+      };
+      await AsyncStorage.setItem('@chatup_user_session', JSON.stringify(userSession));
+      onLoginSuccess(userSession);
     }
   };
 
@@ -105,33 +106,38 @@ function LoginScreen({ onLoginSuccess, isDarkMode }) {
       <View style={[styles.loginCard, isDarkMode && styles.darkHeader]}>
         <Text style={[styles.loginLogo, isDarkMode && styles.darkText]}>💬 ChatUP</Text>
         
-        {step === 'phone' ? (
+        {step === 'email' ? (
           <>
             <Text style={[styles.loginSubtitle, isDarkMode && { color: '#a0aec0' }]}>
-              Enter your phone number to receive a secure Supabase OTP code.
+              Enter your email address to start your personal ChatUP session.
             </Text>
 
             <TextInput
               style={[styles.loginInput, isDarkMode && styles.darkInput]}
-              placeholder="+256 700 000000"
+              placeholder="user@example.com"
               placeholderTextColor={isDarkMode ? '#718096' : '#a0aec0'}
-              value={phone}
-              onChangeText={setPhone}
-              keyboardType="phone-pad"
+              value={email}
+              onChangeText={setEmail}
+              keyboardType="email-address"
+              autoCapitalize="none"
             />
 
-            <TouchableOpacity 
-              style={[styles.loginButton, loading && { opacity: 0.7 }]} 
-              onPress={handleSendOTP}
-              disabled={loading}
-            >
-              <Text style={styles.loginButtonText}>{loading ? 'Sending OTP...' : 'Send OTP Code 📱'}</Text>
+            <TouchableOpacity style={styles.loginButton} onPress={handleSendOTP} disabled={loading}>
+              {loading ? (
+                <ActivityIndicator color="#fff" />
+              ) : (
+                <Text style={styles.loginButtonText}>Send Code 📩</Text>
+              )}
+            </TouchableOpacity>
+
+            <TouchableOpacity style={{ marginTop: 15 }} onPress={onNavigateSignup}>
+              <Text style={{ color: '#007AFF', fontSize: 13, fontWeight: 'bold' }}>Create New Account 🚀</Text>
             </TouchableOpacity>
           </>
         ) : (
           <>
             <Text style={[styles.loginSubtitle, isDarkMode && { color: '#a0aec0' }]}>
-              Enter the verification code sent to {phone}
+              Enter 6-digit code sent to {email}
             </Text>
 
             <TextInput
@@ -143,19 +149,16 @@ function LoginScreen({ onLoginSuccess, isDarkMode }) {
               keyboardType="number-pad"
             />
 
-            <TouchableOpacity 
-              style={[styles.loginButton, loading && { opacity: 0.7 }]} 
-              onPress={handleVerifyOTP}
-              disabled={loading}
-            >
-              <Text style={styles.loginButtonText}>{loading ? 'Verifying...' : 'Verify & Login 🚀'}</Text>
+            <TouchableOpacity style={styles.loginButton} onPress={handleVerifyOTP} disabled={loading}>
+              {loading ? (
+                <ActivityIndicator color="#fff" />
+              ) : (
+                <Text style={styles.loginButtonText}>Start Exploring 🚀</Text>
+              )}
             </TouchableOpacity>
 
-            <TouchableOpacity 
-              style={{ marginTop: 15 }} 
-              onPress={() => setStep('phone')}
-            >
-              <Text style={{ color: '#007AFF', fontSize: 13, fontWeight: '600' }}>← Change Phone Number</Text>
+            <TouchableOpacity style={{ marginTop: 15 }} onPress={() => setStep('email')}>
+              <Text style={{ color: '#007AFF', fontSize: 13, fontWeight: '600' }}>← Change Email Address</Text>
             </TouchableOpacity>
           </>
         )}
@@ -165,10 +168,13 @@ function LoginScreen({ onLoginSuccess, isDarkMode }) {
 }
 
 export default function App() {
+  const [initializing, setInitializing] = useState(true);
   const [isAuthenticated, setIsAuthenticated] = useState(false);
-  const [currentUserHandle, setCurrentUserHandle] = useState('Borris');
+  const [authView, setAuthView] = useState('login'); // 'login' or 'signup'
+  const [currentUser, setCurrentUser] = useState(null);
 
   const [activeScreen, setActiveScreen] = useState('ChatRoom');
+  const [screenParams, setScreenParams] = useState({}); // Stores parameters passed during navigation
   const [isDarkMode, setIsDarkMode] = useState(false);
   const [coins, setCoins] = useState(2500);
   const [menuVisible, setMenuVisible] = useState(false);
@@ -184,6 +190,43 @@ export default function App() {
   ]);
   const [ghostVaults, setGhostVaults] = useState({});
 
+  // LISTEN TO SUPABASE AUTH SESSION ON LAUNCH
+  useEffect(() => {
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      if (session?.user) {
+        setCurrentUser(session.user);
+        setIsAuthenticated(true);
+      }
+      setInitializing(false);
+    });
+
+    const { data: authListener } = supabase.auth.onAuthStateChange((_event, session) => {
+      if (session?.user) {
+        setCurrentUser(session.user);
+        setIsAuthenticated(true);
+      } else {
+        setCurrentUser(null);
+        setIsAuthenticated(false);
+      }
+      setInitializing(false);
+    });
+
+    return () => {
+      if (authListener?.subscription) {
+        authListener.subscription.unsubscribe();
+      }
+    };
+  }, []);
+
+  const handleLogout = async () => {
+    await supabase.auth.signOut();
+    await AsyncStorage.removeItem('@chatup_user_session');
+    setCurrentUser(null);
+    setIsAuthenticated(false);
+    setAuthView('login');
+    setMenuVisible(false);
+  };
+
   const sendMeshPacket = (senderName, messageText) => {
     if (!messageText?.trim()) return;
     const newPacket = { id: Date.now().toString(), sender: senderName, text: messageText };
@@ -198,23 +241,45 @@ export default function App() {
     return true;
   };
 
+  // ✅ ENHANCED NAVIGATION WRAPPER WITH PARAMS SUPPORT
   const navigation = {
-    navigate: (screenName, params) => setActiveScreen(screenName),
-    goBack: () => setActiveScreen('GroupList'),
+    navigate: (screenName, params = {}) => {
+      if (screenName === 'Login') {
+        setAuthView('login');
+      } else {
+        setScreenParams(params);
+        setActiveScreen(screenName);
+      }
+    },
+    goBack: () => {
+      setActiveScreen('GroupList');
+    },
   };
 
   const renderCurrentScreen = () => {
     try {
+      const route = { params: screenParams };
+      
       switch (activeScreen) {
-        case 'ChatRoom': return <ChatRoomScreen isDarkMode={isDarkMode} />;
-        case 'GroupList': return <GroupListScreen isDarkMode={isDarkMode} navigation={navigation} />;
-        case 'CreateGroupScreen': return <CreateGroupScreen isDarkMode={isDarkMode} navigation={navigation} />;
-        case 'ChurchLiveScreen': return <ChurchLiveScreen isDarkMode={isDarkMode} />;
-        case 'ChurchTestimonies': return <ChurchTestimoniesScreen isDarkMode={isDarkMode} />;
-        case 'ChurchRegistration': return <ChurchRegistrationScreen navigation={navigation} />;
-        case 'InteractiveGames': return <InteractiveGamesHub coins={coins} setCoins={setCoins} />;
-        case 'GameArena': return <GameArenaScreen coins={coins} setCoins={setCoins} />;
-        case 'CameraHub': return <CameraHubScreen isDarkMode={isDarkMode} navigation={navigation} />;
+        case 'ChatRoom': 
+        case 'ChatRoomScreen': 
+          return <ChatRoomScreen isDarkMode={isDarkMode} currentUser={currentUser} route={route} navigation={navigation} />;
+        case 'GroupList': 
+          return <GroupListScreen isDarkMode={isDarkMode} navigation={navigation} currentUser={currentUser} />;
+        case 'CreateGroupScreen': 
+          return <CreateGroupScreen isDarkMode={isDarkMode} navigation={navigation} currentUser={currentUser} />;
+        case 'ChurchLiveScreen': 
+          return <ChurchLiveScreen isDarkMode={isDarkMode} currentUser={currentUser} route={route} navigation={navigation} />;
+        case 'ChurchTestimonies': 
+          return <ChurchTestimoniesScreen isDarkMode={isDarkMode} currentUser={currentUser} route={route} navigation={navigation} />;
+        case 'ChurchRegistration': 
+          return <ChurchRegistrationScreen navigation={navigation} currentUser={currentUser} route={route} />;
+        case 'InteractiveGames': 
+          return <InteractiveGamesHub coins={coins} setCoins={setCoins} currentUser={currentUser} route={route} navigation={navigation} />;
+        case 'GameArena': 
+          return <GameArenaScreen coins={coins} setCoins={setCoins} currentUser={currentUser} route={route} navigation={navigation} />;
+        case 'CameraHub': 
+          return <CameraHubScreen isDarkMode={isDarkMode} navigation={navigation} currentUser={currentUser} route={route} />;
         case 'AdminControl': 
           return superAdminAccessEnabled ? (
             <AdminControlPanelScreen 
@@ -222,29 +287,43 @@ export default function App() {
               superAdminAccessEnabled={superAdminAccessEnabled} 
               setSuperAdminAccessEnabled={setSuperAdminAccessEnabled} 
             />
-          ) : <ChatRoomScreen isDarkMode={isDarkMode} />;
+          ) : <ChatRoomScreen isDarkMode={isDarkMode} currentUser={currentUser} route={route} navigation={navigation} />;
         case 'GlobalAISupervisor':
           return superAdminAccessEnabled ? (
             <GlobalAISupervisorScreen isDarkMode={isDarkMode} />
-          ) : <ChatRoomScreen isDarkMode={isDarkMode} />;
+          ) : <ChatRoomScreen isDarkMode={isDarkMode} currentUser={currentUser} route={route} navigation={navigation} />;
         case 'MonetizationTreasury': 
           return superAdminAccessEnabled ? (
             <MonetizationTreasuryScreen isDarkMode={isDarkMode} coins={coins} setCoins={setCoins} />
-          ) : <ChatRoomScreen isDarkMode={isDarkMode} />;
-        case 'Notifications': return <NotificationsScreen isDarkMode={isDarkMode} />;
-        case 'SecurityHub': return <SecurityHubScreen isDarkMode={isDarkMode} />;
-        case 'Reactions': return <ReactionsAndBubbles isDarkMode={isDarkMode} />;
-        case 'Voice': return <VoiceAndTranslationScreen isDarkMode={isDarkMode} />;
-        case 'Discovery': return <DiscoveryWalletScreen isDarkMode={isDarkMode} />;
-        case 'Wallet': return <WalletScreen isDarkMode={isDarkMode} coins={coins} setCoins={setCoins} />;
-        case 'Referrals': return <ReferralRewardsScreen isDarkMode={isDarkMode} currentUser={{ id: 'borris_01', name: currentUserHandle }} />;
-        case 'LiveStream': return <LiveStreamScreen isDarkMode={isDarkMode} coins={coins} setCoins={setCoins} />;
-        case 'Analytics': return <AnalyticsScreen isDarkMode={isDarkMode} />;
-        case 'Cinema': return <CinemaScreen isDarkMode={isDarkMode} />;
-        case 'Studio': return <StudioScreen isDarkMode={isDarkMode} />;
-        case 'VirtualTVScreen': return <VirtualTVScreen isDarkMode={isDarkMode} coins={coins} setCoins={setCoins} />;
-        case 'MeshHub': return <MeshHubScreen isDarkMode={isDarkMode} />;
-        case 'DRMHub': return <DRMProtectionScreen isDarkMode={isDarkMode} />;
+          ) : <ChatRoomScreen isDarkMode={isDarkMode} currentUser={currentUser} route={route} navigation={navigation} />;
+        case 'Notifications': 
+          return <NotificationsScreen isDarkMode={isDarkMode} currentUser={currentUser} route={route} navigation={navigation} />;
+        case 'SecurityHub': 
+          return <SecurityHubScreen isDarkMode={isDarkMode} currentUser={currentUser} route={route} navigation={navigation} />;
+        case 'Reactions': 
+          return <ReactionsAndBubbles isDarkMode={isDarkMode} currentUser={currentUser} route={route} navigation={navigation} />;
+        case 'Voice': 
+          return <VoiceAndTranslationScreen isDarkMode={isDarkMode} currentUser={currentUser} route={route} navigation={navigation} />;
+        case 'Discovery': 
+          return <DiscoveryWalletScreen isDarkMode={isDarkMode} currentUser={currentUser} route={route} navigation={navigation} />;
+        case 'Wallet': 
+          return <WalletScreen isDarkMode={isDarkMode} coins={coins} setCoins={setCoins} currentUser={currentUser} route={route} navigation={navigation} />;
+        case 'Referrals': 
+          return <ReferralRewardsScreen isDarkMode={isDarkMode} currentUser={currentUser || { id: 'temp_id', name: 'User' }} route={route} navigation={navigation} />;
+        case 'LiveStream': 
+          return <LiveStreamScreen isDarkMode={isDarkMode} coins={coins} setCoins={setCoins} currentUser={currentUser} route={route} navigation={navigation} />;
+        case 'Analytics': 
+          return <AnalyticsScreen isDarkMode={isDarkMode} currentUser={currentUser} route={route} navigation={navigation} />;
+        case 'Cinema': 
+          return <CinemaScreen isDarkMode={isDarkMode} currentUser={currentUser} route={route} navigation={navigation} />;
+        case 'Studio': 
+          return <StudioScreen isDarkMode={isDarkMode} currentUser={currentUser} route={route} navigation={navigation} />;
+        case 'VirtualTVScreen': 
+          return <VirtualTVScreen isDarkMode={isDarkMode} coins={coins} setCoins={setCoins} currentUser={currentUser} route={route} navigation={navigation} />;
+        case 'MeshHub': 
+          return <MeshHubScreen isDarkMode={isDarkMode} currentUser={currentUser} route={route} navigation={navigation} />;
+        case 'DRMHub': 
+          return <DRMProtectionScreen isDarkMode={isDarkMode} currentUser={currentUser} route={route} navigation={navigation} />;
         case 'Settings': 
           return (
             <SettingsScreen 
@@ -252,14 +331,20 @@ export default function App() {
               setIsDarkMode={setIsDarkMode} 
               superAdminAccessEnabled={superAdminAccessEnabled}
               setSuperAdminAccessEnabled={setSuperAdminAccessEnabled}
+              currentUser={currentUser}
+              onLogout={handleLogout}
             />
           );
-        case 'Profile': return <ProfileScreen isDarkMode={isDarkMode} coins={coins} />;
-        case 'Interpreter': return <UniversalInterpreterModal isDarkMode={isDarkMode} onClose={() => setActiveScreen('ChatRoom')} />;
-        default: return <ChatRoomScreen isDarkMode={isDarkMode} />;
+        case 'Profile': 
+          return <ProfileScreen isDarkMode={isDarkMode} coins={coins} currentUser={currentUser} onLogout={handleLogout} route={route} navigation={navigation} />;
+        case 'Interpreter': 
+          return <UniversalInterpreterModal isDarkMode={isDarkMode} onClose={() => setActiveScreen('ChatRoom')} />;
+        default: 
+          return <ChatRoomScreen isDarkMode={isDarkMode} currentUser={currentUser} route={route} navigation={navigation} />;
       }
     } catch (e) {
-      return <ChatRoomScreen isDarkMode={isDarkMode} />;
+      console.error('Screen Render Error:', e);
+      return <GroupListScreen isDarkMode={isDarkMode} navigation={navigation} currentUser={currentUser} />;
     }
   };
 
@@ -271,12 +356,24 @@ export default function App() {
     }
   };
 
+  if (initializing) {
+    return (
+      <View style={[styles.loginContainer, isDarkMode && { backgroundColor: '#1a202c' }]}>
+        <ActivityIndicator size="large" color="#007AFF" />
+      </View>
+    );
+  }
+
   if (!isAuthenticated) {
+    if (authView === 'signup') {
+      return <SignupScreen navigation={navigation} isDarkMode={isDarkMode} />;
+    }
     return (
       <LoginScreen 
         isDarkMode={isDarkMode} 
-        onLoginSuccess={(handle) => {
-          setCurrentUserHandle(handle);
+        onNavigateSignup={() => setAuthView('signup')}
+        onLoginSuccess={(userObj) => {
+          setCurrentUser(userObj);
           setIsAuthenticated(true);
         }} 
       />
@@ -481,6 +578,10 @@ export default function App() {
                 </TouchableOpacity>
                 <TouchableOpacity style={styles.drawerItem} onPress={() => handleSelectScreen('Settings')}>
                   <Text style={styles.drawerItemText}>⚙️ Settings</Text>
+                </TouchableOpacity>
+
+                <TouchableOpacity style={[styles.drawerItem, { marginTop: 15 }]} onPress={handleLogout}>
+                  <Text style={[styles.drawerItemText, { color: '#e53e3e', fontWeight: 'bold' }]}>🚪 Log Out</Text>
                 </TouchableOpacity>
               </ScrollView>
             </View>

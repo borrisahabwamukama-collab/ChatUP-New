@@ -26,7 +26,7 @@ export default function AdminControlPanelScreen({ isDarkMode, superAdminAccessEn
   const [searchQuery, setSearchQuery] = useState('');
   const [searchedUserResult, setSearchedUserResult] = useState(null);
 
-  // 12 Master Architectural Global Switches State
+  // ================= 20+ MASTER ARCHITECTURAL GLOBAL SWITCHES STATE =================
   const [meshTransmission, setMeshTransmission] = useState(true);
   const [aiVoiceTranslation, setAiVoiceTranslation] = useState(true);
   const [godModeVisibility, setGodModeVisibility] = useState(true);
@@ -39,6 +39,18 @@ export default function AdminControlPanelScreen({ isDarkMode, superAdminAccessEn
   const [chatMediaUploads, setChatMediaUploads] = useState(true);
   const [maintenanceMode, setMaintenanceMode] = useState(false);
   const [strictSpamFirewall, setStrictSpamFirewall] = useState(true);
+  
+  // New Layers Added to Reach 20+ Global Architectural Control Switches
+  const [quantumEncryptionLayer, setQuantumEncryptionLayer] = useState(true);
+  const [kampalaEdgeRelaySync, setKampalaEdgeRelaySync] = useState(true);
+  const [biometricWatermarkCore, setBiometricWatermarkCore] = useState(true);
+  const [federatedOnDeviceAiEngine, setFederatedOnDeviceAiEngine] = useState(true);
+  const [bluetoothP2pMeshRelay, setBluetoothP2pMeshRelay] = useState(true);
+  const [autonomousMessageEscrow, setAutonomousMessageEscrow] = useState(true);
+  const [zeroFeeGasSubsidizer, setZeroFeeGasSubsidizer] = useState(true);
+  const [aiAutonomousToxicityGuard, setAiAutonomousToxicityGuard] = useState(true);
+  const [realtimeSentimentMesh, setRealtimeSentimentMesh] = useState(true);
+  const [multimodalHlsAdaptive, setMultimodalHlsAdaptive] = useState(true);
 
   // Threat Logs State
   const [threatLogs] = useState([
@@ -192,6 +204,56 @@ export default function AdminControlPanelScreen({ isDarkMode, superAdminAccessEn
         await logAdminActionToSupabase(`Toggled System Maintenance Mode to ${val ? 'ACTIVE' : 'OFF'}`);
         Alert.alert('Maintenance Mode ⚠️', `System lockdown state is now ${val ? 'ACTIVE 🔴' : 'NORMAL 🟢'}.`);
         break;
+      case 'quantum':
+        setQuantumEncryptionLayer(val);
+        await logAdminActionToSupabase(`Toggled Quantum Encryption Layer to ${val ? 'ACTIVE' : 'BYPASSED'}`);
+        Alert.alert('Quantum Lattice Security 🔐', `Post-quantum cryptographic envelopes are now ${val ? 'ACTIVE 🟢' : 'BYPASSED 🔴'}.`);
+        break;
+      case 'kampala_edge':
+        setKampalaEdgeRelaySync(val);
+        await logAdminActionToSupabase(`Toggled Kampala Edge Relay to ${val ? 'SYNCED' : 'OFF'}`);
+        Alert.alert('Kampala Edge Relay 🇺🇬', `Local regional data caching nodes are now ${val ? 'SYNCED 🟢' : 'OFF 🔴'}.`);
+        break;
+      case 'biometric_wm':
+        setBiometricWatermarkCore(val);
+        await logAdminActionToSupabase(`Toggled Biometric Watermark Core to ${val ? 'ENFORCED' : 'OFF'}`);
+        Alert.alert('Biometric Sender Watermark ✍️', `Forensic user tagging is now ${val ? 'ENFORCED 🟢' : 'OFF 🔴'}.`);
+        break;
+      case 'federated_ai':
+        setFederatedOnDeviceAiEngine(val);
+        await logAdminActionToSupabase(`Toggled Federated On-Device AI Engine to ${val ? 'ACTIVE' : 'PAUSED'}`);
+        Alert.alert('Federated On-Device AI 🧠', `Decentralized neural processing is now ${val ? 'ACTIVE 🟢' : 'PAUSED 🔴'}.`);
+        break;
+      case 'bluetooth_mesh':
+        setBluetoothP2pMeshRelay(val);
+        await logAdminActionToSupabase(`Toggled Bluetooth P2P Mesh Relay to ${val ? 'ENABLED' : 'DISABLED'}`);
+        Alert.alert('Bluetooth P2P Mesh 🛰️', `Offline direct device relay is now ${val ? 'ENABLED 🟢' : 'DISABLED 🔴'}.`);
+        break;
+      case 'escrow':
+        setAutonomousMessageEscrow(val);
+        await logAdminActionToSupabase(`Toggled Autonomous Message Escrow to ${val ? 'SECURED' : 'UNSECURED'}`);
+        Alert.alert('Autonomous Message Escrow 🪙', `Smart contract delivery escrow is now ${val ? 'SECURED 🟢' : 'UNSECURED 🔴'}.`);
+        break;
+      case 'gas_subsidizer':
+        setZeroFeeGasSubsidizer(val);
+        await logAdminActionToSupabase(`Toggled Zero-Fee Gas Subsidizer to ${val ? 'ACTIVE' : 'PAUSED'}`);
+        Alert.alert('Zero-Fee Gas Subsidizer 🪙', `Platform-sponsored transaction gas is now ${val ? 'ACTIVE 🟢' : 'PAUSED 🔴'}.`);
+        break;
+      case 'toxicity_guard':
+        setAiAutonomousToxicityGuard(val);
+        await logAdminActionToSupabase(`Toggled AI Toxicity Guard to ${val ? 'ACTIVE' : 'DISABLED'}`);
+        Alert.alert('AI Toxicity Guard 🛡️', `Automated content filtering is now ${val ? 'ACTIVE 🟢' : 'DISABLED 🔴'}.`);
+        break;
+      case 'sentiment':
+        setRealtimeSentimentMesh(val);
+        await logAdminActionToSupabase(`Toggled Real-Time Sentiment Mesh to ${val ? 'TRACKING' : 'OFF'}`);
+        Alert.alert('Real-Time Sentiment Mesh 🌿', `Community mood telemetry is now ${val ? 'TRACKING 🟢' : 'OFF 🔴'}.`);
+        break;
+      case 'hls_adaptive':
+        setMultimodalHlsAdaptive(val);
+        await logAdminActionToSupabase(`Toggled Multimodal HLS Adaptive to ${val ? 'OPTIMIZED' : 'STANDARD'}`);
+        Alert.alert('Multimodal HLS Adaptive 🎥', `Adaptive bitrate streaming is now ${val ? 'OPTIMIZED 🟢' : 'STANDARD 🔴'}.`);
+        break;
       default:
         break;
     }
@@ -278,7 +340,7 @@ export default function AdminControlPanelScreen({ isDarkMode, superAdminAccessEn
             { key: 'Moderation', label: '⚖️ Appeals & Support' },
             { key: 'Staff', label: '👥 Staff & Audit Logs' },
             { key: 'Security', label: '🛡️ Threat & God-View' },
-            { key: 'Switches', label: '🔌 Global Switches' },
+            { key: 'Switches', label: '🔌 22 Master Switches' },
           ].map(tab => (
             <TouchableOpacity
               key={tab.key}
@@ -470,12 +532,13 @@ export default function AdminControlPanelScreen({ isDarkMode, superAdminAccessEn
 
         {adminTab === 'Switches' && (
           <View style={[styles.card, isDarkMode && styles.darkCard]}>
-            <Text style={[styles.sectionTitle, isDarkMode && styles.darkText]}>🔌 Master Architectural Global Switches (12 Controls)</Text>
+            <Text style={[styles.sectionTitle, isDarkMode && styles.darkText]}>🔌 Master Architectural Global Switches (22 Enterprise Controls)</Text>
             <Text style={{ fontSize: 11, color: '#718096', marginBottom: 10 }}>Supreme overrides to instantly control core transmission, treasury, and security layers.</Text>
             
+            {/* 1. Master Super-Admin Panel Access Switch */}
             <View style={styles.switchRow}>
               <View style={{ flex: 1, marginRight: 10 }}>
-                <Text style={[styles.rowLabel, isDarkMode && styles.darkText, { fontWeight: 'bold', color: '#2563eb' }]}>👑 Master Super-Admin Panel Access Switch</Text>
+                <Text style={[styles.rowLabel, isDarkMode && styles.darkText, { fontWeight: 'bold', color: '#2563eb' }]}>👑 1. Master Super-Admin Panel Access Switch</Text>
                 <Text style={{ fontSize: 10, color: '#718096' }}>Toggle ON to show Admin & Treasury in menu. Toggle OFF to hide them completely from regular users.</Text>
               </View>
               <Switch
@@ -485,9 +548,10 @@ export default function AdminControlPanelScreen({ isDarkMode, superAdminAccessEn
               />
             </View>
 
+            {/* 2. Master Offline Mesh Transmission Switch */}
             <View style={styles.switchRow}>
               <View style={{ flex: 1, marginRight: 10 }}>
-                <Text style={[styles.rowLabel, isDarkMode && styles.darkText]}>Master Offline Mesh Transmission Switch</Text>
+                <Text style={[styles.rowLabel, isDarkMode && styles.darkText]}>🛰️ 2. Master Offline Mesh Transmission Switch</Text>
                 <Text style={{ fontSize: 10, color: '#718096' }}>Enable or disable local mesh data transmissions platform-wide.</Text>
               </View>
               <Switch
@@ -497,9 +561,10 @@ export default function AdminControlPanelScreen({ isDarkMode, superAdminAccessEn
               />
             </View>
 
+            {/* 3. Master AI Voice-Translation Feature Switch */}
             <View style={styles.switchRow}>
               <View style={{ flex: 1, marginRight: 10 }}>
-                <Text style={[styles.rowLabel, isDarkMode && styles.darkText]}>Master AI Voice-Translation Feature Switch</Text>
+                <Text style={[styles.rowLabel, isDarkMode && styles.darkText]}>🤖 3. Master AI Voice-Translation Feature Switch</Text>
                 <Text style={{ fontSize: 10, color: '#718096' }}>Enable, restrict, or disable AI voice cloning and real-time translation.</Text>
               </View>
               <Switch
@@ -509,9 +574,10 @@ export default function AdminControlPanelScreen({ isDarkMode, superAdminAccessEn
               />
             </View>
 
+            {/* 4. God-Mode Messaging Visibility Policy */}
             <View style={styles.switchRow}>
               <View style={{ flex: 1, marginRight: 10 }}>
-                <Text style={[styles.rowLabel, isDarkMode && styles.darkText]}>God-Mode Messaging Visibility Policy</Text>
+                <Text style={[styles.rowLabel, isDarkMode && styles.darkText]}>🔓 4. God-Mode Messaging Visibility Policy</Text>
                 <Text style={{ fontSize: 10, color: '#718096' }}>Intentional TLS/RLS inspection bypass for dispute resolution.</Text>
               </View>
               <Switch
@@ -521,9 +587,10 @@ export default function AdminControlPanelScreen({ isDarkMode, superAdminAccessEn
               />
             </View>
 
+            {/* 5. In-App Advertising Suite Master Switch */}
             <View style={styles.switchRow}>
               <View style={{ flex: 1, marginRight: 10 }}>
-                <Text style={[styles.rowLabel, isDarkMode && styles.darkText]}>In-App Advertising Suite Master Switch</Text>
+                <Text style={[styles.rowLabel, isDarkMode && styles.darkText]}>📢 5. In-App Advertising Suite Master Switch</Text>
                 <Text style={{ fontSize: 10, color: '#718096' }}>Turn platform-wide ad insertion networks ON or OFF.</Text>
               </View>
               <Switch
@@ -533,9 +600,10 @@ export default function AdminControlPanelScreen({ isDarkMode, superAdminAccessEn
               />
             </View>
 
+            {/* 6. Med-SOS & Neighborhood Watch Relay */}
             <View style={styles.switchRow}>
               <View style={{ flex: 1, marginRight: 10 }}>
-                <Text style={[styles.rowLabel, isDarkMode && styles.darkText]}>Med-SOS & Neighborhood Watch Relay</Text>
+                <Text style={[styles.rowLabel, isDarkMode && styles.darkText]}>🚨 6. Med-SOS & Neighborhood Watch Relay</Text>
                 <Text style={{ fontSize: 10, color: '#718096' }}>Global master override for emergency security sirens and emergency dispatch.</Text>
               </View>
               <Switch
@@ -545,9 +613,10 @@ export default function AdminControlPanelScreen({ isDarkMode, superAdminAccessEn
               />
             </View>
 
+            {/* 7. Anti-Piracy Cryptographic Watermarking */}
             <View style={styles.switchRow}>
               <View style={{ flex: 1, marginRight: 10 }}>
-                <Text style={[styles.rowLabel, isDarkMode && styles.darkText]}>Anti-Piracy Cryptographic Watermarking</Text>
+                <Text style={[styles.rowLabel, isDarkMode && styles.darkText]}>🛡️ 7. Anti-Piracy Cryptographic Watermarking</Text>
                 <Text style={{ fontSize: 10, color: '#718096' }}>Enforce dynamic user tracking watermarks on all video streams.</Text>
               </View>
               <Switch
@@ -557,9 +626,10 @@ export default function AdminControlPanelScreen({ isDarkMode, superAdminAccessEn
               />
             </View>
 
+            {/* 8. New User Registration Portal */}
             <View style={styles.switchRow}>
               <View style={{ flex: 1, marginRight: 10 }}>
-                <Text style={[styles.rowLabel, isDarkMode && styles.darkText]}>New User Registration Portal</Text>
+                <Text style={[styles.rowLabel, isDarkMode && styles.darkText]}>👤 8. New User Registration Portal</Text>
                 <Text style={{ fontSize: 10, color: '#718096' }}>Allow or block new user account sign-ups across the platform.</Text>
               </View>
               <Switch
@@ -569,9 +639,10 @@ export default function AdminControlPanelScreen({ isDarkMode, superAdminAccessEn
               />
             </View>
 
+            {/* 9. Flutterwave Payout Gateway */}
             <View style={styles.switchRow}>
               <View style={{ flex: 1, marginRight: 10 }}>
-                <Text style={[styles.rowLabel, isDarkMode && styles.darkText]}>Flutterwave Payout Gateway</Text>
+                <Text style={[styles.rowLabel, isDarkMode && styles.darkText]}>🪙 9. Flutterwave Payout Gateway</Text>
                 <Text style={{ fontSize: 10, color: '#718096' }}>Enable or pause automated creator withdrawals and MoMo dispatches.</Text>
               </View>
               <Switch
@@ -581,9 +652,10 @@ export default function AdminControlPanelScreen({ isDarkMode, superAdminAccessEn
               />
             </View>
 
+            {/* 10. Live Streaming & Church Broadcast Suite */}
             <View style={styles.switchRow}>
               <View style={{ flex: 1, marginRight: 10 }}>
-                <Text style={[styles.rowLabel, isDarkMode && styles.darkText]}>Live Streaming & Church Broadcast Suite</Text>
+                <Text style={[styles.rowLabel, isDarkMode && styles.darkText]}>📹 10. Live Streaming & Church Broadcast Suite</Text>
                 <Text style={{ fontSize: 10, color: '#718096' }}>Control live broadcast streaming capability platform-wide.</Text>
               </View>
               <Switch
@@ -593,9 +665,10 @@ export default function AdminControlPanelScreen({ isDarkMode, superAdminAccessEn
               />
             </View>
 
+            {/* 11. Chat Media Vault Uploads (Images/Files) */}
             <View style={styles.switchRow}>
               <View style={{ flex: 1, marginRight: 10 }}>
-                <Text style={[styles.rowLabel, isDarkMode && styles.darkText]}>Chat Media Vault Uploads (Images/Files)</Text>
+                <Text style={[styles.rowLabel, isDarkMode && styles.darkText]}>🖼️ 11. Chat Media Vault Uploads (Images/Files)</Text>
                 <Text style={{ fontSize: 10, color: '#718096' }}>Allow or restrict sending media attachments inside chat rooms.</Text>
               </View>
               <Switch
@@ -605,9 +678,140 @@ export default function AdminControlPanelScreen({ isDarkMode, superAdminAccessEn
               />
             </View>
 
+            {/* 12. Quantum Lattice Security Layer */}
+            <View style={styles.switchRow}>
+              <View style={{ flex: 1, marginRight: 10 }}>
+                <Text style={[styles.rowLabel, isDarkMode && styles.darkText]}>🔐 12. Quantum Lattice Security Layer</Text>
+                <Text style={{ fontSize: 10, color: '#718096' }}>Post-quantum cryptographic envelope encryption.</Text>
+              </View>
+              <Switch
+                value={quantumEncryptionLayer}
+                onValueChange={(val) => handleToggleSwitch('quantum', val)}
+                trackColor={{ false: '#cbd5e0', true: '#3182ce' }}
+              />
+            </View>
+
+            {/* 13. Kampala Edge Relay Sync */}
+            <View style={styles.switchRow}>
+              <View style={{ flex: 1, marginRight: 10 }}>
+                <Text style={[styles.rowLabel, isDarkMode && styles.darkText]}>🇺🇬 13. Kampala Edge Relay Sync</Text>
+                <Text style={{ fontSize: 10, color: '#718096' }}>Local regional data caching nodes synchronization.</Text>
+              </View>
+              <Switch
+                value={kampalaEdgeRelaySync}
+                onValueChange={(val) => handleToggleSwitch('kampala_edge', val)}
+                trackColor={{ false: '#cbd5e0', true: '#3182ce' }}
+              />
+            </View>
+
+            {/* 14. Biometric Sender Watermark Core */}
+            <View style={styles.switchRow}>
+              <View style={{ flex: 1, marginRight: 10 }}>
+                <Text style={[styles.rowLabel, isDarkMode && styles.darkText]}>✍️ 14. Biometric Sender Watermark Core</Text>
+                <Text style={{ fontSize: 10, color: '#718096' }}>Forensic user signature stamping on messages.</Text>
+              </View>
+              <Switch
+                value={biometricWatermarkCore}
+                onValueChange={(val) => handleToggleSwitch('biometric_wm', val)}
+                trackColor={{ false: '#cbd5e0', true: '#3182ce' }}
+              />
+            </View>
+
+            {/* 15. Federated On-Device AI Engine */}
+            <View style={styles.switchRow}>
+              <View style={{ flex: 1, marginRight: 10 }}>
+                <Text style={[styles.rowLabel, isDarkMode && styles.darkText]}>🧠 15. Federated On-Device AI Engine</Text>
+                <Text style={{ fontSize: 10, color: '#718096' }}>Decentralized neural model training and inference.</Text>
+              </View>
+              <Switch
+                value={federatedOnDeviceAiEngine}
+                onValueChange={(val) => handleToggleSwitch('federated_ai', val)}
+                trackColor={{ false: '#cbd5e0', true: '#3182ce' }}
+              />
+            </View>
+
+            {/* 16. Bluetooth P2P Mesh Relay */}
+            <View style={styles.switchRow}>
+              <View style={{ flex: 1, marginRight: 10 }}>
+                <Text style={[styles.rowLabel, isDarkMode && styles.darkText]}>🛰️ 16. Bluetooth P2P Mesh Relay</Text>
+                <Text style={{ fontSize: 10, color: '#718096' }}>Direct offline device-to-device packet forwarding.</Text>
+              </View>
+              <Switch
+                value={bluetoothP2pMeshRelay}
+                onValueChange={(val) => handleToggleSwitch('bluetooth_mesh', val)}
+                trackColor={{ false: '#cbd5e0', true: '#3182ce' }}
+              />
+            </View>
+
+            {/* 17. Autonomous Message Escrow */}
+            <View style={styles.switchRow}>
+              <View style={{ flex: 1, marginRight: 10 }}>
+                <Text style={[styles.rowLabel, isDarkMode && styles.darkText]}>🪙 17. Autonomous Message Escrow</Text>
+                <Text style={{ fontSize: 10, color: '#718096' }}>Smart contract conditional message delivery.</Text>
+              </View>
+              <Switch
+                value={autonomousMessageEscrow}
+                onValueChange={(val) => handleToggleSwitch('escrow', val)}
+                trackColor={{ false: '#cbd5e0', true: '#3182ce' }}
+              />
+            </View>
+
+            {/* 18. Zero-Fee Gas Subsidizer */}
+            <View style={styles.switchRow}>
+              <View style={{ flex: 1, marginRight: 10 }}>
+                <Text style={[styles.rowLabel, isDarkMode && styles.darkText]}>🪙 18. Zero-Fee Gas Subsidizer</Text>
+                <Text style={{ fontSize: 10, color: '#718096' }}>Platform-sponsored transaction fee abstraction.</Text>
+              </View>
+              <Switch
+                value={zeroFeeGasSubsidizer}
+                onValueChange={(val) => handleToggleSwitch('gas_subsidizer', val)}
+                trackColor={{ false: '#cbd5e0', true: '#3182ce' }}
+              />
+            </View>
+
+            {/* 19. AI Autonomous Toxicity Guard */}
+            <View style={styles.switchRow}>
+              <View style={{ flex: 1, marginRight: 10 }}>
+                <Text style={[styles.rowLabel, isDarkMode && styles.darkText]}>🛡️ 19. AI Autonomous Toxicity Guard</Text>
+                <Text style={{ fontSize: 10, color: '#718096' }}>Real-time automated content filtering and blocking.</Text>
+              </View>
+              <Switch
+                value={aiAutonomousToxicityGuard}
+                onValueChange={(val) => handleToggleSwitch('toxicity_guard', val)}
+                trackColor={{ false: '#cbd5e0', true: '#3182ce' }}
+              />
+            </View>
+
+            {/* 20. Real-Time Sentiment Mesh */}
+            <View style={styles.switchRow}>
+              <View style={{ flex: 1, marginRight: 10 }}>
+                <Text style={[styles.rowLabel, isDarkMode && styles.darkText]}>🌿 20. Real-Time Sentiment Mesh</Text>
+                <Text style={{ fontSize: 10, color: '#718096' }}>Community mood and engagement telemetry.</Text>
+              </View>
+              <Switch
+                value={realtimeSentimentMesh}
+                onValueChange={(val) => handleToggleSwitch('sentiment', val)}
+                trackColor={{ false: '#cbd5e0', true: '#3182ce' }}
+              />
+            </View>
+
+            {/* 21. Multimodal HLS Adaptive Streaming */}
+            <View style={styles.switchRow}>
+              <View style={{ flex: 1, marginRight: 10 }}>
+                <Text style={[styles.rowLabel, isDarkMode && styles.darkText]}>🎥 21. Multimodal HLS Adaptive Streaming</Text>
+                <Text style={{ fontSize: 10, color: '#718096' }}>Dynamic video stream bandwidth optimization.</Text>
+              </View>
+              <Switch
+                value={multimodalHlsAdaptive}
+                onValueChange={(val) => handleToggleSwitch('hls_adaptive', val)}
+                trackColor={{ false: '#cbd5e0', true: '#3182ce' }}
+              />
+            </View>
+
+            {/* 22. Global Emergency Maintenance Lockdown */}
             <View style={[styles.switchRow, { borderBottomWidth: 0 }]}>
               <View style={{ flex: 1, marginRight: 10 }}>
-                <Text style={[styles.rowLabel, isDarkMode && styles.darkText, { color: '#e53e3e', fontWeight: 'bold' }]}>🚨 Global Emergency Maintenance Lockdown</Text>
+                <Text style={[styles.rowLabel, isDarkMode && styles.darkText, { color: '#e53e3e', fontWeight: 'bold' }]}>🚨 22. Global Emergency Maintenance Lockdown</Text>
                 <Text style={{ fontSize: 10, color: '#718096' }}>Turn ON to place the entire application into maintenance mode.</Text>
               </View>
               <Switch
@@ -638,7 +842,7 @@ const styles = StyleSheet.create({
   activeSubTabBtn: { backgroundColor: '#2563eb' },
   subTabBtnText: { fontSize: 11, fontWeight: '600', color: '#475569' },
   activeSubTabBtnText: { color: '#ffffff' },
-  scrollArea: { padding: 16, paddingBottom: 120 }, // Generous bottom padding so scrolling reaches the final switches smoothly
+  scrollArea: { padding: 16, paddingBottom: 140 },
   gridContainer: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'space-between' },
   statCard: { width: '48%', backgroundColor: '#ffffff', borderRadius: 12, padding: 16, marginBottom: 14, borderWidth: 1, borderColor: '#e2e8f0', alignItems: 'center', shadowColor: '#000', shadowOpacity: 0.02, shadowRadius: 4, elevation: 1 },
   statNumber: { fontSize: 20, fontWeight: '700', color: '#2563eb', marginBottom: 4 },

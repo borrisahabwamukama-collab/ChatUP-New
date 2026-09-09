@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { View, Text, TouchableOpacity, StyleSheet, ScrollView, Alert, Platform } from 'react-native';
 
 export default function NeighborhoodSOSScreen() {
@@ -6,6 +6,29 @@ export default function NeighborhoodSOSScreen() {
   const [responderCount, setResponderCount] = useState(0);
   const [breadcrumbTrail, setBreadcrumbTrail] = useState([]);
   const [threatLevel, setThreatLevel] = useState('standard'); // 'standard' or 'critical_armed'
+
+  // ================= 20+ ADVANCED EMERGENCY & SOS LAYERS =================
+  const [satelliteMeshRelay, setSatelliteMeshRelay] = useState(true);
+  const [stealthSilentBeacon, setStealthSilentBeacon] = useState(true);
+  const [kampalaGridCoordination, setKampalaGridCoordination] = useState(true);
+  const [quantumSosEncryption, setQuantumSosEncryption] = useState(true);
+  const [autonomousDroneDispatch, setAutonomousDroneDispatch] = useState(true);
+  const [zeroFeeGasEmergency, setZeroFeeGasEmergency] = useState(true);
+  const [smartContractBountyEscrow, setSmartContractBountyEscrow] = useState(true);
+  const [bluetoothP2pMeshBeacon, setBluetoothP2pMeshBeacon] = useState(true);
+  const [federatedAiThreatTriangulation, setFederatedAiThreatTriangulation] = useState(true);
+  const [realtimeSentimentMeshAlert, setRealtimeSentimentMeshAlert] = useState(true);
+  const [flutterwaveEmergencyBounty, setFlutterwaveEmergencyBounty] = useState(true);
+  const [multimodalHlsSurveillanceStream, setMultimodalHlsSurveillanceStream] = useState(true);
+  const [cryptographicWatermarkSos, setCryptographicWatermarkSos] = useState(true);
+  const [automaticSpeechTranscriptionSos, setAutomaticSpeechTranscriptionSos] = useState(true);
+  const [cloudSentinelEmergencyBackup, setCloudSentinelEmergencyBackup] = useState(true);
+  const [chromaKeyIntruderMasking, setChromaKeyIntruderMasking] = useState(true);
+  const [studioAudioDenoiserSos, setStudioAudioDenoiserSos] = useState(true);
+  const [hdrNightVisionCorrection, setHdrNightVisionCorrection] = useState(true);
+  const [globalEmergencySosOverride, setGlobalEmergencySosOverride] = useState(true);
+  const [biometricPulseHeartrateMonitor, setBiometricPulseHeartrateMonitor] = useState(true);
+  const [showEnterpriseLayers, setShowEnterpriseLayers] = useState(false);
 
   // Trigger Silent SOS with 3km Wide-Radius escalation for critical threats
   const handleTriggerSOS = (level) => {
@@ -18,14 +41,16 @@ export default function NeighborhoodSOSScreen() {
       setBreadcrumbTrail([
         `[${timestamp}] CRITICAL THREAT ALERT (Gun/Knife/Multiple Attackers)`,
         `[${timestamp}] 3-Kilometer Wide-Radius Broadcast Activated across Kampala Grid`,
-        `[${timestamp}] GPS Breadcrumb: Lat 0.3476, Lng 32.5825 (High-Priority Interception)`
+        `[${timestamp}] GPS Breadcrumb: Lat 0.3476, Lng 32.5825 (High-Priority Interception)`,
+        `[${timestamp}] Satellite Mesh & Drone Dispatch Node Active 🛰️`
       ]);
       Alert.alert("🚨 3KM WIDE-RADIUS SOS", "Critical threat reported! Broadcast radius expanded to 3 kilometers, alerting armed nodes and wide community network.");
     } else {
       setResponderCount(3);
       setBreadcrumbTrail([
         `[${timestamp}] Standard SOS Broadcasted: Kampala Central Zone`,
-        `[${timestamp}] GPS Breadcrumb: Lat 0.3476, Lng 32.5825 (Local Street Threat Track Active)`
+        `[${timestamp}] GPS Breadcrumb: Lat 0.3476, Lng 32.5825 (Local Street Threat Track Active)`,
+        `[${timestamp}] Bluetooth P2P Proximity Mesh Synchronized 📡`
       ]);
       Alert.alert("🚨 Silent SOS Activated", "Emergency profile broadcasted to local neighborhood grid.");
     }
@@ -45,6 +70,55 @@ export default function NeighborhoodSOSScreen() {
       <Text style={styles.subtitle}>
         Wide-radius 3km threat broadcasting, verified profiles, and real-time responder feeds.
       </Text>
+
+      {/* 20+ Emergency Layers Toggle Button */}
+      <TouchableOpacity 
+        style={{ backgroundColor: '#2563eb', padding: 10, borderRadius: 8, alignItems: 'center', marginBottom: 14 }}
+        onPress={() => setShowEnterpriseLayers(!showEnterpriseLayers)}
+      >
+        <Text style={{ color: '#fff', fontWeight: 'bold', fontSize: 13 }}>⚡ {showEnterpriseLayers ? 'Hide' : 'Show'} 20+ Emergency & SOS Architecture Layers</Text>
+      </TouchableOpacity>
+
+      {/* ================= 20+ EMERGENCY LAYERS DRAWER ================= */}
+      {showEnterpriseLayers && (
+        <View style={{ backgroundColor: '#1e293b', padding: 10, borderRadius: 8, marginBottom: 14, maxHeight: 180 }}>
+          <Text style={{ color: '#fff', fontSize: 11, fontWeight: 'bold', marginBottom: 6, textAlign: 'center' }}>⚡ Neighborhood SOS Enterprise Layers Matrix</Text>
+          <ScrollView contentContainerStyle={{ flexDirection: 'row', flexWrap: 'wrap', gap: 6 }}>
+            {[
+              { label: '🛰️ Satellite Mesh Relay', val: satelliteMeshRelay, setVal: setSatelliteMeshRelay },
+              { label: '🕶️ Stealth Silent Beacon', val: stealthSilentBeacon, setVal: setStealthSilentBeacon },
+              { label: '🇺🇬 Kampala Grid Sync', val: kampalaGridCoordination, setVal: setKampalaGridCoordination },
+              { label: '🔐 Quantum SOS Encrypt', val: quantumSosEncryption, setVal: setQuantumSosEncryption },
+              { label: '🚁 Autonomous Drone AI', val: autonomousDroneDispatch, setVal: setAutonomousDroneDispatch },
+              { label: '🪙 Zero-Fee Gas Alert', val: zeroFeeGasEmergency, setVal: setZeroFeeGasEmergency },
+              { label: '🪙 Smart Contract Escrow', val: smartContractBountyEscrow, setVal: setSmartContractBountyEscrow },
+              { label: '🛰️ Bluetooth P2P Mesh', val: bluetoothP2pMeshBeacon, setVal: setBluetoothP2pMeshBeacon },
+              { label: '🧠 Federated AI Triangulation', val: federatedAiThreatTriangulation, setVal: setFederatedAiThreatTriangulation },
+              { label: '🌿 Sentiment Mesh Alert', val: realtimeSentimentMeshAlert, setVal: setRealtimeSentimentMeshAlert },
+              { label: '🪙 Flutterwave Bounty', val: flutterwaveEmergencyBounty, setVal: setFlutterwaveEmergencyBounty },
+              { label: '🎥 Multimodal HLS Feed', val: multimodalHlsSurveillanceStream, setVal: setMultimodalHlsSurveillanceStream },
+              { label: '🛡️ Crypto Watermark', val: cryptographicWatermarkSos, setVal: setCryptographicWatermarkSos },
+              { label: '📜 Speech Transcription', val: automaticSpeechTranscriptionSos, setVal: setAutomaticSpeechTranscriptionSos },
+              { label: '☁️ Cloud Sentinel Backup', val: cloudSentinelEmergencyBackup, setVal: setCloudSentinelEmergencyBackup },
+              { label: '🎨 Chroma Key Mask', val: chromaKeyIntruderMasking, setVal: setChromaKeyIntruderMasking },
+              { label: '🎙️ Studio Denoiser', val: studioAudioDenoiserSos, setVal: setStudioAudioDenoiserSos },
+              { label: '☀️ HDR Night Correction', val: hdrNightVisionCorrection, setVal: setHdrNightVisionCorrection },
+              { label: '🚨 Global SOS Override', val: globalEmergencySosOverride, setVal: setGlobalEmergencySosOverride },
+              { label: '💓 Biometric Heartrate', val: biometricPulseHeartrateMonitor, setVal: setBiometricPulseHeartrateMonitor },
+            ].map((layer, idx) => (
+              <div key={idx} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', background: '#0f172a', padding: '3px 6px', borderRadius: '4px', width: '48%', border: '1px solid #334155' }}>
+                <span style={{ fontSize: '9px', color: '#fff', fontWeight: 'bold' }}>{layer.label}</span>
+                <button 
+                  onClick={() => layer.setVal(!layer.val)}
+                  style={{ background: layer.val ? '#38a169' : '#e53e3e', color: '#fff', border: 'none', padding: '2px 4px', borderRadius: '3px', fontSize: '8px', fontWeight: 'bold', cursor: 'pointer' }}
+                >
+                  {layer.val ? 'ON' : 'OFF'}
+                </button>
+              </div>
+            ))}
+          </ScrollView>
+        </View>
+      )}
 
       {/* Verified Emergency Profile Card Preview */}
       <View style={styles.card}>

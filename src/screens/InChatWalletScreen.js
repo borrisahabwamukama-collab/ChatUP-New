@@ -7,6 +7,7 @@ import {
   TouchableOpacity,
   ScrollView,
   Alert,
+  Switch,
 } from 'react-native';
 
 export default function InChatWalletScreen({ isDarkMode, coins, setCoins }) {
@@ -15,6 +16,21 @@ export default function InChatWalletScreen({ isDarkMode, coins, setCoins }) {
     { id: '2', sender: 'Nimusiima Asifa', text: 'Hey Borris, let us split the field trip expenses using /split 45000' }
   ]);
   const [commandInput, setCommandInput] = useState('');
+
+  // NEW LAYER 1: ESCROW MULTI-SIGNATURE DEPOSIT LOCK
+  const [escrowLockActive, setEscrowLockActive] = useState(false);
+  const [escrowDepositAmount, setEscrowDepositAmount] = useState('50,000 UGX');
+
+  // NEW LAYER 2: INSTANT CURRENCY FX CONVERTER TOGGLE
+  const [fxConverterActive, setFxConverterActive] = useState(true);
+  const [targetCurrency, setTargetCurrency] = useState('USD ($) / UGX');
+
+  // NEW LAYER 3: PEER-TO-PEER OFFLINE MESH BLUETOOTH PAYMENT RELAY
+  const [meshPaymentRelayActive, setMeshPaymentRelayActive] = useState(true);
+
+  // NEW LAYER 4: AUTOMATED FRAUD VELOCITY SHIELD
+  const [fraudVelocityShieldActive, setFraudVelocityShieldActive] = useState(true);
+  const [dailyTransactionVolume, setDailyTransactionVolume] = useState(180000);
 
   // Handle native chat commands like /send and /split
   const handleExecuteCommand = () => {
@@ -33,7 +49,12 @@ export default function InChatWalletScreen({ isDarkMode, coins, setCoins }) {
         return Alert.alert('Insufficient Balance', `You do not have enough coins/funds to send 🪙 ${amount}.`);
       }
 
+      if (fraudVelocityShieldActive && (dailyTransactionVolume + amount > 1000000)) {
+        return Alert.alert('Velocity Shield Triggered 🛡️', 'Transaction exceeds daily local anti-fraud transfer ceiling.');
+      }
+
       setCoins(c => c - amount);
+      setDailyTransactionVolume(prev => prev + amount);
       setChatLog(prev => [
         ...prev,
         { id: newMsgId, sender: 'You', text: `💸 Executed Command: Sent 🪙 ${amount} to ${recipient} via Mobile Money.` }
@@ -81,8 +102,81 @@ export default function InChatWalletScreen({ isDarkMode, coins, setCoins }) {
         </TouchableOpacity>
       </View>
 
-      {/* Chat Log Feed */}
       <ScrollView contentContainerStyle={styles.scrollArea} showsVerticalScrollIndicator={false}>
+        
+        {/* ================= NEW LAYER 1: ESCROW MULTI-SIG LOCK ================= */}
+        <View style={[styles.layerCard, isDarkMode && styles.darkHeader, { borderColor: '#3182ce', borderWidth: 1.5 }]}>
+          <View style={styles.settingRow}>
+            <View style={{ flex: 1, marginRight: 10 }}>
+              <Text style={[styles.layerTitle, isDarkMode && styles.darkText]}>🔒 Escrow Multi-Sig Deposit Lock</Text>
+              <Text style={{ fontSize: 11, color: '#718096' }}>Lock group funds in smart contract escrow until delivery is verified.</Text>
+            </View>
+            <Switch
+              value={escrowLockActive}
+              onValueChange={(val) => {
+                setEscrowLockActive(val);
+                Alert.alert('Escrow Guard', val ? `🔒 Escrow deposit locked (${escrowDepositAmount}).` : 'Escrow released.');
+              }}
+              trackColor={{ false: '#cbd5e0', true: '#3182ce' }}
+            />
+          </View>
+        </View>
+
+        {/* ================= NEW LAYER 2: INSTANT FX CONVERTER ================= */}
+        <View style={[styles.layerCard, isDarkMode && styles.darkHeader, { borderColor: '#d69e2e', borderWidth: 1.5 }]}>
+          <View style={styles.settingRow}>
+            <View style={{ flex: 1, marginRight: 10 }}>
+              <Text style={[styles.layerTitle, isDarkMode && styles.darkText]}>💱 Real-Time FX Currency Display</Text>
+              <Text style={{ fontSize: 11, color: '#718096' }}>Target conversion pair: <Text style={{ fontWeight: 'bold', color: '#d69e2e' }}>{targetCurrency}</Text></Text>
+            </View>
+            <Switch
+              value={fxConverterActive}
+              onValueChange={(val) => {
+                setFxConverterActive(val);
+                Alert.alert('FX Converter', val ? '💱 Live multi-currency exchange active.' : 'UGX only mode.');
+              }}
+              trackColor={{ false: '#cbd5e0', true: '#d69e2e' }}
+            />
+          </View>
+        </View>
+
+        {/* ================= NEW LAYER 3: OFFLINE MESH PAYMENT RELAY ================= */}
+        <View style={[styles.layerCard, isDarkMode && styles.darkHeader, { borderColor: '#48bb78', borderWidth: 1.5 }]}>
+          <View style={styles.settingRow}>
+            <View style={{ flex: 1, marginRight: 10 }}>
+              <Text style={[styles.layerTitle, isDarkMode && styles.darkText]}>🛰️ P2P Offline Mesh Payment Relay</Text>
+              <Text style={{ fontSize: 11, color: '#718096' }}>Route micro-transactions locally over Bluetooth when cellular networks drop.</Text>
+            </View>
+            <Switch
+              value={meshPaymentRelayActive}
+              onValueChange={(val) => {
+                setMeshPaymentRelayActive(val);
+                Alert.alert('Mesh Relay', val ? '🛰️ Offline Bluetooth mesh payment relay active.' : 'Cellular only.');
+              }}
+              trackColor={{ false: '#cbd5e0', true: '#48bb78' }}
+            />
+          </View>
+        </View>
+
+        {/* ================= NEW LAYER 4: AUTOMATED FRAUD VELOCITY SHIELD ================= */}
+        <View style={[styles.layerCard, isDarkMode && styles.darkHeader, { borderColor: '#e53e3e', borderWidth: 1.5 }]}>
+          <View style={styles.settingRow}>
+            <View style={{ flex: 1, marginRight: 10 }}>
+              <Text style={[styles.layerTitle, isDarkMode && styles.darkText]}>🛡️ Automated Fraud Velocity Shield</Text>
+              <Text style={{ fontSize: 11, color: '#718096' }}>Daily transferred: <Text style={{ fontWeight: 'bold', color: '#e53e3e' }}>{dailyTransactionVolume.toLocaleString()} UGX</Text> / 1M limit.</Text>
+            </View>
+            <Switch
+              value={fraudVelocityShieldActive}
+              onValueChange={(val) => {
+                setFraudVelocityShieldActive(val);
+                Alert.alert('Fraud Shield', val ? '🛡️ Strict anti-fraud velocity limits enabled.' : 'Unrestricted transfer mode.');
+              }}
+              trackColor={{ false: '#cbd5e0', true: '#e53e3e' }}
+            />
+          </View>
+        </View>
+
+        {/* Chat Log Feed */}
         {chatLog.map(item => (
           <View key={item.id} style={[styles.chatBubble, item.sender === 'You' ? styles.myBubble : styles.theirBubble]}>
             <Text style={styles.bubbleSender}>{item.sender}</Text>
@@ -116,12 +210,15 @@ const styles = StyleSheet.create({
   darkHeader: { backgroundColor: '#2d3748', borderBottomColor: '#4a5568' },
   headerTitle: { fontSize: 15, fontWeight: 'bold', color: '#2d3748', marginBottom: 2 },
   headerSub: { fontSize: 11, color: '#718096' },
-  walletWidget: { margin: 16, backgroundColor: '#ebf8ff', borderWidth: 1, borderColor: '#bee3f8', borderRadius: 12, padding: 14, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
+  walletWidget: { margin: 16, marginBottom: 8, backgroundColor: '#ebf8ff', borderWidth: 1, borderColor: '#bee3f8', borderRadius: 12, padding: 14, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
   walletTitle: { fontSize: 11, color: '#2b6cb0', fontWeight: 'bold' },
   walletAmount: { fontSize: 18, fontWeight: 'bold', color: '#2b6cb0', marginTop: 2 },
   topUpBtn: { backgroundColor: '#3182ce', paddingHorizontal: 12, paddingVertical: 8, borderRadius: 8 },
   topUpText: { color: '#fff', fontWeight: 'bold', fontSize: 11 },
   scrollArea: { paddingHorizontal: 16, paddingBottom: 20 },
+  layerCard: { backgroundColor: '#fff', borderRadius: 10, padding: 12, marginBottom: 10, borderWidth: 1, borderColor: '#e2e8f0' },
+  layerTitle: { fontSize: 12, fontWeight: 'bold', color: '#2d3748', marginBottom: 2 },
+  settingRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
   chatBubble: { padding: 12, borderRadius: 10, marginBottom: 10, maxWidth: '85%' },
   myBubble: { backgroundColor: '#3182ce', alignSelf: 'flex-end' },
   theirBubble: { backgroundColor: '#fff', alignSelf: 'flex-start', borderWidth: 1, borderColor: '#e2e8f0' },

@@ -7,6 +7,7 @@ import {
   TouchableOpacity,
   ScrollView,
   Alert,
+  Switch,
 } from 'react-native';
 
 export default function DRMProtectionScreen({ isDarkMode }) {
@@ -16,6 +17,18 @@ export default function DRMProtectionScreen({ isDarkMode }) {
   const [copyrightList, setCopyrightList] = useState([
     { id: '1', title: 'Bwindi Gorilla Expedition Master', hash: 'sha256_e3b0c442...', date: '2026-06-12' },
   ]);
+
+  // ================= 10 ADVANCED DRM SUPER-LAYERS =================
+  const [hardwareEnclaveTokenActive, setHardwareEnclaveTokenActive] = useState(true);
+  const [dynamicWatermarkActive, setDynamicWatermarkActive] = useState(true);
+  const [zeroTrustSessionBinding, setZeroTrustSessionBinding] = useState(true);
+  const [decentralizedDrmNodeSync, setDecentralizedDrmNodeSync] = useState(true);
+  const [antiTamperHookDetector, setAntiTamperHookDetector] = useState(true);
+  const [cryptographicLicenseLease, setCryptographicLicenseLease] = useState(true);
+  const [aiPiracyForensicCrawler, setAiPiracyForensicCrawler] = useState(true);
+  const [ephemeralTokenExpiry, setEphemeralTokenExpiry] = useState(true);
+  const [offlineMeshEnclaveLock, setOfflineMeshEnclaveLock] = useState(true);
+  const [revocationKillSwitch, setRevocationKillSwitch] = useState(true);
 
   const handleRegister = () => {
     if (!assetTitle.trim()) return Alert.alert('Error', 'Enter asset title to register copyright.');
@@ -34,6 +47,61 @@ export default function DRMProtectionScreen({ isDarkMode }) {
       <View style={[styles.card, isDarkMode && styles.darkCard]}>
         <Text style={[styles.title, isDarkMode && styles.darkText]}>🛡️ Digital Rights Management & Copyright Suite</Text>
         <Text style={styles.subtitle}>Protect intellectual property with immutable copyright hashes, dynamic watermarks, and anti-piracy blocks.</Text>
+      </View>
+
+      {/* ================= 10 ADVANCED DRM SUPER-LAYERS CONTROL PANEL ================= */}
+      <View style={[styles.card, isDarkMode && styles.darkCard, { borderColor: '#9333ea', borderWidth: 2 }]}>
+        <Text style={[styles.cardTitle, isDarkMode && styles.darkText, { marginBottom: 10 }]}>🔒 Advanced DRM & Anti-Piracy Security Matrix</Text>
+        
+        <View style={styles.settingRow}>
+          <Text style={[styles.settingLabel, isDarkMode && styles.darkText]}>🛡️ Hardware Enclave Token Guard</Text>
+          <Switch value={hardwareEnclaveTokenActive} onValueChange={setHardwareEnclaveTokenActive} trackColor={{ false: '#cbd5e0', true: '#9333ea' }} />
+        </View>
+
+        <View style={styles.settingRow}>
+          <Text style={[styles.settingLabel, isDarkMode && styles.darkText]}>💧 Dynamic Forensic User Watermark</Text>
+          <Switch value={dynamicWatermarkActive} onValueChange={setDynamicWatermarkActive} trackColor={{ false: '#cbd5e0', true: '#3182ce' }} />
+        </View>
+
+        <View style={styles.settingRow}>
+          <Text style={[styles.settingLabel, isDarkMode && styles.darkText]}>🔗 Zero-Trust Device Session Binding</Text>
+          <Switch value={zeroTrustSessionBinding} onValueChange={setZeroTrustSessionBinding} trackColor={{ false: '#cbd5e0', true: '#e53e3e' }} />
+        </View>
+
+        <View style={styles.settingRow}>
+          <Text style={[styles.settingLabel, isDarkMode && styles.darkText]}>🛰️ Decentralized DRM Node Sync</Text>
+          <Switch value={decentralizedDrmNodeSync} onValueChange={setDecentralizedDrmNodeSync} trackColor={{ false: '#cbd5e0', true: '#38a169' }} />
+        </View>
+
+        <View style={styles.settingRow}>
+          <Text style={[styles.settingLabel, isDarkMode && styles.darkText]}>🕵️ Anti-Tamper Hook & Root Detector</Text>
+          <Switch value={antiTamperHookDetector} onValueChange={setAntiTamperHookDetector} trackColor={{ false: '#cbd5e0', true: '#d69e2e' }} />
+        </View>
+
+        <View style={styles.settingRow}>
+          <Text style={[styles.settingLabel, isDarkMode && styles.darkText]}>🪙 Cryptographic License Leasing</Text>
+          <Switch value={cryptographicLicenseLease} onValueChange={setCryptographicLicenseLease} trackColor={{ false: '#cbd5e0', true: '#319795' }} />
+        </View>
+
+        <View style={styles.settingRow}>
+          <Text style={[styles.settingLabel, isDarkMode && styles.darkText]}>🤖 AI Web-Scraping & Leak Crawler</Text>
+          <Switch value={aiPiracyForensicCrawler} onValueChange={setAiPiracyForensicCrawler} trackColor={{ false: '#cbd5e0', true: '#2563eb' }} />
+        </View>
+
+        <View style={styles.settingRow}>
+          <Text style={[styles.settingLabel, isDarkMode && styles.darkText]}>⏱️ Ephemeral Token Expiry Matrix</Text>
+          <Switch value={ephemeralTokenExpiry} onValueChange={setEphemeralTokenExpiry} trackColor={{ false: '#cbd5e0', true: '#805ad5' }} />
+        </View>
+
+        <View style={styles.settingRow}>
+          <Text style={[styles.settingLabel, isDarkMode && styles.darkText]}>🛰️ Offline Mesh Enclave Vault Lock</Text>
+          <Switch value={offlineMeshEnclaveLock} onValueChange={setOfflineMeshEnclaveLock} trackColor={{ false: '#cbd5e0', true: '#48bb78' }} />
+        </View>
+
+        <View style={styles.settingRow}>
+          <Text style={[styles.settingLabel, isDarkMode && styles.darkText]}>🚨 Remote Revocation Kill-Switch</Text>
+          <Switch value={revocationKillSwitch} onValueChange={setRevocationKillSwitch} trackColor={{ false: '#cbd5e0', true: '#b7791f' }} />
+        </View>
       </View>
 
       {/* Anti-Piracy & Screen Recording Block */}
@@ -98,6 +166,8 @@ const styles = StyleSheet.create({
   subtitle: { fontSize: 11, color: '#718096' },
   darkText: { color: '#fff' },
   cardTitle: { fontSize: 13, fontWeight: 'bold', color: '#2d3748', marginBottom: 6 },
+  settingRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 },
+  settingLabel: { fontSize: 11, fontWeight: 'bold', color: '#2d3748' },
   chatInput: { borderWidth: 1, borderColor: '#cbd5e0', borderRadius: 8, paddingHorizontal: 10, height: 38, backgroundColor: '#f7fafc', color: '#2d3748', fontSize: 12 },
   darkInput: { backgroundColor: '#1a202c', borderColor: '#4a5568', color: '#fff' },
   actionBtnBlue: { backgroundColor: '#3182ce', padding: 10, borderRadius: 8, alignItems: 'center' },

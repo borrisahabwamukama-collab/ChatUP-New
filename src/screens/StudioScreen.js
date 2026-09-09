@@ -8,6 +8,7 @@ import {
   ScrollView,
   ActivityIndicator,
   Alert,
+  Switch,
 } from 'react-native';
 
 export default function StudioScreen({ isDarkMode }) {
@@ -75,7 +76,7 @@ export default function StudioScreen({ isDarkMode }) {
   const [liveDuetPartner, setLiveDuetPartner] = useState(null);
   const [isProcessingZeroFriction, setIsProcessingZeroFriction] = useState(false);
 
-  // NEW STUDIO EDITING STATES (Multi-Clip, Speed Control, Voiceover, TTS)
+  // STUDIO EDITING STATES (Multi-Clip, Speed Control, Voiceover, TTS)
   const [timelineClips, setTimelineClips] = useState([
     { id: 'clip_1', name: 'Intro Wildlife Scene (00:00 - 00:45)', duration: '45s' },
     { id: 'clip_2', name: 'Main Interview / Bwindi Footage (00:45 - 03:20)', duration: '2m 35s' }
@@ -96,10 +97,31 @@ export default function StudioScreen({ isDarkMode }) {
   const [fundraisingActive, setFundraisingActive] = useState(true);
   const [latestGiftAlert, setLatestGiftAlert] = useState('🎉 Nimusiima Asifa sent an Elephant 🐘 (500 Coins)!');
 
-  // NEW COIN & PRICING CONFIGURATION STATES
+  // COIN & PRICING CONFIGURATION STATES
   const [cinemaTicketPrice, setCinemaTicketPrice] = useState('50');
   const [ecoSupporterPrice, setEcoSupporterPrice] = useState('100');
   const [vipTierPrice, setVipTierPrice] = useState('250');
+
+  // NEW LAYER 1: MULTI-PLATFORM RESTREAMING & DESTINATION MATRIX
+  const [restreamDestinations, setRestreamDestinations] = useState([
+    { id: 'res_1', platform: 'YouTube Live ("Talk with nature")', active: true, latency: 'Ultra-Low' },
+    { id: 'res_2', platform: 'ChatUp Global Broadcast Feed', active: true, latency: 'Direct' },
+    { id: 'res_3', platform: 'Facebook & Instagram RTMP', active: false, latency: 'Standard' },
+  ]);
+
+  // NEW LAYER 2: SPATIAL AUDIO & 3D IMMERSIVE ACOUSTIC MIXER
+  const [spatialAudioPreset, setSpatialAudioPreset] = useState('Savannah Ambience (Nature 360°) 🌿');
+  const [spatialReverbLevel, setSpatialReverbLevel] = useState('Medium (Open Air)');
+  const [windNoiseSuppressor, setWindNoiseSuppressor] = useState(true);
+
+  // NEW LAYER 3: AUTOMATED CONTENT COPYRIGHT & DRM WATERMARK SHIELD
+  const [drmWatermarkActive, setDrmWatermarkActive] = useState(true);
+  const [geoBlockEastAfricaOnly, setGeoBlockEastAfricaOnly] = useState(false);
+  const [piracyShieldStatus, setPiracyShieldStatus] = useState('Active (Zero Unauthorized Scraping)');
+
+  // NEW LAYER 4: LIVE AUDIENCE INTERACTIVE EMOTE & REACTION RAIN ENGINE
+  const [activeReactionRain, setActiveReactionRain] = useState('🐘 Elephant Stampede');
+  const [reactionRainIntensity, setReactionRainIntensity] = useState('High (Maximum Stream Sparkle)');
 
   // Handlers
   const handleToggleDubbing = () => {
@@ -201,7 +223,113 @@ export default function StudioScreen({ isDarkMode }) {
       nestedScrollEnabled={true}
     >
       <Text style={[styles.analyticsTitle, isDarkMode && styles.darkText]}>🎬 Creator Studio & Broadcast Operations</Text>
-      <Text style={[styles.analyticsSubtitle, isDarkMode && styles.darkText]}>Zero-friction publishing with Live Fundraising, Coin Pricing Control, and Multi-Clip Timeline</Text>
+      <Text style={[styles.analyticsSubtitle, isDarkMode && styles.darkText]}>Zero-friction publishing with Multi-Platform Restreaming, 3D Spatial Audio, DRM Shield, and Interactive Effects</Text>
+
+      {/* NEW LAYER 1: MULTI-PLATFORM RESTREAMING & DESTINATION MATRIX */}
+      <View style={[styles.postCard, isDarkMode && styles.darkHeader, { padding: 15, marginBottom: 15, borderColor: '#3182ce', borderWidth: 2 }]}>
+        <Text style={[styles.commentsHeader, isDarkMode && styles.darkText, { fontSize: 15, marginBottom: 8 }]}>🌐 Multi-Platform Restreaming Destination Matrix</Text>
+        <Text style={{ fontSize: 12, color: '#718096', marginBottom: 10 }}>Simultaneously broadcast your live stream across multiple external networks and channels:</Text>
+        
+        {restreamDestinations.map((dest) => (
+          <View key={dest.id} style={{ backgroundColor: isDarkMode ? '#1a202c' : '#f7fafc', padding: 10, borderRadius: 8, marginBottom: 8, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
+            <View style={{ flex: 1 }}>
+              <Text style={[{ fontSize: 13, fontWeight: 'bold' }, isDarkMode && styles.darkText]}>{dest.platform}</Text>
+              <Text style={{ fontSize: 11, color: '#718096' }}>Latency: {dest.latency} • Status: <Text style={{ color: dest.active ? '#38a169' : '#e53e3e', fontWeight: 'bold' }}>{dest.active ? 'Streaming Live 🔴' : 'Offline ⚪'}</Text></Text>
+            </View>
+            <Switch
+              value={dest.active}
+              onValueChange={(val) => {
+                setRestreamDestinations(prev => prev.map(d => d.id === dest.id ? { ...d, active: val } : d));
+                Alert.alert('Restream Matrix', `${dest.platform} is now ${val ? 'active' : 'paused'}.`);
+              }}
+            />
+          </View>
+        ))}
+      </View>
+
+      {/* NEW LAYER 2: SPATIAL AUDIO & 3D IMMERSIVE ACOUSTIC MIXER */}
+      <View style={[styles.postCard, isDarkMode && styles.darkHeader, { padding: 15, marginBottom: 15, borderColor: '#d69e2e', borderWidth: 2 }]}>
+        <Text style={[styles.commentsHeader, isDarkMode && styles.darkText, { fontSize: 15, marginBottom: 8 }]}>🔊 Spatial Audio & 3D Immersive Acoustic Mixer</Text>
+        <Text style={{ fontSize: 12, color: '#718096', marginBottom: 10 }}>Configure spatial soundscapes for immersive wildlife and studio broadcasts:</Text>
+
+        <Text style={{ fontSize: 11, fontWeight: 'bold', color: '#3182ce', marginBottom: 4 }}>Acoustic Environment Preset:</Text>
+        <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginBottom: 10 }}>
+          {['Savannah Ambience (Nature 360°) 🌿', 'Bwindi Forest Echo 🌲', 'Kampala Studio Acoustic 🎙️', 'Open Lake Wave Surround 🌊'].map((preset) => (
+            <TouchableOpacity
+              key={preset}
+              style={{ backgroundColor: spatialAudioPreset === preset ? '#3182ce' : '#cbd5e0', paddingHorizontal: 10, paddingVertical: 6, borderRadius: 6, marginRight: 6 }}
+              onPress={() => {
+                setSpatialAudioPreset(preset);
+                Alert.alert('Spatial Audio', `Acoustic preset locked to: ${preset}`);
+              }}
+            >
+              <Text style={{ fontSize: 10, fontWeight: 'bold', color: '#fff' }}>{preset}</Text>
+            </TouchableOpacity>
+          ))}
+        </ScrollView>
+
+        <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', backgroundColor: isDarkMode ? '#1a202c' : '#f7fafc', padding: 10, borderRadius: 8 }}>
+          <View style={{ flex: 1 }}>
+            <Text style={[{ fontSize: 12, fontWeight: 'bold' }, isDarkMode && styles.darkText]}>AI Wind & Background Noise Suppressor</Text>
+            <Text style={{ fontSize: 10, color: '#718096' }}>Filters out harsh outdoor wind gusts on field microphones.</Text>
+          </View>
+          <Switch
+            value={windNoiseSuppressor}
+            onValueChange={(val) => {
+              setWindNoiseSuppressor(val);
+              Alert.alert('Wind Suppressor', val ? 'Wind noise cancellation active.' : 'Suppression disabled.');
+            }}
+          />
+        </View>
+      </View>
+
+      {/* NEW LAYER 3: AUTOMATED CONTENT COPYRIGHT & DRM WATERMARK SHIELD */}
+      <View style={[styles.postCard, isDarkMode && styles.darkHeader, { padding: 15, marginBottom: 15, borderColor: '#48bb78', borderWidth: 2 }]}>
+        <Text style={[styles.commentsHeader, isDarkMode && styles.darkText, { fontSize: 15, marginBottom: 8 }]}>🛡️ Content Copyright & DRM Watermark Shield</Text>
+        <Text style={{ fontSize: 12, color: '#718096', marginBottom: 10 }}>Protect your intellectual property from screen recording and unauthorized stream scraping:</Text>
+
+        <View style={{ backgroundColor: isDarkMode ? '#1a202c' : '#f7fafc', padding: 10, borderRadius: 8, marginBottom: 10 }}>
+          <Text style={{ fontSize: 11, fontWeight: 'bold', color: '#38a169', marginBottom: 4 }}>Shield Status: {piracyShieldStatus}</Text>
+          <Text style={{ fontSize: 11, color: '#718096' }}>Dynamic cryptographic viewer token watermarks are embedded into HLS video segments.</Text>
+        </View>
+
+        <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
+          <Text style={[{ fontSize: 12, fontWeight: 'bold' }, isDarkMode && styles.darkText]}>Geo-Lock Broadcast to East Africa Only:</Text>
+          <Switch
+            value={geoBlockEastAfricaOnly}
+            onValueChange={(val) => {
+              setGeoBlockEastAfricaOnly(val);
+              Alert.alert('Geo-Lock Shield', val ? '🔒 Broadcast restricted to East African IP ranges.' : '🌐 Global broadcast access enabled.');
+            }}
+          />
+        </View>
+      </View>
+
+      {/* NEW LAYER 4: LIVE AUDIENCE INTERACTIVE EMOTE & REACTION RAIN ENGINE */}
+      <View style={[styles.postCard, isDarkMode && styles.darkHeader, { padding: 15, marginBottom: 15, borderColor: '#9333ea', borderWidth: 2 }]}>
+        <Text style={[styles.commentsHeader, isDarkMode && styles.darkText, { fontSize: 15, marginBottom: 8 }]}>🎉 Live Audience Interactive Reaction Rain Engine</Text>
+        <Text style={{ fontSize: 12, color: '#718096', marginBottom: 10 }}>Trigger animated floating emoji rainstorms across all connected viewer screens simultaneously:</Text>
+
+        <Text style={{ fontSize: 11, fontWeight: 'bold', color: '#9333ea', marginBottom: 4 }}>Select Reaction Rain Effect:</Text>
+        <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginBottom: 10 }}>
+          {['🐘 Elephant Stampede', '🐆 Leopard Pounce', '🌿 Eco Green Sparkles', '🪙 Coin Shower 💰'].map((effect) => (
+            <TouchableOpacity
+              key={effect}
+              style={{ backgroundColor: activeReactionRain === effect ? '#9333ea' : '#cbd5e0', paddingHorizontal: 10, paddingVertical: 6, borderRadius: 6, marginRight: 6 }}
+              onPress={() => setActiveReactionRain(effect)}
+            >
+              <Text style={{ fontSize: 10, fontWeight: 'bold', color: '#fff' }}>{effect}</Text>
+            </TouchableOpacity>
+          ))}
+        </ScrollView>
+
+        <TouchableOpacity 
+          style={{ backgroundColor: '#9333ea', padding: 10, borderRadius: 8, alignItems: 'center' }}
+          onPress={() => Alert.alert('Reaction Rain Triggered 🎉', `Dispatched "${activeReactionRain}" particle storm to all viewer screens!`)}
+        >
+          <Text style={{ color: '#fff', fontWeight: 'bold', fontSize: 12 }}>Launch Reaction Rain Storm Now 🌧️✨</Text>
+        </TouchableOpacity>
+      </View>
 
       {/* 1. COIN PRICING & TICKET CONFIGURATION SUITE */}
       <View style={[styles.postCard, isDarkMode && styles.darkHeader, { padding: 15, marginBottom: 15, borderColor: '#3182ce', borderWidth: 2 }]}>

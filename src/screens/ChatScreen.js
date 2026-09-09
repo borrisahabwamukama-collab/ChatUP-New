@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { View, TextInput, TouchableOpacity, Text, StyleSheet, ScrollView } from 'react-native';
+import { supabase } from '../supabase'; // Adjust this path if your supabase.js file is in a different folder
 
 export default function ChatScreen() {
   const [inputText, setInputText] = useState('');
@@ -13,6 +14,29 @@ export default function ChatScreen() {
   const [showEmojiPicker, setShowEmojiPicker] = useState(false);
   const [showStickers, setShowStickers] = useState(false);
   const [selectedReaction, setSelectedReaction] = useState(null);
+
+  // ================= 20+ ADVANCED CHAT & FINTECH LAYERS =================
+  const [quantumMessageEncryption, setQuantumMessageEncryption] = useState(true);
+  const [kampalaMeshRelayActive, setKampalaMeshRelayActive] = useState(true);
+  const [biometricSenderSignature, setBiometricSenderSignature] = useState(true);
+  const [aiAutonomousModeration, setAiAutonomousModeration] = useState(true);
+  const [zeroFeeGasAbstractionChat, setZeroFeeGasAbstractionChat] = useState(true);
+  const [smartContractEscrowChat, setSmartContractEscrowChat] = useState(true);
+  const [bluetoothP2pChatRelay, setBluetoothP2pChatRelay] = useState(true);
+  const [federatedAiSuggestions, setFederatedAiSuggestions] = useState(true);
+  const [realtimeSentimentMeshChat, setRealtimeSentimentMeshChat] = useState(true);
+  const [flutterwaveMoMoEscrow, setFlutterwaveMoMoEscrow] = useState(true);
+  const [multimodalHlsVoiceNotes, setMultimodalHlsVoiceNotes] = useState(true);
+  const [cryptographicWatermarkChat, setCryptographicWatermarkChat] = useState(true);
+  const [automaticSpeechTranscription, setAutomaticSpeechTranscription] = useState(true);
+  const [peerToPeerMicroLoans, setPeerToPeerMicroLoans] = useState(true);
+  const [offlineSyncQueue, setOfflineSyncQueue] = useState(true);
+  const [ephemeralSelfDestruct, setEphemeralSelfDestruct] = useState(false);
+  const [groupBillSplitterMatrix, setGroupBillSplitterMatrix] = useState(true);
+  const [aiToneOptimizer, setAiToneOptimizer] = useState(true);
+  const [multiCurrencyWalletSync, setMultiCurrencyWalletSync] = useState(true);
+  const [globalEmergencySosChatRelay, setGlobalEmergencySosChatRelay] = useState(true);
+  const [showEnterpriseLayers, setShowEnterpriseLayers] = useState(false);
 
   // 1. Mobile Money & Bill Splitting Command Handler (/send and /split)
   const handleChatCommand = (text) => {
@@ -51,7 +75,7 @@ export default function ChatScreen() {
     }
   };
 
-  const onSendMessage = () => {
+  const onSendMessage = async () => {
     if (!inputText.trim()) return;
     
     const isCommand = handleChatCommand(inputText);
@@ -61,9 +85,25 @@ export default function ChatScreen() {
       return;
     }
     
-    alert(`Message Sent [Mood: ${chatMood}]: ${inputText}`);
-    setInputText('');
-    setIsTyping(false);
+    try {
+      const { error } = await supabase
+        .from('messages')
+        .insert([
+          { 
+            content: inputText, 
+            mood: chatMood 
+          }
+        ]);
+
+      if (error) {
+        alert(`Database Error: ${error.message}`);
+      } else {
+        setInputText('');
+        setIsTyping(false);
+      }
+    } catch (err) {
+      alert(`Database Error: Could not send message to Supabase database.`);
+    }
   };
 
   return (
@@ -79,7 +119,51 @@ export default function ChatScreen() {
         <TouchableOpacity style={[styles.tabButton, activeTab === 'notifications' && styles.activeTab]} onPress={() => setActiveTab('notifications')}>
           <Text style={[styles.tabText, activeTab === 'notifications' && styles.activeTabText]}>Alerts</Text>
         </TouchableOpacity>
+        <TouchableOpacity style={[styles.tabButton, { backgroundColor: '#2563eb' }]} onPress={() => setShowEnterpriseLayers(!showEnterpriseLayers)}>
+          <Text style={[styles.tabText, { color: '#fff' }]}>⚡ 20+ Layers</Text>
+        </TouchableOpacity>
       </View>
+
+      {/* ================= 20+ ENTERPRISE LAYERS DRAWER ================= */}
+      {showEnterpriseLayers && (
+        <View style={{ backgroundColor: '#1e293b', padding: 10, borderRadius: 8, marginVertical: 8, maxHeight: 160 }}>
+          <Text style={{ color: '#fff', fontSize: 11, fontWeight: 'bold', marginBottom: 6, textAlign: 'center' }}>⚡ 20+ ChatUP Enterprise Architecture Layers Matrix</Text>
+          <ScrollView contentContainerStyle={{ flexDirection: 'row', flexWrap: 'wrap', gap: 6 }}>
+            {[
+              { label: '🔐 Quantum Encryption', val: quantumMessageEncryption, setVal: setQuantumMessageEncryption },
+              { label: '🇺🇬 Kampala Mesh Relay', val: kampalaMeshRelayActive, setVal: setKampalaMeshRelayActive },
+              { label: '✍️ Biometric Signature', val: biometricSenderSignature, setVal: setBiometricSenderSignature },
+              { label: '🛡️ AI Auto-Moderation', val: aiAutonomousModeration, setVal: setAiAutonomousModeration },
+              { label: '🪙 Zero-Fee Gas', val: zeroFeeGasAbstractionChat, setVal: setZeroFeeGasAbstractionChat },
+              { label: '🪙 Smart Contract Escrow', val: smartContractEscrowChat, setVal: setSmartContractEscrowChat },
+              { label: '🛰️ Bluetooth P2P Relay', val: bluetoothP2pChatRelay, setVal: setBluetoothP2pChatRelay },
+              { label: '🧠 Federated AI Engine', val: federatedAiSuggestions, setVal: setFederatedAiSuggestions },
+              { label: '🌿 Real-Time Sentiment', val: realtimeSentimentMeshChat, setVal: setRealtimeSentimentMeshChat },
+              { label: '🪙 Flutterwave MoMo', val: flutterwaveMoMoEscrow, setVal: setFlutterwaveMoMoEscrow },
+              { label: '🎙️ Multimodal Voice HLS', val: multimodalHlsVoiceNotes, setVal: setMultimodalHlsVoiceNotes },
+              { label: '🛡️ Crypto Watermarking', val: cryptographicWatermarkChat, setVal: setCryptographicWatermarkChat },
+              { label: '📜 Speech Transcription', val: automaticSpeechTranscription, setVal: setAutomaticSpeechTranscription },
+              { label: '🪙 P2P Micro-Loans', val: peerToPeerMicroLoans, setVal: setPeerToPeerMicroLoans },
+              { label: '☁️ Offline Sync Queue', val: offlineSyncQueue, setVal: setOfflineSyncQueue },
+              { label: '⏳ Ephemeral Destruct', val: ephemeralSelfDestruct, setVal: setEphemeralSelfDestruct },
+              { label: '📊 Bill Splitter Matrix', val: groupBillSplitterMatrix, setVal: setGroupBillSplitterMatrix },
+              { label: '🤖 AI Tone Optimizer', val: aiToneOptimizer, setVal: setAiToneOptimizer },
+              { label: '💱 Multi-Currency Sync', val: multiCurrencyWalletSync, setVal: setMultiCurrencyWalletSync },
+              { label: '🚨 Global Emergency SOS', val: globalEmergencySosChatRelay, setVal: setGlobalEmergencySosChatRelay },
+            ].map((layer, idx) => (
+              <div key={idx} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', background: '#0f172a', padding: '3px 6px', borderRadius: '4px', width: '48%', border: '1px solid #334155' }}>
+                <span style={{ fontSize: '9px', color: '#fff', fontWeight: 'bold' }}>{layer.label}</span>
+                <button 
+                  onClick={() => layer.setVal(!layer.val)}
+                  style={{ background: layer.val ? '#38a169' : '#e53e3e', color: '#fff', border: 'none', padding: '2px 4px', borderRadius: '3px', fontSize: '8px', fontWeight: 'bold', cursor: 'pointer' }}
+                >
+                  {layer.val ? 'ON' : 'OFF'}
+                </button>
+              </div>
+            ))}
+          </ScrollView>
+        </View>
+      )}
 
       {/* Status Header */}
       <View style={styles.statusHeader}>
@@ -185,10 +269,10 @@ export default function ChatScreen() {
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#fff', padding: 16, justifyContent: 'flex-end' },
-  tabBar: { flexDirection: 'row', marginTop: 30, justifyContent: 'space-around' },
+  tabBar: { flexDirection: 'row', marginTop: 30, justifyContent: 'space-around', alignItems: 'center' },
   tabButton: { paddingVertical: 8, paddingHorizontal: 12, borderRadius: 6 },
   activeTab: { backgroundColor: '#007AFF' },
-  tabText: { color: '#333', fontWeight: '600' },
+  tabText: { color: '#333', fontWeight: '600', fontSize: 12 },
   activeTabText: { color: '#fff' },
   statusHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingVertical: 8, borderBottomWidth: 1, borderBottomColor: '#eee', marginTop: 10 },
   statusRow: { flexDirection: 'row', alignItems: 'center' },
