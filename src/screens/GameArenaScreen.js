@@ -13,6 +13,11 @@ import {
   Dimensions,
   TouchableWithoutFeedback
 } from 'react-native';
+import { BannerAd, BannerAdSize, TestIds, RewardedAd, RewardedAdEventType } from 'react-native-google-mobile-ads';
+
+// Dynamic Google AdMob Unit IDs (Automatic Test IDs during development)
+const bannerAdUnitId = __DEV__ ? TestIds.BANNER : 'ca-app-pub-xxxxxxxxoxxxxxxx/xxxxxxxxxx';
+const rewardedAdUnitId = __DEV__ ? TestIds.REWARDED : 'ca-app-pub-xxxxxxxxoxxxxxxx/xxxxxxxxxx';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 
@@ -27,6 +32,10 @@ export default function GameArenaScreen({ coins, setCoins, isDarkMode }) {
   const [playerTwoScore, setPlayerTwoScore] = useState(2);
   const [isMatchActive, setIsMatchActive] = useState(true);
   const [winnerDeclared, setWinnerDeclared] = useState(null);
+
+  // Monetization & Rewarded Ad States
+  const [rewardedAdLoaded, setRewardedAdLoaded] = useState(false);
+  const [rewardedAdInstance, setRewardedAdInstance] = useState(null);
 
   // Sideline Sidemenu / Chat Feeds
   const [matchMessages, setMatchMessages] = useState([
@@ -56,7 +65,7 @@ export default function GameArenaScreen({ coins, setCoins, isDarkMode }) {
   const webcamRef = useRef(null);
   const [cameraActive, setCameraActive] = useState(true);
 
-  // Initialize Web Camera Stream
+  // Initialize Web Camera Stream & AdMob Rewarded Ad
   useEffect(() => {
     let mediaStream = null;
     if (Platform.OS === 'web' && cameraActive) {
@@ -69,12 +78,52 @@ export default function GameArenaScreen({ coins, setCoins, isDarkMode }) {
         })
         .catch(() => {});
     }
+    initRewardedAd();
     return () => {
       if (mediaStream) {
         mediaStream.getTracks().forEach(track => track.stop());
       }
     };
   }, [cameraActive]);
+
+  const initRewardedAd = () => {
+    try {
+      const rewardedAd = RewardedAd.createForAdRequest(rewardedAdUnitId, {
+        requestNonPersonalizedAdsOnly: true,
+      });
+
+      const unsubscribeLoaded = rewardedAd.addAdEventListener(RewardedAdEventType.LOADED, () => {
+        setRewardedAdLoaded(true);
+      });
+
+      const unsubscribeEarned = rewardedAd.addAdEventListener(RewardedAdEventType.EARNED_REWARD, () => {
+        setCoins(prev => prev + 50);
+        Alert.alert('💰 Ad Reward Credited!', 'Successfully earned +50 Coins tournament bounty!');
+      });
+
+      rewardedAd.load();
+      setRewardedAdInstance(rewardedAd);
+
+      return () => {
+        unsubscribeLoaded();
+        unsubscribeEarned();
+      };
+    } catch (e) {
+      console.log('Rewarded Ad initialization notice:', e);
+    }
+  };
+
+  const handleShowRewardedAd = () => {
+    if (rewardedAdLoaded && rewardedAdInstance) {
+      rewardedAdInstance.show();
+      setRewardedAdLoaded(false);
+      rewardedAdInstance.load();
+    } else {
+      // Fallback simulation for web/preview
+      setCoins(prev => prev + 50);
+      Alert.alert('💰 Ad Reward Credited (Simulated)', 'Watch ad completed! +50 coins added to your ChatUp wallet balance.');
+    }
+  };
 
   // Interactive Game Action Handler (Dynamic Board Simulation)
   const handleGameAction = (actionType) => {
@@ -147,6 +196,37 @@ export default function GameArenaScreen({ coins, setCoins, isDarkMode }) {
   return (
     <ScrollView contentContainerStyle={[styles.container, isDarkMode && styles.darkContainer]}>
       
+      {/* ================= GOOGLE ADMOB DYNAMIC BANNER ================= */}
+      <View style={styles.monetizationAdCard}>
+        <Text style={styles.adTagLabel}>Sponsored Arena Banner 📢 • AdMob Banner</Text>
+        <View style={{ alignItems: 'center', marginVertical: 4 }}>
+          <BannerAd
+            unitId={bannerAdUnitId}
+            size={BannerAdSize.ANCHORED_ADAPTIVE_BANNER}
+            requestOptions={{
+              requestNonPersonalizedAdsOnly: true,
+            }}
+            onAdLoaded={() => console.log('AdMob Arena Banner loaded successfully')}
+            onAdFailedToLoad={(error) => console.log('AdMob Arena Banner load error: ', error)}
+          />
+        </View>
+      </View>
+
+      {/* ================= REWARDED AD TOURNAMENT BONUS WIDGET ================= */}
+      <View style={styles.creatorMonetizationCard}>
+        <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
+          <View>
+            <Text style={{ fontSize: 12, fontWeight: 'bold', color: '#2b6cb0' }}>🪙 Tournament Spectator Rewards</Text>
+            <Text style={{ fontSize: 14, fontWeight: 'bold', color: '#2d3748', marginTop: 2 }}>
+              Watch a sponsor clip to earn +50 coins!
+            </Text>
+          </View>
+          <TouchableOpacity style={styles.watchRewardAdBtn} onPress={handleShowRewardedAd}>
+            <Text style={{ color: '#fff', fontSize: 11, fontWeight: 'bold' }}>Watch Ad (+50 Coins) 🎁</Text>
+          </TouchableOpacity>
+        </View>
+      </View>
+
       {/* ================= 1. TOURNAMENT SPONSORSHIP BANNER ================= */}
       {sponsorBannerActive && (
         <View style={[styles.sponsorBanner, isDarkMode && styles.darkCard]}>
@@ -672,4 +752,10 @@ const styles = StyleSheet.create({
     borderRadius: 8,
     alignItems: 'center',
   },
+
+  // Monetization Ad Styles
+  monetizationAdCard: { backgroundColor: '#fff', borderWidth: 1, borderColor: '#e2e8f0', borderRadius: 8, padding: 8, marginBottom: 12, alignItems: 'center' },
+  adTagLabel: { fontSize: 9, color: '#a0aec0', textTransform: 'uppercase', fontWeight: 'bold', marginBottom: 2 },
+  creatorMonetizationCard: { backgroundColor: '#ebf8ff', borderWidth: 1, borderColor: '#bee3f8', borderRadius: 8, padding: 12, marginBottom: 12 },
+  watchRewardAdBtn: { backgroundColor: '#3182ce', paddingHorizontal: 12, paddingVertical: 6, borderRadius: 6 },
 });

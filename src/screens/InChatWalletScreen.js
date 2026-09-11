@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   StyleSheet,
   Text,
@@ -9,6 +9,11 @@ import {
   Alert,
   Switch,
 } from 'react-native';
+import { BannerAd, BannerAdSize, TestIds, RewardedAd, RewardedAdEventType } from 'react-native-google-mobile-ads';
+
+// Dynamic Google AdMob Unit IDs (Automatic Test IDs during development)
+const bannerAdUnitId = __DEV__ ? TestIds.BANNER : 'ca-app-pub-xxxxxxxxoxxxxxxx/xxxxxxxxxx';
+const rewardedAdUnitId = __DEV__ ? TestIds.REWARDED : 'ca-app-pub-xxxxxxxxoxxxxxxx/xxxxxxxxxx';
 
 export default function InChatWalletScreen({ isDarkMode, coins, setCoins }) {
   const [chatLog, setChatLog] = useState([
@@ -16,6 +21,10 @@ export default function InChatWalletScreen({ isDarkMode, coins, setCoins }) {
     { id: '2', sender: 'Nimusiima Asifa', text: 'Hey Borris, let us split the field trip expenses using /split 45000' }
   ]);
   const [commandInput, setCommandInput] = useState('');
+
+  // Monetization & Rewarded Ad States
+  const [rewardedAdLoaded, setRewardedAdLoaded] = useState(false);
+  const [rewardedAdInstance, setRewardedAdInstance] = useState(null);
 
   // NEW LAYER 1: ESCROW MULTI-SIGNATURE DEPOSIT LOCK
   const [escrowLockActive, setEscrowLockActive] = useState(false);
@@ -31,6 +40,54 @@ export default function InChatWalletScreen({ isDarkMode, coins, setCoins }) {
   // NEW LAYER 4: AUTOMATED FRAUD VELOCITY SHIELD
   const [fraudVelocityShieldActive, setFraudVelocityShieldActive] = useState(true);
   const [dailyTransactionVolume, setDailyTransactionVolume] = useState(180000);
+
+  // Initialize AdMob Rewarded Ad
+  useEffect(() => {
+    initRewardedAd();
+  }, []);
+
+  const initRewardedAd = () => {
+    try {
+      const rewardedAd = RewardedAd.createForAdRequest(rewardedAdUnitId, {
+        requestNonPersonalizedAdsOnly: true,
+      });
+
+      const unsubscribeLoaded = rewardedAd.addAdEventListener(RewardedAdEventType.LOADED, () => {
+        setRewardedAdLoaded(true);
+      });
+
+      const unsubscribeEarned = rewardedAd.addAdEventListener(RewardedAdEventType.EARNED_REWARD, () => {
+        if (setCoins) {
+          setCoins(prev => prev + 100);
+        }
+        Alert.alert('💰 Ad Reward Credited!', 'Successfully earned +100 Coins wallet funding bonus!');
+      });
+
+      rewardedAd.load();
+      setRewardedAdInstance(rewardedAd);
+
+      return () => {
+        unsubscribeLoaded();
+        unsubscribeEarned();
+      };
+    } catch (e) {
+      console.log('Rewarded Ad initialization notice:', e);
+    }
+  };
+
+  const handleShowRewardedAd = () => {
+    if (rewardedAdLoaded && rewardedAdInstance) {
+      rewardedAdInstance.show();
+      setRewardedAdLoaded(false);
+      rewardedAdInstance.load();
+    } else {
+      // Fallback simulation for web/preview
+      if (setCoins) {
+        setCoins(prev => prev + 100);
+      }
+      Alert.alert('💰 Ad Reward Credited (Simulated)', 'Watch ad completed! +100 coins added to your ChatUp wallet balance.');
+    }
+  };
 
   // Handle native chat commands like /send and /split
   const handleExecuteCommand = () => {
@@ -85,6 +142,37 @@ export default function InChatWalletScreen({ isDarkMode, coins, setCoins }) {
   return (
     <View style={[styles.container, isDarkMode && styles.darkContainer]}>
       
+      {/* ================= GOOGLE ADMOB DYNAMIC BANNER ================= */}
+      <View style={styles.monetizationAdCard}>
+        <Text style={styles.adTagLabel}>Sponsored Wallet Banner 📢 • AdMob Banner</Text>
+        <View style={{ alignItems: 'center', marginVertical: 4 }}>
+          <BannerAd
+            unitId={bannerAdUnitId}
+            size={BannerAdSize.ANCHORED_ADAPTIVE_BANNER}
+            requestOptions={{
+              requestNonPersonalizedAdsOnly: true,
+            }}
+            onAdLoaded={() => console.log('AdMob Wallet Banner loaded successfully')}
+            onAdFailedToLoad={(error) => console.log('AdMob Wallet Banner load error: ', error)}
+          />
+        </View>
+      </View>
+
+      {/* ================= REWARDED AD WALLET BONUS WIDGET ================= */}
+      <View style={styles.creatorMonetizationCard}>
+        <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
+          <View style={{ flex: 1, marginRight: 10 }}>
+            <Text style={{ fontSize: 12, fontWeight: 'bold', color: '#2b6cb0' }}>🪙 Mobile Money Top-Up Bonus</Text>
+            <Text style={{ fontSize: 14, fontWeight: 'bold', color: '#2d3748', marginTop: 2 }}>
+              Watch a sponsor clip to earn +100 coins!
+            </Text>
+          </View>
+          <TouchableOpacity style={styles.watchRewardAdBtn} onPress={handleShowRewardedAd}>
+            <Text style={{ color: '#fff', fontSize: 11, fontWeight: 'bold' }}>Watch Ad (+100 🪙) 🎁</Text>
+          </TouchableOpacity>
+        </View>
+      </View>
+
       {/* Header */}
       <View style={[styles.header, isDarkMode && styles.darkHeader]}>
         <Text style={[styles.headerTitle, isDarkMode && styles.darkText]}>💳 In-Chat Mobile Money & Bill Splitting</Text>
@@ -229,4 +317,10 @@ const styles = StyleSheet.create({
   darkInput: { backgroundColor: '#1a202c', borderColor: '#4a5568', color: '#fff' },
   sendBtn: { backgroundColor: '#3182ce', paddingHorizontal: 14, height: 40, borderRadius: 20, justifyContent: 'center', alignItems: 'center' },
   sendBtnText: { color: '#fff', fontWeight: 'bold', fontSize: 12 },
+
+  // Monetization Ad Styles
+  monetizationAdCard: { backgroundColor: '#fff', borderWidth: 1, borderColor: '#e2e8f0', borderRadius: 8, padding: 8, marginBottom: 12, alignItems: 'center' },
+  adTagLabel: { fontSize: 9, color: '#a0aec0', textTransform: 'uppercase', fontWeight: 'bold', marginBottom: 2 },
+  creatorMonetizationCard: { backgroundColor: '#ebf8ff', borderWidth: 1, borderColor: '#bee3f8', borderRadius: 8, padding: 12, marginBottom: 12 },
+  watchRewardAdBtn: { backgroundColor: '#3182ce', paddingHorizontal: 12, paddingVertical: 6, borderRadius: 6 },
 });

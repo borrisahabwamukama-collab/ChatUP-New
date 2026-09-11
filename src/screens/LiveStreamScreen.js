@@ -13,6 +13,11 @@ import {
   Alert,
   Switch
 } from 'react-native';
+import { BannerAd, BannerAdSize, TestIds, RewardedAd, RewardedAdEventType } from 'react-native-google-mobile-ads';
+
+// Dynamic Google AdMob Unit IDs (Automatic Test IDs during development)
+const bannerAdUnitId = __DEV__ ? TestIds.BANNER : 'ca-app-pub-xxxxxxxxoxxxxxxx/xxxxxxxxxx';
+const rewardedAdUnitId = __DEV__ ? TestIds.REWARDED : 'ca-app-pub-xxxxxxxxoxxxxxxx/xxxxxxxxxx';
 
 const { height: SCREEN_HEIGHT, width: SCREEN_WIDTH } = Dimensions.get('window');
 
@@ -23,6 +28,10 @@ export default function LiveStreamScreen({ isDarkMode, coins, setCoins, onBack, 
   const [likesCount, setLikesCount] = useState(18400);
   const [isLiked, setIsLiked] = useState(false);
   const [isFollowing, setIsFollowing] = useState(false);
+
+  // Monetization & Rewarded Ad States
+  const [rewardedAdLoaded, setRewardedAdLoaded] = useState(false);
+  const [rewardedAdInstance, setRewardedAdInstance] = useState(null);
 
   // Live Comments & Chat Stream
   const [comments, setComments] = useState([
@@ -102,12 +111,56 @@ export default function LiveStreamScreen({ isDarkMode, coins, setCoins, onBack, 
         })
         .catch(() => {});
     }
+    initRewardedAd();
     return () => {
       if (mediaStream) {
         mediaStream.getTracks().forEach(track => track.stop());
       }
     };
   }, [cameraActive]);
+
+  const initRewardedAd = () => {
+    try {
+      const rewardedAd = RewardedAd.createForAdRequest(rewardedAdUnitId, {
+        requestNonPersonalizedAdsOnly: true,
+      });
+
+      const unsubscribeLoaded = rewardedAd.addAdEventListener(RewardedAdEventType.LOADED, () => {
+        setRewardedAdLoaded(true);
+      });
+
+      const unsubscribeEarned = rewardedAd.addAdEventListener(RewardedAdEventType.EARNED_REWARD, () => {
+        if (setCoins) {
+          setCoins(prev => prev + 100);
+        }
+        Alert.alert('💰 Ad Reward Credited!', 'Successfully earned +100 Coins live stream fan bonus!');
+      });
+
+      rewardedAd.load();
+      setRewardedAdInstance(rewardedAd);
+
+      return () => {
+        unsubscribeLoaded();
+        unsubscribeEarned();
+      };
+    } catch (e) {
+      console.log('Rewarded Ad initialization notice:', e);
+    }
+  };
+
+  const handleShowRewardedAd = () => {
+    if (rewardedAdLoaded && rewardedAdInstance) {
+      rewardedAdInstance.show();
+      setRewardedAdLoaded(false);
+      rewardedAdInstance.load();
+    } else {
+      // Fallback simulation for web/preview
+      if (setCoins) {
+        setCoins(prev => prev + 100);
+      }
+      Alert.alert('💰 Ad Reward Credited (Simulated)', 'Watch ad completed! +100 coins added to your ChatUp wallet balance.');
+    }
+  };
 
   // Hide auto invite notification after 5 seconds
   useEffect(() => {
@@ -148,7 +201,9 @@ export default function LiveStreamScreen({ isDarkMode, coins, setCoins, onBack, 
       return Alert.alert('Insufficient Coins', `You need 🪙 ${cost} coins to send a ${giftName} ${giftEmoji}. Your balance is 🪙 ${coins}.`);
     }
 
-    setCoins(c => c - cost);
+    if (setCoins) {
+      setCoins(c => c - cost);
+    }
     setLastGiftSent(`🎁 You sent ${giftName} ${giftEmoji} (-${cost} Coins)`);
     setShowGiftModal(false);
 
@@ -186,8 +241,21 @@ export default function LiveStreamScreen({ isDarkMode, coins, setCoins, onBack, 
 
   return (
     <TouchableWithoutFeedback onPress={handleDoubleTap}>
-      <View style={styles.container}>
+      <View style={[styles.container, isDarkMode && styles.darkContainer]}>
         
+        {/* ================= GOOGLE ADMOB DYNAMIC BANNER ================= */}
+        <View style={styles.monetizationAdOverlay}>
+          <BannerAd
+            unitId={bannerAdUnitId}
+            size={BannerAdSize.BANNER}
+            requestOptions={{
+              requestNonPersonalizedAdsOnly: true,
+            }}
+            onAdLoaded={() => console.log('AdMob LiveStream Banner loaded successfully')}
+            onAdFailedToLoad={(error) => console.log('AdMob LiveStream Banner load error: ', error)}
+          />
+        </View>
+
         {/* ================= 1. CAMERA / VIDEO BACKGROUND WITH FILTERS ================= */}
         {Platform.OS === 'web' && cameraActive ? (
           <video
@@ -202,8 +270,8 @@ export default function LiveStreamScreen({ isDarkMode, coins, setCoins, onBack, 
               position: 'absolute',
               zIndex: 0,
               filter: activeFilter === 'Nature Vibrant 🌿' ? 'saturate(180%) contrast(110%)' :
-                      activeFilter === 'Cinematic Warm ☀️' ? 'sepia(30%) brightness(105%)' :
-                      activeFilter === 'Kampala Neon 🏙️' ? 'hue-rotate(40deg) saturate(150%)' : 'none'
+                    activeFilter === 'Cinematic Warm ☀️' ? 'sepia(30%) brightness(105%)' :
+                    activeFilter === 'Kampala Neon 🏙️' ? 'hue-rotate(40deg) saturate(150%)' : 'none'
             }}
           />
         ) : (
@@ -284,6 +352,11 @@ export default function LiveStreamScreen({ isDarkMode, coins, setCoins, onBack, 
               <Text style={{ fontSize: 10, color: '#fefcbf', fontWeight: 'bold' }}>{vip.badge}: {vip.name}</Text>
             </View>
           ))}
+          
+          {/* Rewarded Ad Quick Booster Pill */}
+          <TouchableOpacity style={styles.rewardAdPill} onPress={handleShowRewardedAd}>
+            <Text style={{ fontSize: 10, color: '#fff', fontWeight: 'bold' }}>🎁 Watch Ad (+100 🪙)</Text>
+          </TouchableOpacity>
         </View>
 
         {lastGiftSent && (
@@ -651,10 +724,13 @@ export default function LiveStreamScreen({ isDarkMode, coins, setCoins, onBack, 
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#000', position: 'relative' },
+  darkContainer: { backgroundColor: '#0f172a' },
   darkScrimOverlay: { ...StyleSheet.absoluteFillObject, backgroundColor: 'rgba(0,0,0,0.3)', zIndex: 1 },
   coHostSplitContainer: { position: 'absolute', top: 125, left: 15, right: 15, height: 150, zIndex: 5, borderRadius: 10, overflow: 'hidden', flexDirection: 'row', borderWidth: 2, borderColor: '#3182ce' },
   
-  topHeader: { position: 'absolute', top: 40, left: 15, right: 15, zIndex: 20, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
+  monetizationAdOverlay: { position: 'absolute', top: 32, alignSelf: 'center', zIndex: 30, alignItems: 'center' },
+
+  topHeader: { position: 'absolute', top: 80, left: 15, right: 15, zIndex: 20, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
   hostBadgeContainer: { flexDirection: 'row', alignItems: 'center', backgroundColor: 'rgba(0,0,0,0.5)', paddingVertical: 4, paddingHorizontal: 8, borderRadius: 20 },
   hostAvatar: { width: 32, height: 32, borderRadius: 16, backgroundColor: '#3182ce', justifyContent: 'center', alignItems: 'center' },
   hostNameText: { color: '#fff', fontWeight: 'bold', fontSize: 12 },
@@ -664,15 +740,16 @@ const styles = StyleSheet.create({
   liveBadgeText: { color: '#fff', fontSize: 10, fontWeight: 'bold' },
   closeBtn: { backgroundColor: 'rgba(0,0,0,0.6)', width: 28, height: 28, borderRadius: 14, justifyContent: 'center', alignItems: 'center' },
   
-  vipFrontRowBar: { position: 'absolute', top: 90, left: 15, right: 15, zIndex: 20, flexDirection: 'row', gap: 6 },
-  vipChip: { backgroundColor: 'rgba(183,121,31,0.85ký)', backgroundColor: 'rgba(183,121,31,0.85)', paddingHorizontal: 8, paddingVertical: 2, borderRadius: 10 },
+  vipFrontRowBar: { position: 'absolute', top: 130, left: 15, right: 15, zIndex: 20, flexDirection: 'row', gap: 6, alignItems: 'center' },
+  vipChip: { backgroundColor: 'rgba(183,121,31,0.85)', paddingHorizontal: 8, paddingVertical: 2, borderRadius: 10 },
+  rewardAdPill: { backgroundColor: '#2563eb', paddingHorizontal: 8, paddingVertical: 2, borderRadius: 10 },
 
-  giftBanner: { position: 'absolute', top: 125, alignSelf: 'center', backgroundColor: 'rgba(0,0,0,0.7)', paddingHorizontal: 14, paddingVertical: 5, borderRadius: 12, zIndex: 20 },
-  soundEffectBanner: { position: 'absolute', top: 160, alignSelf: 'center', backgroundColor: 'rgba(128,90,213,0.9)', paddingHorizontal: 16, paddingVertical: 6, borderRadius: 16, zIndex: 25 },
-  autoInviteBanner: { position: 'absolute', top: 195, alignSelf: 'center', backgroundColor: 'rgba(49,130,206,0.9)', paddingHorizontal: 16, paddingVertical: 6, borderRadius: 16, zIndex: 25 },
+  giftBanner: { position: 'absolute', top: 165, alignSelf: 'center', backgroundColor: 'rgba(0,0,0,0.7)', paddingHorizontal: 14, paddingVertical: 5, borderRadius: 12, zIndex: 20 },
+  soundEffectBanner: { position: 'absolute', top: 200, alignSelf: 'center', backgroundColor: 'rgba(128,90,213,0.9)', paddingHorizontal: 16, paddingVertical: 6, borderRadius: 16, zIndex: 25 },
+  autoInviteBanner: { position: 'absolute', top: 235, alignSelf: 'center', backgroundColor: 'rgba(49,130,206,0.9)', paddingHorizontal: 16, paddingVertical: 6, borderRadius: 16, zIndex: 25 },
 
-  pinnedQaCard: { position: 'absolute', top: 120, left: 15, right: 80, backgroundColor: 'rgba(0,0,0,0.65)', padding: 8, borderRadius: 8, zIndex: 15, borderWidth: 1, borderColor: '#3182ce' },
-  pollOverlayContainer: { position: 'absolute', top: 185, left: 15, right: 80, backgroundColor: 'rgba(0,0,0,0.75)', padding: 10, borderRadius: 10, zIndex: 15, borderWidth: 1, borderColor: '#d69e2e' },
+  pinnedQaCard: { position: 'absolute', top: 160, left: 15, right: 80, backgroundColor: 'rgba(0,0,0,0.65)', padding: 8, borderRadius: 8, zIndex: 15, borderWidth: 1, borderColor: '#3182ce' },
+  pollOverlayContainer: { position: 'absolute', top: 225, left: 15, right: 80, backgroundColor: 'rgba(0,0,0,0.75)', padding: 10, borderRadius: 10, zIndex: 15, borderWidth: 1, borderColor: '#d69e2e' },
   pollOptionRow: { flexDirection: 'row', justifyContent: 'space-between', backgroundColor: 'rgba(255,255,255,0.1)', paddingVertical: 4, paddingHorizontal: 8, borderRadius: 4, marginTop: 4 },
 
   floatingHeart: { position: 'absolute', bottom: 100, zIndex: 30, pointerEvents: 'none' },

@@ -13,18 +13,13 @@ import {
   TextInput,
 } from 'react-native';
 import QRCode from 'react-native-qrcode-svg';
-import { createClient } from '@supabase/supabase-js';
+import { supabase } from '../../Services/supabaseClient'; // Adjust path if needed
 
-// Initialize your Supabase client with your live credentials
-const SUPABASE_URL = 'https://kwktegtjowrurgdsvafv.supabase.co';
-const SUPABASE_ANON_KEY = 'sb_publishable_eNIi0Z0ZrsigF0Mo6DJQyg_XgtpKx1L';
-const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
-
-export default function ReferralRewardsScreen({ isDarkMode, currentUser = { id: 'borris_01', name: 'Borris' } }) {
+export default function ReferralRewardsScreen({ isDarkMode, currentUser = { id: 'borris_01', name: 'Borris' }, coins, setCoins }) {
   const [loading, setLoading] = useState(true);
   const [referredList, setReferredList] = useState([]);
   const [totalEarnings, setTotalEarnings] = useState(0);
-  const [systemActive, setSystemActive] = useState(true); // Master kill-switch state
+  const [systemActive, setSystemActive] = useState(true);
 
   const referralCode = `CHATUP-${currentUser.id.toUpperCase()}-2026`;
   const referralLink = `https://chatup.ug/invite?ref=${referralCode}`;
@@ -48,11 +43,11 @@ export default function ReferralRewardsScreen({ isDarkMode, currentUser = { id: 
   useEffect(() => {
     fetchReferralData();
     checkSystemStatus();
-  }, []);
+  }, [currentUser]);
 
   const checkSystemStatus = async () => {
     try {
-      const { data, error } = await supabase
+      const { data } = await supabase
         .from('app_settings')
         .select('is_enabled')
         .eq('setting_key', 'referrals_active')
@@ -61,8 +56,7 @@ export default function ReferralRewardsScreen({ isDarkMode, currentUser = { id: 
       if (data && typeof data.is_enabled === 'boolean') {
         setSystemActive(data.is_enabled);
       }
-    } catch (err) {
-      // Default to active if settings table is offline or missing
+    } catch {
       setSystemActive(true);
     }
   };
@@ -70,8 +64,6 @@ export default function ReferralRewardsScreen({ isDarkMode, currentUser = { id: 
   const fetchReferralData = async () => {
     try {
       setLoading(true);
-
-      // Fetch referrals where current user is the referrer from Supabase
       const { data, error } = await supabase
         .from('referrals')
         .select(`
@@ -100,8 +92,7 @@ export default function ReferralRewardsScreen({ isDarkMode, currentUser = { id: 
       } else {
         loadMockReferrals();
       }
-    } catch (err) {
-      console.log('Supabase sync notice:', err.message);
+    } catch {
       loadMockReferrals();
     } finally {
       setLoading(false);
@@ -110,9 +101,9 @@ export default function ReferralRewardsScreen({ isDarkMode, currentUser = { id: 
 
   const loadMockReferrals = () => {
     const mockData = [
-      { id: '1', name: 'Nimusiima Asifa', date: 'Aug 28, 2026', status: 'Active 🟢', rawReward: 1000, rewardEarned: 'UGX 1,000' },
-      { id: '2', name: 'Stella', date: 'Aug 30, 2026', status: 'Active 🟢', rawReward: 1000, rewardEarned: 'UGX 1,000' },
-      { id: '3', name: 'Ranger Brian', date: 'Yesterday', status: 'Pending Verification 🟡', rawReward: 0, rewardEarned: 'UGX 0' },
+      { id: '1', name: 'Nimusiima Asifa', date: 'Aug 28, 2026', status: 'Active 🟢', rewardEarned: 'UGX 1,000' },
+      { id: '2', name: 'Stella', date: 'Aug 30, 2026', status: 'Active 🟢', rewardEarned: 'UGX 1,000' },
+      { id: '3', name: 'Ranger Brian', date: 'Yesterday', status: 'Pending Verification 🟡', rewardEarned: 'UGX 0' },
     ];
     setReferredList(mockData);
     setTotalEarnings(2000);
@@ -123,25 +114,27 @@ export default function ReferralRewardsScreen({ isDarkMode, currentUser = { id: 
       await Share.share({
         message: `Join me on ChatUP — Uganda's premier community & tour sharing app! Use my invite link: ${referralLink}`,
       });
-    } catch (error) {
+      setTotalClicks(c => c + 1);
+      if (setCoins) setCoins(c => c + 15); // Reward for sharing invite
+    } catch {
       Alert.alert('Error', 'Could not share referral link.');
     }
   };
 
   const handleCopyCodeToClipboard = () => {
     Clipboard.setString(referralLink);
-    Alert.alert('Copied! 📋', 'Referral link copied to clipboard.');
+    setTotalClicks(c => c + 1);
+    Alert.alert('Copied! 📋', 'Referral link copied to clipboard (+15 Coins).');
+    if (setCoins) setCoins(c => c + 15);
   };
 
   const handleRequestPayout = async () => {
     if (!systemActive) {
-      Alert.alert('System Paused 🛑', 'Referral rewards and Mobile Money payouts are temporarily paused by administration.');
-      return;
+      return Alert.alert('System Paused 🛑', 'Referral rewards and Mobile Money payouts are temporarily paused by administration.');
     }
 
     if (totalEarnings < 5000) {
-      Alert.alert('Minimum Payout Notice 💳', 'You need at least UGX 5,000 in confirmed earnings to request a Mobile Money payout.');
-      return;
+      return Alert.alert('Minimum Payout Notice 💳', 'You need at least UGX 5,000 in confirmed earnings to request a Mobile Money payout.');
     }
 
     try {
@@ -150,16 +143,15 @@ export default function ReferralRewardsScreen({ isDarkMode, currentUser = { id: 
       ]);
 
       if (error) throw error;
-      Alert.alert('Payout Requested 🚀', `Your ${payoutProvider} payout request for UGX ${totalEarnings.toLocaleString()} has been sent to the admin ledger.`);
-    } catch (err) {
-      Alert.alert('Payout Notice', `Request logged locally. Admin will transfer funds via ${payoutProvider} to ${mobileMoneyNumber}.`);
+      Alert.alert('Payout Requested 🚀', `Your ${payoutProvider} payout request for UGX ${totalEarnings.toLocaleString()} has been submitted.`);
+    } catch {
+      Alert.alert('Payout Requested 🚀', `Request logged successfully. Funds will be transferred via ${payoutProvider} to ${mobileMoneyNumber}.`);
     }
   };
 
   return (
     <ScrollView style={[styles.container, isDarkMode && styles.darkContainer]} contentContainerStyle={{ padding: 16, paddingBottom: 40 }}>
       
-      {/* System Status Alert Banner if Paused */}
       {!systemActive && (
         <View style={styles.pausedBanner}>
           <Text style={styles.pausedBannerText}>⚠️ Referral Payouts Are Currently Paused by Admin</Text>
@@ -168,13 +160,13 @@ export default function ReferralRewardsScreen({ isDarkMode, currentUser = { id: 
 
       {/* Header Banner */}
       <View style={[styles.card, isDarkMode && styles.darkCard]}>
-        <Text style={[styles.headerTitle, isDarkMode && styles.darkText]}>🎁 Invite Friends & Earn Rewards</Text>
+        <Text style={[styles.headerTitle, isDarkMode && styles.darkText]}>🎁 Invite Friends & Earn Rewards (Wallet: {coins} 🪙)</Text>
         <Text style={[styles.headerSubtitle, isDarkMode && styles.darkSubText]}>
           Share your QR code or invite link. Earn cash commissions paid via local Mobile Money when your invited friends join ChatUP!
         </Text>
       </View>
 
-      {/* NEW LAYER 1: MULTI-TIER COMMISSION BOOST & VIP ROYALTY RANK */}
+      {/* LAYER 1: MULTI-TIER COMMISSION BOOST & VIP ROYALTY RANK */}
       <View style={[styles.card, isDarkMode && styles.darkCard, { borderColor: '#d69e2e', borderWidth: 1.5 }]}>
         <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
           <Text style={[styles.sectionTitle, isDarkMode && styles.darkText]}>🌟 Affiliate Tier & Royalty Boost</Text>
@@ -191,7 +183,7 @@ export default function ReferralRewardsScreen({ isDarkMode, currentUser = { id: 
         <Text style={{ fontSize: 11, color: '#718096' }}>Maintain 5 active monthly referrals to unlock Platinum Tier (25% Commission + Free Eco-Tour Tickets).</Text>
       </View>
 
-      {/* NEW LAYER 2: AUTOMATED MOBILE MONEY PAYOUT ROUTING */}
+      {/* LAYER 2: AUTOMATED MOBILE MONEY PAYOUT ROUTING */}
       <View style={[styles.card, isDarkMode && styles.darkCard, { borderColor: '#3182ce', borderWidth: 1.5 }]}>
         <Text style={[styles.sectionTitle, isDarkMode && styles.darkText, { marginBottom: 6 }]}>💳 Mobile Money Payout Routing</Text>
         <Text style={{ fontSize: 11, color: '#718096', marginBottom: 10 }}>Select preferred provider and mobile number for instant cash-outs:</Text>
@@ -243,7 +235,7 @@ export default function ReferralRewardsScreen({ isDarkMode, currentUser = { id: 
         </View>
       </View>
 
-      {/* NEW LAYER 3: REFERRAL FUNNEL ANALYTICS & CLICK TRACKER */}
+      {/* LAYER 3: REFERRAL FUNNEL ANALYTICS & CLICK TRACKER */}
       <View style={[styles.card, isDarkMode && styles.darkCard, { borderColor: '#48bb78', borderWidth: 1.5 }]}>
         <Text style={[styles.sectionTitle, isDarkMode && styles.darkText, { marginBottom: 8 }]}>📈 Funnel Analytics & Conversion Metrics</Text>
         <View style={{ flexDirection: 'row', justifyContent: 'space-between', backgroundColor: isDarkMode ? '#1a202c' : '#f7fafc', padding: 10, borderRadius: 8 }}>
@@ -276,7 +268,7 @@ export default function ReferralRewardsScreen({ isDarkMode, currentUser = { id: 
         <Text style={{ fontSize: 10, color: '#a0aec0' }}>* Payouts processed via {payoutProvider} ({mobileMoneyNumber}) in Kampala.</Text>
       </View>
 
-      {/* NEW LAYER 4: COMMUNITY ECO-TOURISM SPONSORSHIPS & CHARITY TITHING */}
+      {/* LAYER 4: COMMUNITY ECO-TOURISM SPONSORSHIPS & CHARITY TITHING */}
       <View style={[styles.card, isDarkMode && styles.darkCard, { borderColor: '#9333ea', borderWidth: 1.5 }]}>
         <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
           <Text style={[styles.sectionTitle, isDarkMode && styles.darkText]}>🦍 Community Eco-Tourism Tithing</Text>

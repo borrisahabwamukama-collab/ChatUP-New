@@ -12,7 +12,7 @@ import {
 } from 'react-native';
 import { supabase } from '../supabaseClient'; // Make sure this path points to your initialized Supabase client
 
-export default function LoginScreen({ navigation }) {
+export default function LoginScreen({ navigation, isDarkMode, coins, setCoins }) {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
@@ -51,10 +51,10 @@ export default function LoginScreen({ navigation }) {
   };
 
   return (
-    <ScrollView contentContainerStyle={styles.container} keyboardShouldPersistTaps="handled">
-      <View style={styles.headerContainer}>
-        <Text style={styles.headerTitle}>🔐 ChatUp Secure Login</Text>
-        <Text style={styles.headerSubtitle}>Authenticate securely using standard Email and Password login.</Text>
+    <ScrollView contentContainerStyle={[styles.container, isDarkMode && styles.darkContainer]} keyboardShouldPersistTaps="handled">
+      <View style={[styles.headerContainer, isDarkMode && styles.darkHeaderCard]}>
+        <Text style={[styles.headerTitle, isDarkMode && styles.darkText]}>🔐 ChatUp Secure Login</Text>
+        <Text style={[styles.headerSubtitle, isDarkMode && { color: '#94a3b8' }]}>Authenticate securely using standard Email and Password login.</Text>
       </View>
 
       {/* Email Input */}
@@ -63,7 +63,7 @@ export default function LoginScreen({ navigation }) {
         placeholderTextColor="#a0aec0"
         value={email} 
         onChangeText={setEmail} 
-        style={styles.input} 
+        style={[styles.input, isDarkMode && styles.darkInput]} 
         autoCapitalize="none"
         keyboardType="email-address"
       />
@@ -74,16 +74,16 @@ export default function LoginScreen({ navigation }) {
         placeholderTextColor="#a0aec0"
         value={password} 
         onChangeText={setPassword} 
-        style={styles.input} 
+        style={[styles.input, isDarkMode && styles.darkInput]} 
         secureTextEntry={true}
         autoCapitalize="none"
       />
 
       {/* BIOMETRIC QUICK LOGIN TOGGLE */}
-      <View style={styles.layerRow}>
+      <View style={[styles.layerRow, isDarkMode && styles.darkCard]}>
         <View style={{ flex: 1, marginRight: 10 }}>
-          <Text style={styles.layerTitle}>👁️ Biometric Face / Fingerprint Login</Text>
-          <Text style={styles.layerSub}>Authenticate instantly using hardware keys.</Text>
+          <Text style={[styles.layerTitle, isDarkMode && styles.darkText]}>👁️ Biometric Face / Fingerprint Login</Text>
+          <Text style={[styles.layerSub, isDarkMode && { color: '#94a3b8' }]}>Authenticate instantly using hardware keys.</Text>
         </View>
         <Switch
           value={biometricQuickLoginActive}
@@ -93,10 +93,10 @@ export default function LoginScreen({ navigation }) {
       </View>
 
       {/* OFFLINE MESH AUTHENTICATION HANDSHAKE */}
-      <View style={styles.layerRow}>
+      <View style={[styles.layerRow, isDarkMode && styles.darkCard]}>
         <View style={{ flex: 1, marginRight: 10 }}>
-          <Text style={styles.layerTitle}>🛰️ Offline Mesh Peer Handshake</Text>
-          <Text style={{ fontSize: 10, color: '#718096' }}>Allow nearby trusted nodes to verify session credentials locally.</Text>
+          <Text style={[styles.layerTitle, isDarkMode && styles.darkText]}>🛰️ Offline Mesh Peer Handshake</Text>
+          <Text style={{ fontSize: 10, color: isDarkMode ? '#94a3b8' : '#718096' }}>Allow nearby trusted nodes to verify session credentials locally.</Text>
         </View>
         <Switch
           value={meshAuthRelayActive}
@@ -106,7 +106,7 @@ export default function LoginScreen({ navigation }) {
       </View>
 
       {/* ACCOUNT SECURITY LOCKOUT COUNTER BADGE */}
-      <View style={styles.lockoutBadge}>
+      <View style={[styles.lockoutBadge, isDarkMode && { backgroundColor: '#1e293b', borderColor: '#334155' }]}>
         <Text style={{ fontSize: 10, fontWeight: 'bold', color: failedAttemptsCount > 0 ? '#e53e3e' : '#38a169' }}>
           🛡️ Security Guard: {5 - failedAttemptsCount} Login Attempt(s) Remaining
         </Text>
@@ -121,8 +121,8 @@ export default function LoginScreen({ navigation }) {
         )}
       </TouchableOpacity>
 
-      <TouchableOpacity style={styles.secondaryBtn} onPress={() => navigation.navigate('Signup')}>
-        <Text style={styles.secondaryBtnText}>Create New Account / Sign Up 📝</Text>
+      <TouchableOpacity style={[styles.secondaryBtn, isDarkMode && { backgroundColor: '#1e293b', borderColor: '#334155' }]} onPress={() => navigation.navigate('Signup')}>
+        <Text style={[styles.secondaryBtnText, isDarkMode && styles.darkText]}>Create New Account / Sign Up 📝</Text>
       </TouchableOpacity>
     </ScrollView>
   );
@@ -130,6 +130,11 @@ export default function LoginScreen({ navigation }) {
 
 const styles = StyleSheet.create({
   container: { flexGrow: 1, justifyContent: 'center', padding: 20, backgroundColor: '#f7fafc' },
+  darkContainer: { backgroundColor: '#0f172a' },
+  darkCard: { backgroundColor: '#1e293b', borderColor: '#334155' },
+  darkHeaderCard: { backgroundColor: '#1e293b' },
+  darkText: { color: '#f8fafc' },
+  darkInput: { backgroundColor: '#1e293b', borderColor: '#334155', color: '#f8fafc' },
   headerContainer: { marginBottom: 16, alignItems: 'center' },
   headerTitle: { fontSize: 18, fontWeight: 'bold', color: '#2d3748', marginBottom: 4 },
   headerSubtitle: { fontSize: 11, color: '#718096', textAlign: 'center' },

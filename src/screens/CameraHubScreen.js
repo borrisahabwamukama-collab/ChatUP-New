@@ -1,41 +1,177 @@
 import React, { useState, useEffect } from 'react';
-import { StyleSheet, Text, View, TouchableOpacity, Alert } from 'react-native';
-import { Camera, CameraView, useCameraPermissions } from 'expo-camera';
+import { StyleSheet, Text, View, TouchableOpacity, Alert, ScrollView } from 'react-native';
+import { CameraView, useCameraPermissions } from 'expo-camera';
+import { supabase } from '../supabaseClient'; // Adjust path if your client is located elsewhere
 
 export default function CameraHubScreen({ navigation }) {
   const [facing, setFacing] = useState('back');
   const [permission, requestPermission] = useCameraPermissions();
   const [activeSource, setActiveSource] = useState('Device Primary');
 
-  // ================= 20+ ADVANCED MULTI-CAMERA & BROADCAST LAYERS =================
-  const [ultraLowLatencyHls, setUltraLowLatencyHls] = useState(true);
-  const [aiAutoFramingActive, setAiAutoFramingActive] = useState(true);
-  const [multicamSwitchingBuffer, setMulticamSwitchingBuffer] = useState(true);
-  const [adaptiveBitrateStream, setAdaptiveBitrateStream] = useState(true);
-  const [quantumEncryptionStream, setQuantumEncryptionStream] = useState(true);
-  const [kampalaEdgeRelaySync, setKampalaEdgeRelaySync] = useState(true);
-  const [biometricWatermarkVideo, setBiometricWatermarkVideo] = useState(true);
-  const [federatedAiEnhancement, setFederatedAiEnhancement] = useState(true);
-  const [bluetoothP2pVideoRelay, setBluetoothP2pVideoRelay] = useState(true);
-  const [smartContractStreamEscrow, setSmartContractStreamEscrow] = useState(true);
-  const [zeroFeeGasBroadcast, setZeroFeeGasBroadcast] = useState(true);
-  const [autonomousToxicityVisualGuard, setAutonomousToxicityVisualGuard] = useState(true);
-  const [realtimeSentimentOverlay, setRealtimeSentimentOverlay] = useState(true);
-  const [cloudRecordingBackup, setCloudRecordingBackup] = useState(true);
-  const [chromaKeyBackgroundMask, setChromaKeyBackgroundMask] = useState(true);
-  const [studioAudioDenoiser, setStudioAudioDenoiser] = useState(true);
-  const [hdrColorCorrection, setHdrColorCorrection] = useState(true);
-  const [ptzCameraRemoteControl, setPtzCameraRemoteControl] = useState(true);
-  const [teleprompterSync, setTeleprompterSync] = useState(true);
-  const [globalEmergencyBroadcastOverride, setGlobalEmergencyBroadcastOverride] = useState(true);
+  // ================= FULLY DYNAMIC BROADCAST LAYERS STATE =================
+  const [broadcastLayers, setBroadcastLayers] = useState({
+    ultraLowLatencyHls: true,
+    aiAutoFramingActive: true,
+    multicamSwitchingBuffer: true,
+    adaptiveBitrateStream: true,
+    quantumEncryptionStream: true,
+    kampalaEdgeRelaySync: true,
+    biometricWatermarkVideo: true,
+    federatedAiEnhancement: true,
+    bluetoothP2pVideoRelay: true,
+    smartContractStreamEscrow: true,
+    zeroFeeGasBroadcast: true,
+    autonomousToxicityVisualGuard: true,
+    realtimeSentimentOverlay: true,
+    cloudRecordingBackup: true,
+    chromaKeyBackgroundMask: true,
+    studioAudioDenoiser: true,
+    hdrColorCorrection: true,
+    ptzCameraRemoteControl: true,
+    teleprompterSync: true,
+    globalEmergencyBroadcastOverride: true,
+  });
+
+  const [isSaving, setIsSaving] = useState(false);
+
+  // Load saved layer configurations and setup real-time listener on mount
+  useEffect(() => {
+    fetchStreamSettings();
+
+    // Setup Supabase Realtime subscription for cross-device sync
+    const subscription = supabase
+      .channel('public:stream_settings')
+      .on(
+        'postgres_changes',
+        {
+          event: 'UPDATE',
+          schema: 'public',
+          table: 'stream_settings',
+          filter: 'id=eq.1',
+        },
+        (payload) => {
+          const data = payload.new;
+          if (data) {
+            setBroadcastLayers({
+              ultraLowLatencyHls: data.ultra_low_latency_hls ?? true,
+              aiAutoFramingActive: data.ai_auto_framing_active ?? true,
+              multicamSwitchingBuffer: data.multicam_switching_buffer ?? true,
+              adaptiveBitrateStream: data.adaptive_bitrate_stream ?? true,
+              quantumEncryptionStream: data.quantum_encryption_stream ?? true,
+              kampalaEdgeRelaySync: data.kampala_edge_relay_sync ?? true,
+              biometricWatermarkVideo: data.biometric_watermark_video ?? true,
+              federatedAiEnhancement: data.federated_ai_enhancement ?? true,
+              bluetoothP2pVideoRelay: data.bluetooth_p2p_video_relay ?? true,
+              smartContractStreamEscrow: data.smart_contract_stream_escrow ?? true,
+              zeroFeeGasBroadcast: data.zero_fee_gas_broadcast ?? true,
+              autonomousToxicityVisualGuard: data.autonomous_toxicity_visual_guard ?? true,
+              realtimeSentimentOverlay: data.realtime_sentiment_overlay ?? true,
+              cloudRecordingBackup: data.cloud_recording_backup ?? true,
+              chromaKeyBackgroundMask: data.chroma_key_background_mask ?? true,
+              studioAudioDenoiser: data.studio_audio_denoiser ?? true,
+              hdrColorCorrection: data.hdr_color_correction ?? true,
+              ptzCameraRemoteControl: data.ptz_camera_remote_control ?? true,
+              teleprompterSync: data.teleprompter_sync ?? true,
+              globalEmergencyBroadcastOverride: data.global_emergency_broadcast_override ?? true,
+            });
+          }
+        }
+      )
+      .subscribe();
+
+    // Cleanup subscription on unmount
+    return () => {
+      supabase.removeChannel(subscription);
+    };
+  }, []);
+
+  const fetchStreamSettings = async () => {
+    try {
+      const { data, error } = await supabase
+        .from('stream_settings')
+        .select('*')
+        .eq('id', 1)
+        .single();
+
+      if (data && !error) {
+        setBroadcastLayers({
+          ultraLowLatencyHls: data.ultra_low_latency_hls ?? true,
+          aiAutoFramingActive: data.ai_auto_framing_active ?? true,
+          multicamSwitchingBuffer: data.multicam_switching_buffer ?? true,
+          adaptiveBitrateStream: data.adaptive_bitrate_stream ?? true,
+          quantumEncryptionStream: data.quantum_encryption_stream ?? true,
+          kampalaEdgeRelaySync: data.kampala_edge_relay_sync ?? true,
+          biometricWatermarkVideo: data.biometric_watermark_video ?? true,
+          federatedAiEnhancement: data.federated_ai_enhancement ?? true,
+          bluetoothP2pVideoRelay: data.bluetooth_p2p_video_relay ?? true,
+          smartContractStreamEscrow: data.smart_contract_stream_escrow ?? true,
+          zeroFeeGasBroadcast: data.zero_fee_gas_broadcast ?? true,
+          autonomousToxicityVisualGuard: data.autonomous_toxicity_visual_guard ?? true,
+          realtimeSentimentOverlay: data.realtime_sentiment_overlay ?? true,
+          cloudRecordingBackup: data.cloud_recording_backup ?? true,
+          chromaKeyBackgroundMask: data.chroma_key_background_mask ?? true,
+          studioAudioDenoiser: data.studio_audio_denoiser ?? true,
+          hdrColorCorrection: data.hdr_color_correction ?? true,
+          ptzCameraRemoteControl: data.ptz_camera_remote_control ?? true,
+          teleprompterSync: data.teleprompter_sync ?? true,
+          globalEmergencyBroadcastOverride: data.global_emergency_broadcast_override ?? true,
+        });
+      }
+    } catch (err) {
+      console.log('No existing remote settings found or table offline. Using default local state.');
+    }
+  };
+
+  const toggleLayer = async (key) => {
+    const updatedLayers = {
+      ...broadcastLayers,
+      [key]: !broadcastLayers[key],
+    };
+    setBroadcastLayers(updatedLayers);
+
+    // Dynamically sync changes back to Supabase in the background
+    setIsSaving(true);
+    try {
+      const { error } = await supabase
+        .from('stream_settings')
+        .upsert({
+          id: 1,
+          ultra_low_latency_hls: updatedLayers.ultraLowLatencyHls,
+          ai_auto_framing_active: updatedLayers.aiAutoFramingActive,
+          multicam_switching_buffer: updatedLayers.multicamSwitchingBuffer,
+          adaptive_bitrate_stream: updatedLayers.adaptiveBitrateStream,
+          quantum_encryption_stream: updatedLayers.quantumEncryptionStream,
+          kampala_edge_relay_sync: updatedLayers.kampalaEdgeRelaySync,
+          biometric_watermark_video: updatedLayers.biometricWatermarkVideo,
+          federated_ai_enhancement: updatedLayers.federatedAiEnhancement,
+          bluetooth_p2p_video_relay: updatedLayers.bluetoothP2pVideoRelay,
+          smart_contract_stream_escrow: updatedLayers.smartContractStreamEscrow,
+          zero_fee_gas_broadcast: updatedLayers.zeroFeeGasBroadcast,
+          autonomous_toxicity_visual_guard: updatedLayers.autonomousToxicityVisualGuard,
+          realtime_sentiment_overlay: updatedLayers.realtimeSentimentOverlay,
+          cloud_recording_backup: updatedLayers.cloudRecordingBackup,
+          chroma_key_background_mask: updatedLayers.chromaKeyBackgroundMask,
+          studio_audio_denoiser: updatedLayers.studioAudioDenoiser,
+          hdr_color_correction: updatedLayers.hdrColorCorrection,
+          ptz_camera_remote_control: updatedLayers.ptzCameraRemoteControl,
+          teleprompter_sync: updatedLayers.teleprompterSync,
+          global_emergency_broadcast_override: updatedLayers.globalEmergencyBroadcastOverride,
+          updated_at: new Date(),
+        });
+
+      if (error) throw error;
+    } catch (err) {
+      console.error('Failed to sync layer update to Supabase:', err.message);
+    } finally {
+      setIsSaving(false);
+    }
+  };
 
   if (!permission) {
-    // Camera permissions are still loading.
     return <View style={styles.container}><Text style={styles.text}>Loading camera permissions...</Text></View>;
   }
 
   if (!permission.granted) {
-    // Camera permissions are not granted yet.
     return (
       <View style={styles.container}>
         <Text style={styles.message}>We need your permission to access the camera for live streaming and fellowship recording.</Text>
@@ -55,6 +191,29 @@ export default function CameraHubScreen({ navigation }) {
     Alert.alert('Camera Source Switched 🎥', `Now routing feed from: ${sourceName}`);
   };
 
+  const layerDefinitions = [
+    { key: 'ultraLowLatencyHls', label: '📡 Ultra-Low HLS' },
+    { key: 'aiAutoFramingActive', label: '🤖 AI Auto-Framing' },
+    { key: 'multicamSwitchingBuffer', label: '🔄 Buffer Sync' },
+    { key: 'adaptiveBitrateStream', label: '⚡ Adaptive Bitrate' },
+    { key: 'quantumEncryptionStream', label: '🔐 Quantum Stream' },
+    { key: 'kampalaEdgeRelaySync', label: '🇺🇬 Kampala Edge' },
+    { key: 'biometricWatermarkVideo', label: '✍️ Biometric WM' },
+    { key: 'federatedAiEnhancement', label: '🧠 Federated AI' },
+    { key: 'bluetoothP2pVideoRelay', label: '🛰️ Bluetooth P2P' },
+    { key: 'smartContractStreamEscrow', label: '🪙 Stream Escrow' },
+    { key: 'zeroFeeGasBroadcast', label: '🪙 Zero-Fee Gas' },
+    { key: 'autonomousToxicityVisualGuard', label: '🛡️ Toxicity Guard' },
+    { key: 'realtimeSentimentOverlay', label: '🌿 Sentiment Mesh' },
+    { key: 'cloudRecordingBackup', label: '☁️ Cloud Backup' },
+    { key: 'chromaKeyBackgroundMask', label: '🎨 Chroma Key' },
+    { key: 'studioAudioDenoiser', label: '🎙️ Audio Denoiser' },
+    { key: 'hdrColorCorrection', label: '☀️ HDR Correction' },
+    { key: 'ptzCameraRemoteControl', label: '🎛️ PTZ Remote' },
+    { key: 'teleprompterSync', label: '📜 Teleprompter' },
+    { key: 'globalEmergencyBroadcastOverride', label: '🚨 SOS Override' },
+  ];
+
   return (
     <View style={styles.container}>
       {/* Live Camera Feed Container */}
@@ -63,46 +222,33 @@ export default function CameraHubScreen({ navigation }) {
           <View style={styles.sourceBadge}>
             <Text style={styles.sourceBadgeText}>🔴 ACTIVE: {activeSource}</Text>
           </View>
+          {isSaving && (
+            <View style={styles.syncBadge}>
+              <Text style={styles.syncBadgeText}>☁️ Syncing...</Text>
+            </View>
+          )}
         </View>
 
-        {/* ================= 20+ BROADCAST LAYERS MATRIX CONTROLLER (EMBEDDED OVERLAY) ================= */}
-        <div style={{ position: 'absolute', top: 70, left: 10, right: 10, background: 'rgba(15, 23, 42, 0.85)', borderRadius: 8, padding: 8, zIndex: 100, border: '1px solid #4a5568', maxHeight: '180px', overflowY: 'auto' }}>
-          <Text style={{ color: '#fff', fontSize: '10px', fontWeight: 'bold', marginBottom: 4, textAlign: 'center' }}>⚡ 20+ Broadcast & Camera Enterprise Layers Matrix</Text>
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(130px, 1fr))', gap: '4px' }}>
-            {[
-              { label: '📡 Ultra-Low HLS', val: ultraLowLatencyHls, setVal: setUltraLowLatencyHls },
-              { label: '🤖 AI Auto-Framing', val: aiAutoFramingActive, setVal: setAiAutoFramingActive },
-              { label: '🔄 Buffer Sync', val: multicamSwitchingBuffer, setVal: setMulticamSwitchingBuffer },
-              { label: '⚡ Adaptive Bitrate', val: adaptiveBitrateStream, setVal: setAdaptiveBitrateStream },
-              { label: '🔐 Quantum Stream', val: quantumEncryptionStream, setVal: setQuantumEncryptionStream },
-              { label: '🇺🇬 Kampala Edge', val: kampalaEdgeRelaySync, setVal: setKampalaEdgeRelaySync },
-              { label: '✍️ Biometric WM', val: biometricWatermarkVideo, setVal: setBiometricWatermarkVideo },
-              { label: '🧠 Federated AI', val: federatedAiEnhancement, setVal: setFederatedAiEnhancement },
-              { label: '🛰️ Bluetooth P2P', val: bluetoothP2pVideoRelay, setVal: setBluetoothP2pVideoRelay },
-              { label: '🪙 Stream Escrow', val: smartContractStreamEscrow, setVal: setSmartContractStreamEscrow },
-              { label: '🪙 Zero-Fee Gas', val: zeroFeeGasBroadcast, setVal: setZeroFeeGasBroadcast },
-              { label: '🛡️ Toxicity Guard', val: autonomousToxicityVisualGuard, setVal: setAutonomousToxicityVisualGuard },
-              { label: '🌿 Sentiment Mesh', val: realtimeSentimentOverlay, setVal: setRealtimeSentimentOverlay },
-              { label: '☁️ Cloud Backup', val: cloudRecordingBackup, setVal: setCloudRecordingBackup },
-              { label: '🎨 Chroma Key', val: chromaKeyBackgroundMask, setVal: setChromaKeyBackgroundMask },
-              { label: '🎙️ Audio Denoiser', val: studioAudioDenoiser, setVal: setStudioAudioDenoiser },
-              { label: '☀️ HDR Correction', val: hdrColorCorrection, setVal: setHdrColorCorrection },
-              { label: '🎛️ PTZ Remote', val: ptzCameraRemoteControl, setVal: setPtzCameraRemoteControl },
-              { label: '📜 Teleprompter', val: teleprompterSync, setVal: setTeleprompterSync },
-              { label: '🚨 SOS Override', val: globalEmergencyBroadcastOverride, setVal: setGlobalEmergencyBroadcastOverride },
-            ].map((layer, idx) => (
-              <div key={idx} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: 'rgba(255,255,255,0.08)', padding: '2px 4px', borderRadius: '4px' }}>
-                <span style={{ fontSize: '8px', color: '#fff', fontWeight: 'bold' }}>{layer.label}</span>
-                <button 
-                  onClick={() => layer.setVal(!layer.val)}
-                  style={{ background: layer.val ? '#38a169' : '#e53e3e', color: '#fff', border: 'none', padding: '1px 4px', borderRadius: '3px', fontSize: '7px', fontWeight: 'bold', cursor: 'pointer' }}
-                >
-                  {layer.val ? 'ON' : 'OFF'}
-                </button>
-              </div>
-            ))}
-          </div>
-        </div>
+        {/* ================= DYNAMIC REACT NATIVE BROADCAST MATRIX ================= */}
+        <View style={styles.matrixContainer}>
+          <Text style={styles.matrixTitle}>⚡ 20+ Broadcast & Camera Enterprise Layers Matrix</Text>
+          <ScrollView contentContainerStyle={styles.matrixGrid} nestedScrollEnabled={true}>
+            {layerDefinitions.map((item) => {
+              const isActive = broadcastLayers[item.key];
+              return (
+                <View key={item.key} style={styles.matrixCard}>
+                  <Text style={styles.matrixLabel}>{item.label}</Text>
+                  <TouchableOpacity 
+                    style={[styles.matrixButton, isActive ? styles.btnActive : styles.btnInactive]}
+                    onPress={() => toggleLayer(item.key)}
+                  >
+                    <Text style={styles.matrixButtonText}>{isActive ? 'ON' : 'OFF'}</Text>
+                  </TouchableOpacity>
+                </View>
+              );
+            })}
+          </ScrollView>
+        </View>
 
         <View style={styles.overlayBottom}>
           {/* Switch Device Camera (Front/Back) */}
@@ -145,7 +291,6 @@ const styles = StyleSheet.create({
     backgroundColor: '#0f172a',
     justifyContent: 'center',
     alignItems: 'center',
-    padding: 20,
   },
   camera: {
     flex: 1,
@@ -157,6 +302,7 @@ const styles = StyleSheet.create({
     paddingBottom: 16,
     color: '#ffffff',
     fontSize: 14,
+    paddingHorizontal: 20,
   },
   btn: {
     backgroundColor: '#2563eb',
@@ -174,7 +320,10 @@ const styles = StyleSheet.create({
   },
   overlayTop: {
     padding: 20,
-    alignItems: 'flex-start',
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginTop: 20,
   },
   sourceBadge: {
     backgroundColor: 'rgba(220, 38, 38, 0.85)',
@@ -187,9 +336,80 @@ const styles = StyleSheet.create({
     fontSize: 11,
     fontWeight: 'bold',
   },
+  syncBadge: {
+    backgroundColor: 'rgba(59, 130, 246, 0.85)',
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 4,
+  },
+  syncBadgeText: {
+    color: '#ffffff',
+    fontSize: 9,
+    fontWeight: 'bold',
+  },
+  matrixContainer: {
+    position: 'absolute',
+    top: 80,
+    left: 10,
+    right: 10,
+    backgroundColor: 'rgba(15, 23, 42, 0.9)',
+    borderRadius: 8,
+    padding: 8,
+    zIndex: 100,
+    borderWidth: 1,
+    borderColor: '#4a5568',
+    maxHeight: 190,
+  },
+  matrixTitle: {
+    color: '#fff',
+    fontSize: 10,
+    fontWeight: 'bold',
+    marginBottom: 6,
+    textAlign: 'center',
+  },
+  matrixGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    justifyContent: 'space-between',
+    paddingBottom: 4,
+  },
+  matrixCard: {
+    width: '31%',
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    backgroundColor: 'rgba(255,255,255,0.08)',
+    paddingHorizontal: 4,
+    paddingVertical: 4,
+    borderRadius: 4,
+    marginBottom: 4,
+  },
+  matrixLabel: {
+    fontSize: 8,
+    color: '#fff',
+    fontWeight: 'bold',
+    flex: 1,
+    marginRight: 2,
+  },
+  matrixButton: {
+    paddingHorizontal: 5,
+    paddingVertical: 2,
+    borderRadius: 3,
+  },
+  btnActive: {
+    backgroundColor: '#38a169',
+  },
+  btnInactive: {
+    backgroundColor: '#e53e3e',
+  },
+  matrixButtonText: {
+    color: '#fff',
+    fontSize: 7,
+    fontWeight: 'bold',
+  },
   overlayBottom: {
     padding: 20,
-    backgroundColor: 'rgba(15, 23, 42, 0.6)',
+    backgroundColor: 'rgba(15, 23, 42, 0.7)',
     alignItems: 'center',
   },
   controlButton: {

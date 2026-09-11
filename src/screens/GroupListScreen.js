@@ -1,5 +1,10 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { View, Text, FlatList, TouchableOpacity, StyleSheet, TextInput, Alert, ScrollView } from 'react-native';
+import { BannerAd, BannerAdSize, TestIds, RewardedAd, RewardedAdEventType } from 'react-native-google-mobile-ads';
+
+// Dynamic Google AdMob Unit IDs (Automatic Test IDs during development)
+const bannerAdUnitId = __DEV__ ? TestIds.BANNER : 'ca-app-pub-xxxxxxxxoxxxxxxx/xxxxxxxxxx';
+const rewardedAdUnitId = __DEV__ ? TestIds.REWARDED : 'ca-app-pub-xxxxxxxxoxxxxxxx/xxxxxxxxxx';
 
 const MOCK_GROUPS = [
   { id: '1', name: 'Kampala Sunday Prayer Cell', avatar: '🙏', lastMessage: 'Let us remember to pray for the upcoming outreach.', time: '10:45 AM', unread: 3, isPining: true },
@@ -7,7 +12,7 @@ const MOCK_GROUPS = [
   { id: '3', name: 'Worship & Media Hub', avatar: '🎥', lastMessage: 'Camera angles for Sunday service are set.', time: 'Yesterday', unread: 1, isPining: false },
 ];
 
-export default function GroupListScreen({ navigation, isDarkMode }) {
+export default function GroupListScreen({ navigation, coins, setCoins, isDarkMode }) {
   const [chats, setChats] = useState(MOCK_GROUPS);
   const [searchQuery, setSearchQuery] = useState('');
 
@@ -18,6 +23,58 @@ export default function GroupListScreen({ navigation, isDarkMode }) {
   const [archivedCount] = useState(4);
   const [unreadOnlyFilter, setUnreadOnlyFilter] = useState(false);
   const [biometricEnclaveLocked, setBiometricEnclaveLocked] = useState(false);
+
+  // Monetization & Rewarded Ad States
+  const [rewardedAdLoaded, setRewardedAdLoaded] = useState(false);
+  const [rewardedAdInstance, setRewardedAdInstance] = useState(null);
+
+  // Initialize AdMob Rewarded Ad
+  useEffect(() => {
+    initRewardedAd();
+  }, []);
+
+  const initRewardedAd = () => {
+    try {
+      const rewardedAd = RewardedAd.createForAdRequest(rewardedAdUnitId, {
+        requestNonPersonalizedAdsOnly: true,
+      });
+
+      const unsubscribeLoaded = rewardedAd.addAdEventListener(RewardedAdEventType.LOADED, () => {
+        setRewardedAdLoaded(true);
+      });
+
+      const unsubscribeEarned = rewardedAd.addAdEventListener(RewardedAdEventType.EARNED_REWARD, () => {
+        if (setCoins) {
+          setCoins(prev => prev + 50);
+        }
+        Alert.alert('💰 Ad Reward Credited!', 'Successfully earned +50 Coins chat sponsor bonus!');
+      });
+
+      rewardedAd.load();
+      setRewardedAdInstance(rewardedAd);
+
+      return () => {
+        unsubscribeLoaded();
+        unsubscribeEarned();
+      };
+    } catch (e) {
+      console.log('Rewarded Ad initialization notice:', e);
+    }
+  };
+
+  const handleShowRewardedAd = () => {
+    if (rewardedAdLoaded && rewardedAdInstance) {
+      rewardedAdInstance.show();
+      setRewardedAdLoaded(false);
+      rewardedAdInstance.load();
+    } else {
+      // Fallback simulation for web/preview
+      if (setCoins) {
+        setCoins(prev => prev + 50);
+      }
+      Alert.alert('💰 Ad Reward Credited (Simulated)', 'Watch ad completed! +50 coins added to your ChatUp wallet balance.');
+    }
+  };
 
   // SEARCH & FILTER LOGIC
   const filteredChats = chats.filter(item => {
@@ -92,6 +149,37 @@ export default function GroupListScreen({ navigation, isDarkMode }) {
   return (
     <View style={[styles.container, isDarkMode && styles.darkContainer]}>
       
+      {/* ================= GOOGLE ADMOB DYNAMIC BANNER ================= */}
+      <View style={styles.monetizationAdCard}>
+        <Text style={styles.adTagLabel}>Sponsored Chat Banner 📢 • AdMob Banner</Text>
+        <View style={{ alignItems: 'center', marginVertical: 4 }}>
+          <BannerAd
+            unitId={bannerAdUnitId}
+            size={BannerAdSize.ANCHORED_ADAPTIVE_BANNER}
+            requestOptions={{
+              requestNonPersonalizedAdsOnly: true,
+            }}
+            onAdLoaded={() => console.log('AdMob GroupList Banner loaded successfully')}
+            onAdFailedToLoad={(error) => console.log('AdMob GroupList Banner load error: ', error)}
+          />
+        </View>
+      </View>
+
+      {/* ================= REWARDED AD CHAT REWARD WIDGET ================= */}
+      <View style={styles.creatorMonetizationCard}>
+        <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
+          <View style={{ flex: 1, marginRight: 10 }}>
+            <Text style={{ fontSize: 12, fontWeight: 'bold', color: '#2b6cb0' }}>🪙 Chat Reward Boost</Text>
+            <Text style={{ fontSize: 14, fontWeight: 'bold', color: '#2d3748', marginTop: 2 }}>
+              Watch a sponsor clip to earn +50 coins!
+            </Text>
+          </View>
+          <TouchableOpacity style={styles.watchRewardAdBtn} onPress={handleShowRewardedAd}>
+            <Text style={{ color: '#fff', fontSize: 11, fontWeight: 'bold' }}>Watch Ad (+50 🪙) 🎁</Text>
+          </TouchableOpacity>
+        </View>
+      </View>
+
       {/* Search Bar & Tools Header */}
       <View style={[styles.headerContainer, isDarkMode && styles.darkHeader]}>
         <TextInput
@@ -201,4 +289,10 @@ const styles = StyleSheet.create({
   darkSeparator: { backgroundColor: '#2d3748' },
   fab: { position: 'absolute', bottom: 24, right: 24, width: 56, height: 56, borderRadius: 28, backgroundColor: '#2563eb', justifyContent: 'center', alignItems: 'center', elevation: 4, shadowColor: '#000', shadowOpacity: 0.3, shadowRadius: 4, shadowOffset: { width: 0, height: 2 } },
   fabText: { color: 'white', fontSize: 28, fontWeight: 'bold', marginTop: -2 },
+
+  // Monetization Ad Styles
+  monetizationAdCard: { backgroundColor: '#fff', borderWidth: 1, borderColor: '#e2e8f0', borderRadius: 8, padding: 8, marginBottom: 12, alignItems: 'center' },
+  adTagLabel: { fontSize: 9, color: '#a0aec0', textTransform: 'uppercase', fontWeight: 'bold', marginBottom: 2 },
+  creatorMonetizationCard: { backgroundColor: '#ebf8ff', borderWidth: 1, borderColor: '#bee3f8', borderRadius: 8, padding: 12, marginBottom: 12 },
+  watchRewardAdBtn: { backgroundColor: '#3182ce', paddingHorizontal: 12, paddingVertical: 6, borderRadius: 6 },
 });

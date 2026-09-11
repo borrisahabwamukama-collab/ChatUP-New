@@ -11,6 +11,12 @@ import {
   Alert,
   Platform,
 } from 'react-native';
+import { supabase } from '../../Services/supabaseClient';
+import { BannerAd, BannerAdSize, TestIds, RewardedAd, RewardedAdEventType } from 'react-native-google-mobile-ads';
+
+// Dynamic Google AdMob Unit IDs (Automatic Test IDs during development)
+const bannerAdUnitId = __DEV__ ? TestIds.BANNER : 'ca-app-pub-xxxxxxxxoxxxxxxx/xxxxxxxxxx';
+const rewardedAdUnitId = __DEV__ ? TestIds.REWARDED : 'ca-app-pub-xxxxxxxxoxxxxxxx/xxxxxxxxxx';
 
 export default function CinemaScreen({ isDarkMode, coins, setCoins, userRole = 'creator', onBack }) {
   // Navigation & Core Balances
@@ -18,37 +24,12 @@ export default function CinemaScreen({ isDarkMode, coins, setCoins, userRole = '
   const [customTipAmount, setCustomTipAmount] = useState('20');
   const [unlockedCinemaIds, setUnlockedCinemaIds] = useState(['1', '2', 'free-1']);
 
-  // Global Screening Catalog with Working Streams
-  const [videos, setVideos] = useState([
-    { 
-      id: '1', 
-      title: 'Bwindi Mountain Gorillas - 4K IMAX Expedition', 
-      video_url: 'https://www.w3schools.com/html/mov_bbb.mp4', 
-      description: 'An intimate journey deep into Uganda’s misty rainforests with endangered mountain gorilla families.', 
-      host: 'Talk With Nature', 
-      genre: 'Wildlife / IMAX',
-      duration: '1h 45m',
-      rating: 'PG-13',
-      price: 50,
-      isFree: false,
-      boxOfficeRevenue: 1450, 
-      ticketSalesCount: 29 
-    },
-    { 
-      id: '2', 
-      title: 'Kampala Cyberpunk: Neon Savannah (Free Premiere)', 
-      video_url: 'https://www.w3schools.com/html/movie.mp4', 
-      description: 'A sci-fi thriller blending East African street culture with decentralized mesh intelligence.', 
-      host: 'Creator Station', 
-      genre: 'Sci-Fi / Action',
-      duration: '2h 10m',
-      rating: 'R',
-      price: 0,
-      isFree: true,
-      boxOfficeRevenue: 0, 
-      ticketSalesCount: 42 
-    }
-  ]);
+  // Monetization & Rewarded Ad States
+  const [rewardedAdLoaded, setRewardedAdLoaded] = useState(false);
+  const [rewardedAdInstance, setRewardedAdInstance] = useState(null);
+
+  // Global Screening Catalog State
+  const [videos, setVideos] = useState([]);
 
   // Master Creator Studio State
   const [newVideoTitle, setNewVideoTitle] = useState('');
@@ -68,13 +49,10 @@ export default function CinemaScreen({ isDarkMode, coins, setCoins, userRole = '
   const [applicantFollowers, setApplicantFollowers] = useState('');
   const [rulesAgreed, setRulesAgreed] = useState(false);
   
-  // Host Application Review Queue
-  const [hostApplications, setHostApplications] = useState([
-    { id: 'app-1', name: 'Stella Wilderness Vlogs', purpose: 'Documentary screenings of national parks', audience: '2,500', followers: '12,000', status: 'Pending Review ⏳' },
-    { id: 'app-2', name: 'Kampala Indie Cinema Club', purpose: 'Showcasing East African short films', audience: '1,000', followers: '4,500', status: 'Pending Review ⏳' }
-  ]);
+  // Host Application Review Queue State
+  const [hostApplications, setHostApplications] = useState([]);
 
-  // ================= 10 SUPER-LAYERS ARCHITECTURE (RESTORED FULL MATRIX) =================
+  // ================= 10 SUPER-LAYERS ARCHITECTURE =================
   const [quantumEncryptionLattice, setQuantumEncryptionLattice] = useState(true);
   const [kampalaEdgeRelaySync, setKampalaEdgeRelaySync] = useState(true);
   const [aiAutonomousToxicityGuard, setAiAutonomousToxicityGuard] = useState(true);
@@ -93,7 +71,6 @@ export default function CinemaScreen({ isDarkMode, coins, setCoins, userRole = '
   const [allowViewerInvites, setAllowViewerInvites] = useState(true);
   const [userAvatarBadge, setUserAvatarBadge] = useState('👑 VIP Creator');
   const [primaryHostName, setPrimaryHostName] = useState('Master Control');
-  const [coHostsOnStage, setCoHostsOnStage] = useState(['Master Control', 'Stella']);
   const [ticketStubs, setTicketStubs] = useState(['Bwindi Mountain Gorillas Pass']);
   const [activeChatTab, setActiveChatTab] = useState('general'); 
   const [qaFeed, setQaFeed] = useState([{ id: 1, author: 'Stella', text: 'Will there be a sequel?' }]);
@@ -127,7 +104,6 @@ export default function CinemaScreen({ isDarkMode, coins, setCoins, userRole = '
   const [activeTheaterMovie, setActiveTheaterMovie] = useState(null);
   const [isPlaying, setIsPlaying] = useState(true);
   const [playbackSpeed, setPlaybackSpeed] = useState(1.0);
-  const [isMuted, setIsMuted] = useState(false);
   const [floatingReactions, setFloatingReactions] = useState([]);
 
   // Video Element & Live Webcam Refs
@@ -143,8 +119,9 @@ export default function CinemaScreen({ isDarkMode, coins, setCoins, userRole = '
     { id: 'c1', name: 'Viewer_Kampala', status: 'Waiting to speak', onStage: false, muted: false },
     { id: 'c2', name: 'Stella', status: 'On Stage Co-Host', onStage: true, muted: false }
   ]);
+  const [coHostsOnStage, setCoHostsOnStage] = useState(['Master Control', 'Stella']);
 
-  // Live Camera Stream Initialization Effect
+  // Live Camera Stream Initialization Effect & AdMob Rewarded Ad Init
   useEffect(() => {
     let stream = null;
     if (hostCamActive && (activeTheaterMovie || curtainCallActive)) {
@@ -157,12 +134,52 @@ export default function CinemaScreen({ isDarkMode, coins, setCoins, userRole = '
         })
         .catch(() => {});
     }
+    initRewardedAd();
     return () => {
       if (stream) {
         stream.getTracks().forEach(track => track.stop());
       }
     };
   }, [hostCamActive, activeTheaterMovie, curtainCallActive]);
+
+  const initRewardedAd = () => {
+    try {
+      const rewardedAd = RewardedAd.createForAdRequest(rewardedAdUnitId, {
+        requestNonPersonalizedAdsOnly: true,
+      });
+
+      const unsubscribeLoaded = rewardedAd.addAdEventListener(RewardedAdEventType.LOADED, () => {
+        setRewardedAdLoaded(true);
+      });
+
+      const unsubscribeEarned = rewardedAd.addAdEventListener(RewardedAdEventType.EARNED_REWARD, () => {
+        setCoins(prev => prev + 50);
+        Alert.alert('💰 Ad Reward Credited!', 'Successfully earned +50 Coins sponsor bonus!');
+      });
+
+      rewardedAd.load();
+      setRewardedAdInstance(rewardedAd);
+
+      return () => {
+        unsubscribeLoaded();
+        unsubscribeEarned();
+      };
+    } catch (e) {
+      console.log('Rewarded Ad initialization notice:', e);
+    }
+  };
+
+  const handleShowRewardedAd = () => {
+    if (rewardedAdLoaded && rewardedAdInstance) {
+      rewardedAdInstance.show();
+      setRewardedAdLoaded(false);
+      rewardedAdInstance.load();
+    } else {
+      // Fallback simulation for web/preview
+      setCoins(prev => prev + 50);
+      Alert.alert('💰 Ad Reward Credited (Simulated)', 'Watch ad completed! +50 coins added to your ChatUp wallet balance.');
+    }
+  };
 
   // Live Viewer Presence Roster State
   const [showViewersModal, setShowViewersModal] = useState(false);
@@ -200,6 +217,118 @@ export default function CinemaScreen({ isDarkMode, coins, setCoins, userRole = '
 
   const [cinemaAdPlaying, setCinemaAdPlaying] = useState(false);
   const [snacksPurchased, setSnacksPurchased] = useState([]);
+
+  // Fetch Videos & Host Applications from Supabase on Mount & Setup Realtime
+  useEffect(() => {
+    fetchCinemaCatalog();
+    fetchHostApplications();
+
+    if (supabase) {
+      const catalogChannel = supabase
+        .channel('public:cinema_catalog')
+        .on('postgres_changes', { event: '*', schema: 'public', table: 'cinema_catalog' }, () => {
+          fetchCinemaCatalog();
+        })
+        .subscribe();
+
+      const appsChannel = supabase
+        .channel('public:cinema_host_applications')
+        .on('postgres_changes', { event: '*', schema: 'public', table: 'cinema_host_applications' }, () => {
+          fetchHostApplications();
+        })
+        .subscribe();
+
+      return () => {
+        supabase.removeChannel(catalogChannel);
+        supabase.removeChannel(appsChannel);
+      };
+    }
+  }, []);
+
+  const fetchCinemaCatalog = async () => {
+    try {
+      if (!supabase) throw new Error('Supabase client missing');
+      const { data, error } = await supabase
+        .from('cinema_catalog')
+        .select('*')
+        .order('created_at', { ascending: false });
+
+      if (error || !data || data.length === 0) {
+        setVideos([
+          { 
+            id: '1', 
+            title: 'Bwindi Mountain Gorillas - 4K IMAX Expedition', 
+            video_url: 'https://www.w3schools.com/html/mov_bbb.mp4', 
+            description: 'An intimate journey deep into Uganda’s misty rainforests with endangered mountain gorilla families.', 
+            host: 'Talk With Nature', 
+            genre: 'Wildlife / IMAX',
+            duration: '1h 45m',
+            rating: 'PG-13',
+            price: 50,
+            isFree: false,
+            boxOfficeRevenue: 1450, 
+            ticketSalesCount: 29 
+          },
+          { 
+            id: '2', 
+            title: 'Kampala Cyberpunk: Neon Savannah (Free Premiere)', 
+            video_url: 'https://www.w3schools.com/html/movie.mp4', 
+            description: 'A sci-fi thriller blending East African street culture with decentralized mesh intelligence.', 
+            host: 'Creator Station', 
+            genre: 'Sci-Fi / Action',
+            duration: '2h 10m',
+            rating: 'R',
+            price: 0,
+            isFree: true,
+            boxOfficeRevenue: 0, 
+            ticketSalesCount: 42 
+          }
+        ]);
+      } else {
+        setVideos(data);
+      }
+    } catch (err) {
+      setVideos([
+        { 
+          id: '1', 
+          title: 'Bwindi Mountain Gorillas - 4K IMAX Expedition', 
+          video_url: 'https://www.w3schools.com/html/mov_bbb.mp4', 
+          description: 'An intimate journey deep into Uganda’s misty rainforests with endangered mountain gorilla families.', 
+          host: 'Talk With Nature', 
+          genre: 'Wildlife / IMAX',
+          duration: '1h 45m',
+          rating: 'PG-13',
+          price: 50,
+          isFree: false,
+          boxOfficeRevenue: 1450, 
+          ticketSalesCount: 29 
+        }
+      ]);
+    }
+  };
+
+  const fetchHostApplications = async () => {
+    try {
+      if (!supabase) throw new Error('Supabase missing');
+      const { data, error } = await supabase
+        .from('cinema_host_applications')
+        .select('*')
+        .order('created_at', { ascending: false });
+
+      if (error || !data || data.length === 0) {
+        setHostApplications([
+          { id: 'app-1', name: 'Stella Wilderness Vlogs', purpose: 'Documentary screenings of national parks', audience: '2,500', followers: '12,000', status: 'Pending Review ⏳' },
+          { id: 'app-2', name: 'Kampala Indie Cinema Club', purpose: 'Showcasing East African short films', audience: '1,000', followers: '4,500', status: 'Pending Review ⏳' }
+        ]);
+      } else {
+        setHostApplications(data);
+      }
+    } catch (e) {
+      setHostApplications([
+        { id: 'app-1', name: 'Stella Wilderness Vlogs', purpose: 'Documentary screenings of national parks', audience: '2,500', followers: '12,000', status: 'Pending Review ⏳' }
+      ]);
+    }
+  };
 
   // Intermission Timer Effect
   useEffect(() => {
@@ -264,7 +393,7 @@ export default function CinemaScreen({ isDarkMode, coins, setCoins, userRole = '
     Alert.alert('Sound Effect Broadcasted 🔊', `"${effectName}" ${emojiIcon} played across the global room audio channel!`);
   };
 
-  const handleSendHostApplication = () => {
+  const handleSendHostApplication = async () => {
     if (!applicantChannelName.trim() || !applicantPurpose.trim() || !applicantFollowers.trim()) {
       return Alert.alert('Error', 'Please fill in all required fields including your follower count.');
     }
@@ -272,16 +401,25 @@ export default function CinemaScreen({ isDarkMode, coins, setCoins, userRole = '
       return Alert.alert('Rules Agreement Required ⚠️', 'You must read and check the agreement box confirming you understand the rules and regulations before submitting.');
     }
 
-    const newApp = {
-      id: Date.now().toString(),
-      name: applicantChannelName,
-      purpose: applicantPurpose,
+    const newAppPayload = {
+      name: applicantChannelName.trim(),
+      purpose: applicantPurpose.trim(),
       audience: applicantAudienceSize,
-      followers: applicantFollowers,
-      status: 'Pending Review ⏳'
+      followers: applicantFollowers.trim(),
+      status: 'Pending Review ⏳',
+      created_at: new Date().toISOString(),
     };
 
-    setHostApplications(prev => [newApp, ...prev]);
+    try {
+      if (supabase) {
+        const { error } = await supabase.from('cinema_host_applications').insert([newAppPayload]);
+        if (error) throw error;
+      }
+    } catch (err) {
+      console.log('Supabase sync warning:', err);
+    }
+
+    setHostApplications(prev => [{ id: Date.now().toString(), ...newAppPayload }, ...prev]);
     setApplicantChannelName('');
     setApplicantPurpose('');
     setApplicantFollowers('');
@@ -291,13 +429,27 @@ export default function CinemaScreen({ isDarkMode, coins, setCoins, userRole = '
     Alert.alert('Application Submitted! 📋', 'Your cinema hosting application has been sent to the review queue.');
   };
 
-  const handleApproveApplication = (appId, appName) => {
+  const handleApproveApplication = async (appId, appName) => {
     setHostApplications(prev => prev.map(a => a.id === appId ? { ...a, status: 'Approved & Active 🟢' } : a));
+    try {
+      if (supabase) {
+        await supabase.from('cinema_host_applications').update({ status: 'Approved & Active 🟢' }).eq('id', appId);
+      }
+    } catch (e) {
+      console.log('Sync error:', e);
+    }
     Alert.alert('Host Approved! 🎉', `"${appName}" has been granted hosting privileges and added to the 10k theater room network.`);
   };
 
-  const handleRejectApplication = (appId, appName) => {
+  const handleRejectApplication = async (appId, appName) => {
     setHostApplications(prev => prev.map(a => a.id === appId ? { ...a, status: 'Rejected 🔴' } : a));
+    try {
+      if (supabase) {
+        await supabase.from('cinema_host_applications').update({ status: 'Rejected 🔴' }).eq('id', appId);
+      }
+    } catch (e) {
+      console.log('Sync error:', e);
+    }
     Alert.alert('Application Rejected 🚫', `Hosting request for "${appName}" was declined.`);
   };
 
@@ -347,7 +499,7 @@ export default function CinemaScreen({ isDarkMode, coins, setCoins, userRole = '
     setCustomTipAmount('20');
   };
 
-  const handleBuyCinemaTicket = (movie) => {
+  const handleBuyCinemaTicket = async (movie) => {
     if (movie.isFree || unlockedCinemaIds.includes(movie.id) || userRole === 'admin') {
       setActiveTheaterMovie(movie);
       return;
@@ -367,7 +519,22 @@ export default function CinemaScreen({ isDarkMode, coins, setCoins, userRole = '
     setUnlockedCinemaIds(prev => [...prev, movie.id]);
     setTicketStubs(prev => [...prev, `${movie.title} (${selectedSeatTier})`]);
     
-    setVideos(prev => prev.map(v => v.id === movie.id ? { ...v, boxOfficeRevenue: v.boxOfficeRevenue + finalPrice, ticketSalesCount: v.ticketSalesCount + 1 } : v));
+    const updatedRevenue = (movie.boxOfficeRevenue || 0) + finalPrice;
+    const updatedSalesCount = (movie.ticketSalesCount || 0) + 1;
+
+    setVideos(prev => prev.map(v => v.id === movie.id ? { ...v, boxOfficeRevenue: updatedRevenue, ticketSalesCount: updatedSalesCount } : v));
+    
+    try {
+      if (supabase) {
+        await supabase.from('cinema_catalog').update({ 
+          boxOfficeRevenue: updatedRevenue, 
+          ticketSalesCount: updatedSalesCount 
+        }).eq('id', movie.id);
+      }
+    } catch (e) {
+      console.log('Ticket purchase sync warning:', e);
+    }
+
     setActiveTheaterMovie(movie);
     
     Alert.alert('Ticket Unlocked! 🎟️', `Successfully purchased a ${selectedSeatTier} pass! Digital ticket stub added to profile.`);
@@ -434,17 +601,17 @@ export default function CinemaScreen({ isDarkMode, coins, setCoins, userRole = '
     }
   };
 
-  const handleCreateVideo = () => {
+  const handleCreateVideo = async () => {
     if (!newVideoTitle.trim() || !newVideoUrl.trim()) {
       return Alert.alert('Error', 'Please enter a movie title and select a video file or streaming URL.');
     }
     const parsedPrice = isMovieFree ? 0 : (parseInt(newVideoPrice) || 50);
     const newId = Date.now().toString();
-    const newVid = {
+    const newVidPayload = {
       id: newId,
-      title: newVideoTitle,
-      video_url: newVideoUrl,
-      description: newVideoDesc || 'Independent creator premiere stream.',
+      title: newVideoTitle.trim(),
+      video_url: newVideoUrl.trim(),
+      description: newVideoDesc.trim() || 'Independent creator premiere stream.',
       host: primaryHostName,
       genre: newVideoGenre,
       duration: '1h 30m',
@@ -453,9 +620,19 @@ export default function CinemaScreen({ isDarkMode, coins, setCoins, userRole = '
       isFree: isMovieFree,
       boxOfficeRevenue: 0,
       ticketSalesCount: 0,
+      created_at: new Date().toISOString(),
     };
 
-    setVideos(prev => [newVid, ...prev]);
+    try {
+      if (supabase) {
+        const { error } = await supabase.from('cinema_catalog').insert([newVidPayload]);
+        if (error) throw error;
+      }
+    } catch (err) {
+      console.log('Supabase sync warning:', err);
+    }
+
+    setVideos(prev => [newVidPayload, ...prev]);
     setUnlockedCinemaIds(prev => [...prev, newId]);
 
     setNewVideoTitle('');
@@ -463,7 +640,7 @@ export default function CinemaScreen({ isDarkMode, coins, setCoins, userRole = '
     setNewVideoDesc('');
     setLocalFileBanner('');
     
-    Alert.alert('Screening Published Successfully! 🎟️', `"${newVideoTitle}" is now live in your 10k-capacity catalog!`);
+    Alert.alert('Screening Published Successfully! 🎟️', `"${newVidPayload.title}" is now live in your 10k-capacity catalog!`);
   };
 
   const handleRequestPayout = () => {
@@ -545,6 +722,37 @@ export default function CinemaScreen({ isDarkMode, coins, setCoins, userRole = '
               </TouchableOpacity>
             )}
           </View>
+        </View>
+      </View>
+
+      {/* ================= GOOGLE ADMOB DYNAMIC BANNER ================= */}
+      <View style={styles.monetizationAdCard}>
+        <Text style={styles.adTagLabel}>Sponsored Intermission 📢 • AdMob Cinema Banner</Text>
+        <View style={{ alignItems: 'center', marginVertical: 4 }}>
+          <BannerAd
+            unitId={bannerAdUnitId}
+            size={BannerAdSize.ANCHORED_ADAPTIVE_BANNER}
+            requestOptions={{
+              requestNonPersonalizedAdsOnly: true,
+            }}
+            onAdLoaded={() => console.log('AdMob Cinema Banner loaded successfully')}
+            onAdFailedToLoad={(error) => console.log('AdMob Cinema Banner load error: ', error)}
+          />
+        </View>
+      </View>
+
+      {/* ================= REWARDED AD SPONSOR BONUS WIDGET ================= */}
+      <View style={styles.creatorMonetizationCard}>
+        <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
+          <View>
+            <Text style={{ fontSize: 12, fontWeight: 'bold', color: '#2b6cb0' }}>🪙 Cinema Sponsor Rewards</Text>
+            <Text style={{ fontSize: 14, fontWeight: 'bold', color: '#2d3748', marginTop: 2 }}>
+              Watch a quick partner clip to earn +50 coins!
+            </Text>
+          </View>
+          <TouchableOpacity style={styles.watchRewardAdBtn} onPress={handleShowRewardedAd}>
+            <Text style={{ color: '#fff', fontSize: 11, fontWeight: 'bold' }}>Watch Ad (+50 Coins) 🎁</Text>
+          </TouchableOpacity>
         </View>
       </View>
 
@@ -1094,7 +1302,7 @@ export default function CinemaScreen({ isDarkMode, coins, setCoins, userRole = '
       </Modal>
 
       {/* ========================================================== */}
-      {/* 7. CINEMA HOST APPLICATION FORM MODAL (WITH RULES & REACH) */}
+      {/* 7. CINEMA HOST APPLICATION FORM MODAL                      */}
       {/* ========================================================== */}
       <Modal visible={showApplyModal} animationType="fade" transparent={true}>
         <View style={styles.modalOverlay}>
@@ -1360,7 +1568,7 @@ export default function CinemaScreen({ isDarkMode, coins, setCoins, userRole = '
       </Modal>
 
       {/* ========================================================== */}
-      {/* 12. VIRTUAL LOBBY MODAL (PRE-SHOW WAITING ROOM)           */}
+      {/* 12. VIRTUAL LOBBY MODAL (PRE-SHOW WAITING ROOM)            */}
       {/* ========================================================== */}
       <Modal visible={lobbyActive} animationType="slide" transparent={true}>
         <View style={styles.modalOverlay}>
@@ -1400,7 +1608,7 @@ export default function CinemaScreen({ isDarkMode, coins, setCoins, userRole = '
       </Modal>
 
       {/* ========================================================== */}
-      {/* 13. HOST ROOM MODERATION & VIEWERS MANAGEMENT MODAL       */}
+      {/* 13. HOST ROOM MODERATION & VIEWERS MANAGEMENT MODAL        */}
       {/* ========================================================== */}
       <Modal visible={showViewersModal} animationType="slide" transparent={true}>
         <Pressable style={styles.modalOverlay} onPress={() => setShowViewersModal(false)}>
@@ -1461,7 +1669,7 @@ export default function CinemaScreen({ isDarkMode, coins, setCoins, userRole = '
       </Modal>
 
       {/* ========================================================== */}
-      {/* 14. ANALYTICS DASHBOARD MODAL                                */}
+      {/* 14. ANALYTICS DASHBOARD MODAL                              */}
       {/* ========================================================== */}
       <Modal visible={showAnalyticsModal} animationType="slide" transparent={true}>
         <View style={styles.modalOverlay}>
@@ -1494,7 +1702,7 @@ export default function CinemaScreen({ isDarkMode, coins, setCoins, userRole = '
       </Modal>
 
       {/* ========================================================== */}
-      {/* 15. AUTOMATED CTA REDIRECT MODAL                           */}
+      {/* 15. AUTOMATED CTA REDIRECT MODAL                         */}
       {/* ========================================================== */}
       <Modal visible={ctaModalActive} animationType="fade" transparent={true}>
         <View style={styles.modalOverlay}>
@@ -1527,7 +1735,7 @@ export default function CinemaScreen({ isDarkMode, coins, setCoins, userRole = '
       </Modal>
 
       {/* ========================================================== */}
-      {/* 16. CURTAIN CALL & INSTANT RATING PANEL                    */}
+      {/* 16. CURTAIN CALL & INSTANT RATING PANEL                  */}
       {/* ========================================================== */}
       <Modal visible={curtainCallActive} animationType="slide" transparent={false}>
         <View style={[styles.theaterContainer, isDarkMode && styles.darkContainer, { padding: 20, justifyContent: 'center' }]}>
@@ -1678,4 +1886,10 @@ const styles = StyleSheet.create({
   cardTitle: { fontSize: 13, fontWeight: 'bold', color: '#2d3748' },
   peerRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingVertical: 10, borderBottomWidth: 1, borderBottomColor: '#4a5568' },
   itemTitle: { fontSize: 12, fontWeight: 'bold', color: '#2d3748' },
+
+  // Monetization Ad Styles
+  monetizationAdCard: { backgroundColor: '#fff', borderWidth: 1, borderColor: '#e2e8f0', borderRadius: 8, padding: 8, marginBottom: 12, alignItems: 'center' },
+  adTagLabel: { fontSize: 9, color: '#a0aec0', textTransform: 'uppercase', fontWeight: 'bold', marginBottom: 2 },
+  creatorMonetizationCard: { backgroundColor: '#ebf8ff', borderWidth: 1, borderColor: '#bee3f8', borderRadius: 8, padding: 12, marginBottom: 12 },
+  watchRewardAdBtn: { backgroundColor: '#3182ce', paddingHorizontal: 12, paddingVertical: 6, borderRadius: 6 },
 });

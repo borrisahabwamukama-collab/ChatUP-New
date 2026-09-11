@@ -11,7 +11,7 @@ import {
   Switch,
 } from 'react-native';
 
-export default function StudioScreen({ isDarkMode }) {
+export default function StudioScreen({ isDarkMode, coins = 100, setCoins }) {
   const [editorTitle, setEditorTitle] = useState('');
   
   // Advanced Studio & New AI States
@@ -139,7 +139,8 @@ export default function StudioScreen({ isDarkMode }) {
     setTimeout(() => {
       setSmartTrimStatus('AI Smart Trim Complete! 3 highlights detected.');
       setHighlightReelsCount(prev => prev + 3);
-      Alert.alert('AI Smart Trim ✂️', 'Successfully generated 3 viral short-form highlight clips from your long-form footage.');
+      if (setCoins) setCoins(c => c + 25); // Reward for smart trim utility
+      Alert.alert('AI Smart Trim ✂️ (+25 🪙)', 'Successfully generated 3 viral short-form highlight clips from your long-form footage.');
     }, 1200);
   };
 
@@ -198,7 +199,8 @@ export default function StudioScreen({ isDarkMode }) {
   const handleSimulateWildlifeGift = (giftName, giftEmoji, coinValue) => {
     setFundraisingCurrentAmount(prev => prev + coinValue);
     setLatestGiftAlert(`🎁 Massive Support! Viewer sent a ${giftName} ${giftEmoji} (+${coinValue} Coins)!`);
-    Alert.alert(`Wildlife Super-Gift! ${giftEmoji}`, `A viewer just contributed a ${giftName} worth 🪙 ${coinValue} coins to the live fund!`);
+    if (setCoins) setCoins(c => c + coinValue); // Credited to wallet
+    Alert.alert(`Wildlife Super-Gift! ${giftEmoji} (+${coinValue} 🪙)`, `A viewer just contributed a ${giftName} worth 🪙 ${coinValue} coins to the live fund!`);
   };
 
   const handleSavePricingConfig = () => {
@@ -211,7 +213,8 @@ export default function StudioScreen({ isDarkMode }) {
     
     setTimeout(async () => {
       setIsProcessingZeroFriction(false);
-      Alert.alert('🚀 Success!', `Project "${editorTitle}" successfully rendered with multi-clip timeline and published to Cinema!`);
+      if (setCoins) setCoins(c => c + 75); // Reward for studio publishing
+      Alert.alert('🚀 Success! (+75 🪙)', `Project "${editorTitle}" successfully rendered with multi-clip timeline and published to Cinema!`);
       setEditorTitle('');
     }, 800);
   };
@@ -222,7 +225,7 @@ export default function StudioScreen({ isDarkMode }) {
       contentContainerStyle={{ flexGrow: 1, paddingBottom: 140, padding: 20 }}
       nestedScrollEnabled={true}
     >
-      <Text style={[styles.analyticsTitle, isDarkMode && styles.darkText]}>🎬 Creator Studio & Broadcast Operations</Text>
+      <Text style={[styles.analyticsTitle, isDarkMode && styles.darkText]}>🎬 Creator Studio & Broadcast (Wallet: {coins} 🪙)</Text>
       <Text style={[styles.analyticsSubtitle, isDarkMode && styles.darkText]}>Zero-friction publishing with Multi-Platform Restreaming, 3D Spatial Audio, DRM Shield, and Interactive Effects</Text>
 
       {/* NEW LAYER 1: MULTI-PLATFORM RESTREAMING & DESTINATION MATRIX */}
@@ -486,7 +489,7 @@ export default function StudioScreen({ isDarkMode }) {
           style={{ backgroundColor: '#3182ce', paddingHorizontal: 14, paddingVertical: 10, borderRadius: 6, alignItems: 'center' }}
           onPress={handleRunSmartTrim}
         >
-          <Text style={{ color: '#fff', fontWeight: 'bold', fontSize: 12 }}>Run AI Smart Trim Analysis 🎬</Text>
+          <Text style={{ color: '#fff', fontWeight: 'bold', fontSize: 12 }}>Run AI Smart Trim Analysis 🎬 (+25 🪙)</Text>
         </TouchableOpacity>
       </View>
 
@@ -824,7 +827,7 @@ export default function StudioScreen({ isDarkMode }) {
         >
           {isProcessingZeroFriction ? <ActivityIndicator color="#fff" style={{ marginRight: 8 }} /> : null}
           <Text style={[styles.sendButtonText, { fontSize: 16 }]}>
-            {isProcessingZeroFriction ? 'Rendering & Broadcasting...' : '⚡ Zero-Friction One-Tap Publish 🚀'}
+            {isProcessingZeroFriction ? 'Rendering & Broadcasting...' : '⚡ Zero-Friction One-Tap Publish (+75 🪙) 🚀'}
           </Text>
         </TouchableOpacity>
       </View>

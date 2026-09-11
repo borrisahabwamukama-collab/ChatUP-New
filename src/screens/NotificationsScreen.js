@@ -9,7 +9,7 @@ import {
   Alert,
 } from 'react-native';
 
-export default function NotificationsScreen({ isDarkMode }) {
+export default function NotificationsScreen({ isDarkMode, coins, setCoins }) {
   const [pushEnabled, setPushEnabled] = useState(true);
   const [liveAlerts, setLiveAlerts] = useState(true);
   const [walletAlerts, setWalletAlerts] = useState(true);
@@ -49,7 +49,7 @@ export default function NotificationsScreen({ isDarkMode }) {
   return (
     <ScrollView style={[styles.container, isDarkMode && styles.darkContainer]} contentContainerStyle={{ paddingBottom: 40, padding: 12 }}>
       <View style={[styles.headerCard, isDarkMode && styles.darkCard]}>
-        <Text style={[styles.title, isDarkMode && styles.darkText]}>🔔 Notifications & Alerts Hub</Text>
+        <Text style={[styles.title, isDarkMode && styles.darkText]}>🔔 Notifications & Alerts Hub (Wallet: {coins} 🪙)</Text>
         <Text style={styles.subtitle}>Manage your push alerts, live stream pings, and activity history.</Text>
       </View>
 
@@ -58,7 +58,7 @@ export default function NotificationsScreen({ isDarkMode }) {
         <View style={styles.settingRow}>
           <View style={{ flex: 1, marginRight: 10 }}>
             <Text style={[styles.cardTitle, isDarkMode && styles.darkText, { marginBottom: 2 }]}>🌙 Quiet Hours & DND Scheduler</Text>
-            <Text style={{ fontSize: 11, color: '#718096' }}>Automatically suppress non-urgent notification pings during night hours ({dndScheduleTime}).</Text>
+            <Text style={{ fontSize: 11, color: isDarkMode ? '#94a3b8' : '#718096' }}>Automatically suppress non-urgent notification pings during night hours ({dndScheduleTime}).</Text>
           </View>
           <Switch 
             value={dndModeActive} 
@@ -76,7 +76,7 @@ export default function NotificationsScreen({ isDarkMode }) {
         <View style={styles.settingRow}>
           <View style={{ flex: 1, marginRight: 10 }}>
             <Text style={[styles.cardTitle, isDarkMode && styles.darkText, { marginBottom: 2 }]}>⭐ Priority Contact & VIP Filtering</Text>
-            <Text style={{ fontSize: 11, color: '#718096' }}>Only vibrate or sound alerts when messages arrive from: <Text style={{ fontWeight: 'bold', color: '#d69e2e' }}>{selectedVipGroup}</Text></Text>
+            <Text style={{ fontSize: 11, color: isDarkMode ? '#94a3b8' : '#718096' }}>Only vibrate or sound alerts when messages arrive from: <Text style={{ fontWeight: 'bold', color: '#d69e2e' }}>{selectedVipGroup}</Text></Text>
           </View>
           <Switch 
             value={vipOnlyAlerts} 
@@ -92,19 +92,19 @@ export default function NotificationsScreen({ isDarkMode }) {
       {/* NEW LAYER 3: HAPTIC VIBRATION INTENSITY CONFIGURATION */}
       <View style={[styles.card, isDarkMode && styles.darkCard, { borderColor: '#48bb78', borderWidth: 1.5 }]}>
         <Text style={[styles.cardTitle, isDarkMode && styles.darkText]}>📳 Haptic Vibration Intensity ({hapticIntensity})</Text>
-        <Text style={{ fontSize: 11, color: '#718096', marginBottom: 8 }}>Choose tactile feedback profile for incoming Super-Gifts and live stream pings:</Text>
+        <Text style={{ fontSize: 11, color: isDarkMode ? '#94a3b8' : '#718096', marginBottom: 8 }}>Choose tactile feedback profile for incoming Super-Gifts and live stream pings:</Text>
         
         <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginBottom: 4 }}>
           {['Light (Subtle 📳)', 'Medium (Balanced 📳)', 'Heavy (Strong Pulse ⚡)', 'Silent (No Vibration 🔇)'].map((profile) => (
             <TouchableOpacity
               key={profile}
-              style={[styles.chip, hapticIntensity === profile && styles.activeChip]}
+              style={[styles.chip, hapticIntensity === profile && styles.activeChip, isDarkMode && styles.darkChip]}
               onPress={() => {
                 setHapticIntensity(profile);
                 Alert.alert('Haptic Profile', `Tactile feedback updated to: ${profile}`);
               }}
             >
-              <Text style={[styles.chipText, hapticIntensity === profile && { color: '#fff' }]}>{profile}</Text>
+              <Text style={[styles.chipText, hapticIntensity === profile && { color: '#fff' }, isDarkMode && styles.darkText]}>{profile}</Text>
             </TouchableOpacity>
           ))}
         </ScrollView>
@@ -115,7 +115,7 @@ export default function NotificationsScreen({ isDarkMode }) {
         <View style={styles.settingRow}>
           <View style={{ flex: 1, marginRight: 10 }}>
             <Text style={[styles.cardTitle, isDarkMode && styles.darkText, { marginBottom: 2 }]}>🧹 Auto-Cleanup & Retention ({retentionPeriod})</Text>
-            <Text style={{ fontSize: 11, color: '#718096' }}>Automatically delete old notification logs to preserve local device storage.</Text>
+            <Text style={{ fontSize: 11, color: isDarkMode ? '#94a3b8' : '#718096' }}>Automatically delete old notification logs to preserve local device storage.</Text>
           </View>
           <Switch 
             value={autoClearOldAlerts} 
@@ -174,7 +174,7 @@ export default function NotificationsScreen({ isDarkMode }) {
             </View>
           ))
         ) : (
-          <Text style={{ fontSize: 11, color: '#718096', textAlign: 'center', padding: 20, fontStyle: 'italic' }}>No active notifications in your history log.</Text>
+          <Text style={{ fontSize: 11, color: isDarkMode ? '#94a3b8' : '#718096', textAlign: 'center', padding: 20, fontStyle: 'italic' }}>No active notifications in your history log.</Text>
         )}
       </View>
     </ScrollView>
@@ -194,6 +194,7 @@ const styles = StyleSheet.create({
   settingRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingVertical: 8, borderBottomWidth: 1, borderBottomColor: '#edf2f7' },
   settingText: { fontSize: 12, color: '#2d3748' },
   chip: { backgroundColor: '#edf2f7', paddingHorizontal: 10, paddingVertical: 6, borderRadius: 8, marginRight: 6 },
+  darkChip: { backgroundColor: '#1a202c' },
   activeChip: { backgroundColor: '#3182ce' },
   chipText: { fontSize: 11, fontWeight: 'bold', color: '#4a5568' },
   notifItem: { backgroundColor: '#f7fafc', padding: 10, borderRadius: 8, marginBottom: 6, borderWidth: 1, borderColor: '#e2e8f0' },

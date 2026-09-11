@@ -1,5 +1,5 @@
 import React, { useState, useEffect, createContext, useContext } from 'react';
-import { StyleSheet, View, Text, TouchableOpacity, ScrollView, Modal, Pressable, TextInput, Alert, ActivityIndicator } from 'react-native';
+import { StyleSheet, View, Text, TouchableOpacity, ScrollView, Modal, Pressable, TextInput, Alert, ActivityIndicator, Dimensions } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { supabase } from './Services/supabaseClient'; // Adjusted path to your Supabase client
@@ -47,6 +47,101 @@ const MeshNetworkContext = createContext();
 
 export function useMeshNetwork() {
   return useContext(MeshNetworkContext);
+}
+
+// --- FULLY INTEGRATED SHORT-FORM REELS FEED SCREEN ---
+function ReelsFeedScreen({ isDarkMode, coins, setCoins, currentUser }) {
+  const [reelsList, setReelsList] = useState([
+    {
+      id: 'reel_1',
+      title: 'Wildlife Conservation in Queen Elizabeth Park 🐘🌿',
+      creator: 'Borris Ranger Hub',
+      videoUrl: 'https://images.unsplash.com/photo-1534567153574-2b12153a87f0?q=80&w=1000&auto=format&fit=crop',
+      likes: 1420,
+      comments: 94,
+      isLiked: false,
+    },
+    {
+      id: 'reel_2',
+      title: 'Kampala Afrobeat Studio Jam Session 🎶🔥',
+      creator: 'Studio UG Music',
+      videoUrl: 'https://images.unsplash.com/photo-1511671782779-c97d3d27a1d4?q=80&w=1000&auto=format&fit=crop',
+      likes: 3890,
+      comments: 210,
+      isLiked: false,
+    },
+    {
+      id: 'reel_3',
+      title: 'Bwindi Impenetrable Gorilla Trekking Epic 🦍✨',
+      creator: 'Pearl Africa Cinema',
+      videoUrl: 'https://images.unsplash.com/photo-1557050543-4d5f4e07ef46?q=80&w=1000&auto=format&fit=crop',
+      likes: 5120,
+      comments: 430,
+      isLiked: true,
+    }
+  ]);
+  const [activeReelIndex, setActiveReelIndex] = useState(0);
+
+  const handleLikeReel = (id) => {
+    setReelsList(prev => prev.map(reel => {
+      if (reel.id === id) {
+        const nextLiked = !reel.isLiked;
+        if (nextLiked && setCoins) setCoins(c => c + 5); // Reward for liking reels
+        return { ...reel, isLiked: nextLiked, likes: nextLiked ? reel.likes + 1 : reel.likes - 1 };
+      }
+      return reel;
+    }));
+  };
+
+  return (
+    <ScrollView 
+      style={[styles.container, isDarkMode && styles.darkContainer]} 
+      contentContainerStyle={{ padding: 12, paddingBottom: 100 }}
+    >
+      <View style={[styles.card, isDarkMode && styles.darkCard, { marginBottom: 12 }]}>
+        <Text style={[styles.cardTitle, isDarkMode && styles.darkText]}>📱 ChatUp Short-Form Reels & Video Hub</Text>
+        <Text style={{ fontSize: 11, color: '#718096' }}>Scroll vertical short-form reels, like videos to earn coins (+5 🪙), and share wildlife & creator clips instantly.</Text>
+      </View>
+
+      {reelsList.map((reel, index) => (
+        <View key={reel.id} style={[styles.card, isDarkMode && styles.darkCard, { padding: 0, overflow: 'hidden', marginBottom: 16 }]}>
+          <View style={{ height: 340, backgroundColor: '#000', position: 'relative' }}>
+            <img 
+              src={reel.videoUrl} 
+              alt={reel.title} 
+              style={{ width: '100%', height: '100%', objectFit: 'cover' }} 
+            />
+            
+            <View style={{ position: 'absolute', top: 12, left: 12, backgroundColor: 'rgba(0,0,0,0.7)', paddingHorizontal: 8, paddingVertical: 4, borderRadius: 6 }}>
+              <Text style={{ color: '#fff', fontSize: 10, fontWeight: 'bold' }}>🎬 Reel #{index + 1}</Text>
+            </View>
+
+            <View style={{ position: 'absolute', right: 12, bottom: 20, alignItems: 'center', gap: 14 }}>
+              <TouchableOpacity onPress={() => handleLikeReel(reel.id)} style={{ alignItems: 'center' }}>
+                <Text style={{ fontSize: 28 }}>{reel.isLiked ? '❤️' : '🤍'}</Text>
+                <Text style={{ color: '#fff', fontSize: 11, fontWeight: 'bold', textShadowColor: '#000', textShadowRadius: 2 }}>{reel.likes}</Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity onPress={() => Alert.alert('Reel Comments', `Opening comment thread for "${reel.title}"...`)} style={{ alignItems: 'center' }}>
+                <Text style={{ fontSize: 26 }}>💬</Text>
+                <Text style={{ color: '#fff', fontSize: 11, fontWeight: 'bold', textShadowColor: '#000', textShadowRadius: 2 }}>{reel.comments}</Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity onPress={() => { if (setCoins) setCoins(c => c + 10); Alert.alert('Shared! 🚀 (+10 🪙)', 'Reel link successfully shared to chat inbox.'); }} style={{ alignItems: 'center' }}>
+                <Text style={{ fontSize: 26 }}>↗️</Text>
+                <Text style={{ color: '#fff', fontSize: 10, fontWeight: 'bold' }}>Share</Text>
+              </TouchableOpacity>
+            </View>
+
+            <View style={{ position: 'absolute', bottom: 16, left: 16, right: 70 }}>
+              <Text style={{ color: '#fff', fontSize: 14, fontWeight: 'bold', textShadowColor: '#000', textShadowRadius: 3, marginBottom: 2 }}>{reel.title}</Text>
+              <Text style={{ color: '#cbd5e0', fontSize: 11, textShadowColor: '#000', textShadowRadius: 2 }}>@{reel.creator} • Official Creator</Text>
+            </View>
+          </View>
+        </View>
+      ))}
+    </ScrollView>
+  );
 }
 
 // --- STABLE LOGIN SCREEN WITH SUPABASE EMAIL OTP ---
@@ -174,7 +269,7 @@ export default function App() {
   const [currentUser, setCurrentUser] = useState(null);
 
   const [activeScreen, setActiveScreen] = useState('ChatRoom');
-  const [screenParams, setScreenParams] = useState({}); // Stores parameters passed during navigation
+  const [screenParams, setScreenParams] = useState({}); 
   const [isDarkMode, setIsDarkMode] = useState(false);
   const [coins, setCoins] = useState(2500);
   const [menuVisible, setMenuVisible] = useState(false);
@@ -190,7 +285,7 @@ export default function App() {
   ]);
   const [ghostVaults, setGhostVaults] = useState({});
 
-  // LISTEN TO SUPABASE AUTH SESSION ON LAUNCH
+  // LISTEN TO SUPABASE AUTH SESSION ON LAUNCH & ENSURE PRIVATE ACCOUNT IS ISOLATED
   useEffect(() => {
     supabase.auth.getSession().then(({ data: { session } }) => {
       if (session?.user) {
@@ -241,7 +336,6 @@ export default function App() {
     return true;
   };
 
-  // ✅ ENHANCED NAVIGATION WRAPPER WITH PARAMS SUPPORT
   const navigation = {
     navigate: (screenName, params = {}) => {
       if (screenName === 'Login') {
@@ -312,6 +406,8 @@ export default function App() {
           return <ReferralRewardsScreen isDarkMode={isDarkMode} currentUser={currentUser || { id: 'temp_id', name: 'User' }} route={route} navigation={navigation} />;
         case 'LiveStream': 
           return <LiveStreamScreen isDarkMode={isDarkMode} coins={coins} setCoins={setCoins} currentUser={currentUser} route={route} navigation={navigation} />;
+        case 'Reels':
+          return <ReelsFeedScreen isDarkMode={isDarkMode} coins={coins} setCoins={setCoins} currentUser={currentUser} />;
         case 'Analytics': 
           return <AnalyticsScreen isDarkMode={isDarkMode} currentUser={currentUser} route={route} navigation={navigation} />;
         case 'Cinema': 
@@ -415,6 +511,7 @@ export default function App() {
              activeScreen === 'CameraHub' ? '🎥 Multi-Camera Hub' :
              activeScreen === 'Discovery' ? '🔍 Discovery Feed' :
              activeScreen === 'LiveStream' ? '🔴 Live Stream & Video' :
+             activeScreen === 'Reels' ? '📱 Short-Form Reels' :
              activeScreen === 'AdminControl' ? '👑 Master Super-Admin Panel' : 
              activeScreen === 'GlobalAISupervisor' ? '🤖 Global AI Supervisor & SOC' : 
              activeScreen === 'MonetizationTreasury' ? '🪙 Monetization & Escrow' : 
@@ -457,6 +554,14 @@ export default function App() {
           >
             <Ionicons name="videocam-outline" size={15} color={activeScreen === 'LiveStream' ? '#007AFF' : (isDarkMode ? '#a0aec0' : '#4a5568')} />
             <Text style={[styles.subTabText, activeScreen === 'LiveStream' && styles.activeSubTabText, isDarkMode && styles.darkText]}>Video / Live</Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity 
+            style={[styles.subTabItem, activeScreen === 'Reels' && styles.activeSubTab]} 
+            onPress={() => setActiveScreen('Reels')}
+          >
+            <Ionicons name="film-outline" size={15} color={activeScreen === 'Reels' ? '#007AFF' : (isDarkMode ? '#a0aec0' : '#4a5568')} />
+            <Text style={[styles.subTabText, activeScreen === 'Reels' && styles.activeSubTabText, isDarkMode && styles.darkText]}>Reels 📱</Text>
           </TouchableOpacity>
 
           {superAdminAccessEnabled && (
@@ -511,6 +616,9 @@ export default function App() {
                 </TouchableOpacity>
                 <TouchableOpacity style={styles.drawerItem} onPress={() => handleSelectScreen('LiveStream')}>
                   <Text style={styles.drawerItemText}>🔴 Live Streams</Text>
+                </TouchableOpacity>
+                <TouchableOpacity style={styles.drawerItem} onPress={() => handleSelectScreen('Reels')}>
+                  <Text style={[styles.drawerItemText, { color: '#d97706', fontWeight: 'bold' }]}>📱 Short-Form Reels</Text>
                 </TouchableOpacity>
                 <TouchableOpacity style={styles.drawerItem} onPress={() => handleSelectScreen('InteractiveGames')}>
                   <Text style={[styles.drawerItemText, { color: '#9333ea', fontWeight: 'bold' }]}>🎮 Live & In-Chat Games</Text>
@@ -619,18 +727,18 @@ export default function App() {
 
           <TouchableOpacity 
             style={styles.tabItem} 
-            onPress={() => setActiveScreen('Wallet')}
+            onPress={() => setActiveScreen('Reels')}
           >
-            <Ionicons name={activeScreen === 'Wallet' ? 'wallet' : 'wallet-outline'} size={22} color={activeScreen === 'Wallet' ? '#007AFF' : (isDarkMode ? '#a0aec0' : 'gray')} />
-            <Text style={[styles.tabText, activeScreen === 'Wallet' && styles.activeTabText, isDarkMode && styles.darkText]} numberOfLines={1}>Wallet</Text>
+            <Ionicons name={activeScreen === 'Reels' ? 'film' : 'film-outline'} size={22} color={activeScreen === 'Reels' ? '#007AFF' : (isDarkMode ? '#a0aec0' : 'gray')} />
+            <Text style={[styles.tabText, activeScreen === 'Reels' && styles.activeTabText, isDarkMode && styles.darkText]} numberOfLines={1}>Reels</Text>
           </TouchableOpacity>
 
           <TouchableOpacity 
             style={styles.tabItem} 
-            onPress={() => setActiveScreen('Profile')}
+            onPress={() => setActiveScreen('Wallet')}
           >
-            <Ionicons name={activeScreen === 'Profile' ? 'person' : 'person-outline'} size={22} color={activeScreen === 'Profile' ? '#007AFF' : (isDarkMode ? '#a0aec0' : 'gray')} />
-            <Text style={[styles.tabText, activeScreen === 'Profile' && styles.activeTabText, isDarkMode && styles.darkText]} numberOfLines={1}>Profile</Text>
+            <Ionicons name={activeScreen === 'Wallet' ? 'wallet' : 'wallet-outline'} size={22} color={activeScreen === 'Wallet' ? '#007AFF' : (isDarkMode ? '#a0aec0' : 'gray')} />
+            <Text style={[styles.tabText, activeScreen === 'Wallet' && styles.activeTabText, isDarkMode && styles.darkText]} numberOfLines={1}>Wallet</Text>
           </TouchableOpacity>
         </View>
 
@@ -678,5 +786,7 @@ const styles = StyleSheet.create({
   loginInput: { width: '100%', height: 48, borderWidth: 1, borderColor: '#cbd5e0', borderRadius: 8, paddingHorizontal: 15, fontSize: 15, backgroundColor: '#fff', marginBottom: 15, color: '#2d3748' },
   darkInput: { backgroundColor: '#2d3748', borderColor: '#4a5568', color: '#fff' },
   loginButton: { width: '100%', height: 48, backgroundColor: '#007AFF', justifyContent: 'center', alignItems: 'center', borderRadius: 8 },
-  loginButtonText: { color: '#fff', fontSize: 16, fontWeight: 'bold' }
+  loginButtonText: { color: '#fff', fontSize: 16, fontWeight: 'bold' },
+  card: { backgroundColor: '#fff', borderRadius: 12, padding: 15, marginBottom: 12, borderWidth: 1, borderColor: '#e2e8f0' },
+  cardTitle: { fontSize: 13, fontWeight: 'bold', color: '#2d3748', marginBottom: 6 },
 });

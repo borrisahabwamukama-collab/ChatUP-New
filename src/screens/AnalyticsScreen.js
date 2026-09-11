@@ -7,6 +7,7 @@ import {
   ScrollView,
   Alert,
 } from 'react-native';
+import { supabase } from '../supabaseClient'; // Adjust path if your client is located elsewhere
 
 export default function AnalyticsScreen({ isDarkMode, coins }) {
   // Real-time Engagement Live Counters
@@ -21,22 +22,142 @@ export default function AnalyticsScreen({ isDarkMode, coins }) {
   const [revenueTotalCoins, setRevenueTotalCoins] = useState(1420);
   const [activeTabMetric, setActiveTabMetric] = useState('7D');
 
-  // ================= 25+ ENTERPRISE ANALYTICS & TELEMETRY LAYERS =================
-  const [predictiveChurnActive, setPredictiveChurnActive] = useState(true);
-  const [neuralSentimentHeatmap, setNeuralSentimentHeatmap] = useState(true);
-  const [edgeCachingNodeSync, setEdgeCachingNodeSync] = useState(true);
-  const [biometricEngagementScoring, setBiometricEngagementScoring] = useState(true);
-  const [quantumPacketIntegrity, setQuantumPacketIntegrity] = useState(true);
-  const [kampalaTrafficRelayMesh, setKampalaTrafficRelayMesh] = useState(true);
-  const [federatedAiPersonalization, setFederatedAiPersonalization] = useState(true);
-  const [zeroFeeGasAbstraction, setZeroFeeGasAbstraction] = useState(true);
-  const [autonomousToxicityRadar, setAutonomousToxicityRadar] = useState(true);
-  const [multimodalHlsMetrics, setMultimodalHlsMetrics] = useState(true);
-  const [bluetoothP2pProximityTrack, setBluetoothP2pProximityTrack] = useState(true);
-  const [smartContractEscrowAnalytics, setSmartContractEscrowAnalytics] = useState(true);
-  const [cryptographicWatermarkTelemetry, setCryptographicWatermarkTelemetry] = useState(true);
-  const [adaptiveBitrateQualityAudit, setAdaptiveBitrateQualityAudit] = useState(true);
-  const [crossBorderRoutingMatrix, setCrossBorderRoutingMatrix] = useState(true);
+  // ================= 25+ ENTERPRISE ANALYTICS & TELEMETRY LAYERS STATE =================
+  const [analyticsLayers, setAnalyticsLayers] = useState({
+    predictiveChurnActive: true,
+    neuralSentimentHeatmap: true,
+    edgeCachingNodeSync: true,
+    biometricEngagementScoring: true,
+    quantumPacketIntegrity: true,
+    kampalaTrafficRelayMesh: true,
+    federatedAiPersonalization: true,
+    zeroFeeGasAbstraction: true,
+    autonomousToxicityRadar: true,
+    multimodalHlsMetrics: true,
+    bluetoothP2pProximityTrack: true,
+    smartContractEscrowAnalytics: true,
+    cryptographicWatermarkTelemetry: true,
+    adaptiveBitrateQualityAudit: true,
+    crossBorderRoutingMatrix: true,
+  });
+
+  const [isSaving, setIsSaving] = useState(false);
+
+  // Load saved analytics layers and setup real-time listener on mount
+  useEffect(() => {
+    fetchAnalyticsSettings();
+
+    // Setup Supabase Realtime subscription for cross-device analytics sync
+    const subscription = supabase
+      .channel('public:analytics_settings')
+      .on(
+        'postgres_changes',
+        {
+          event: 'UPDATE',
+          schema: 'public',
+          table: 'analytics_settings',
+          filter: 'id=eq.1',
+        },
+        (payload) => {
+          const data = payload.new;
+          if (data) {
+            setAnalyticsLayers({
+              predictiveChurnActive: data.predictive_churn_active ?? true,
+              neuralSentimentHeatmap: data.neural_sentiment_heatmap ?? true,
+              edgeCachingNodeSync: data.edge_caching_node_sync ?? true,
+              biometricEngagementScoring: data.biometric_engagement_scoring ?? true,
+              quantumPacketIntegrity: data.quantum_packet_integrity ?? true,
+              kampalaTrafficRelayMesh: data.kampala_traffic_relay_mesh ?? true,
+              federatedAiPersonalization: data.federated_ai_personalization ?? true,
+              zeroFeeGasAbstraction: data.zero_fee_gas_abstraction ?? true,
+              autonomousToxicityRadar: data.autonomous_toxicity_radar ?? true,
+              multimodalHlsMetrics: data.multimodal_hls_metrics ?? true,
+              bluetoothP2pProximityTrack: data.bluetooth_p2p_proximity_track ?? true,
+              smartContractEscrowAnalytics: data.smart_contract_escrow_analytics ?? true,
+              cryptographicWatermarkTelemetry: data.cryptographic_watermark_telemetry ?? true,
+              adaptiveBitrateQualityAudit: data.adaptive_bitrate_quality_audit ?? true,
+              crossBorderRoutingMatrix: data.cross_border_routing_matrix ?? true,
+            });
+          }
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(subscription);
+    };
+  }, []);
+
+  const fetchAnalyticsSettings = async () => {
+    try {
+      const { data, error } = await supabase
+        .from('analytics_settings')
+        .select('*')
+        .eq('id', 1)
+        .single();
+
+      if (data && !error) {
+        setAnalyticsLayers({
+          predictiveChurnActive: data.predictive_churn_active ?? true,
+          neuralSentimentHeatmap: data.neural_sentiment_heatmap ?? true,
+          edgeCachingNodeSync: data.edge_caching_node_sync ?? true,
+          biometricEngagementScoring: data.biometric_engagement_scoring ?? true,
+          quantumPacketIntegrity: data.quantum_packet_integrity ?? true,
+          kampalaTrafficRelayMesh: data.kampala_traffic_relay_mesh ?? true,
+          federatedAiPersonalization: data.federated_ai_personalization ?? true,
+          zeroFeeGasAbstraction: data.zero_fee_gas_abstraction ?? true,
+          autonomousToxicityRadar: data.autonomous_toxicity_radar ?? true,
+          multimodalHlsMetrics: data.multimodal_hls_metrics ?? true,
+          bluetoothP2pProximityTrack: data.bluetooth_p2p_proximity_track ?? true,
+          smartContractEscrowAnalytics: data.smart_contract_escrow_analytics ?? true,
+          cryptographicWatermarkTelemetry: data.cryptographic_watermark_telemetry ?? true,
+          adaptiveBitrateQualityAudit: data.adaptive_bitrate_quality_audit ?? true,
+          crossBorderRoutingMatrix: data.cross_border_routing_matrix ?? true,
+        });
+      }
+    } catch (err) {
+      console.log('No existing remote analytics settings found. Using default local state.');
+    }
+  };
+
+  const toggleAnalyticsLayer = async (key) => {
+    const updatedLayers = {
+      ...analyticsLayers,
+      [key]: !analyticsLayers[key],
+    };
+    setAnalyticsLayers(updatedLayers);
+
+    setIsSaving(true);
+    try {
+      const { error } = await supabase
+        .from('analytics_settings')
+        .upsert({
+          id: 1,
+          predictive_churn_active: updatedLayers.predictiveChurnActive,
+          neural_sentiment_heatmap: updatedLayers.neuralSentimentHeatmap,
+          edge_caching_node_sync: updatedLayers.edgeCachingNodeSync,
+          biometric_engagement_scoring: updatedLayers.biometricEngagementScoring,
+          quantum_packet_integrity: updatedLayers.quantumPacketIntegrity,
+          kampala_traffic_relay_mesh: updatedLayers.kampalaTrafficRelayMesh,
+          federated_ai_personalization: updatedLayers.federatedAiPersonalization,
+          zero_fee_gas_abstraction: updatedLayers.zeroFeeGasAbstraction,
+          autonomous_toxicity_radar: updatedLayers.autonomousToxicityRadar,
+          multimodal_hls_metrics: updatedLayers.multimodalHlsMetrics,
+          bluetooth_p2p_proximity_track: updatedLayers.bluetoothP2pProximityTrack,
+          smart_contract_escrow_analytics: updatedLayers.smartContractEscrowAnalytics,
+          cryptographic_watermark_telemetry: updatedLayers.cryptographicWatermarkTelemetry,
+          adaptive_bitrate_quality_audit: updatedLayers.adaptiveBitrateQualityAudit,
+          cross_border_routing_matrix: updatedLayers.crossBorderRoutingMatrix,
+          updated_at: new Date(),
+        });
+
+      if (error) throw error;
+    } catch (err) {
+      console.error('Failed to sync analytics layer update to Supabase:', err.message);
+    } finally {
+      setIsSaving(false);
+    }
+  };
 
   // Simulate real-time fluctuating pulse
   useEffect(() => {
@@ -104,46 +225,58 @@ export default function AnalyticsScreen({ isDarkMode, coins }) {
     Alert.alert('Reward Claimed! 🎉', `Successfully claimed your reward for "${title}". Keep broadcasting!`);
   };
 
+  const layerDefinitions = [
+    { key: 'predictiveChurnActive', label: '📉 Predictive Churn Guard' },
+    { key: 'neuralSentimentHeatmap', label: '🌿 Neural Sentiment Heatmap' },
+    { key: 'edgeCachingNodeSync', label: '🛰️ Edge Caching Node Sync' },
+    { key: 'biometricEngagementScoring', label: '✍️ Biometric Engagement Score' },
+    { key: 'quantumPacketIntegrity', label: '🔐 Quantum Packet Integrity' },
+    { key: 'kampalaTrafficRelayMesh', label: '🇺🇬 Kampala Traffic Relay' },
+    { key: 'federatedAiPersonalization', label: '🧠 Federated AI Personalization' },
+    { key: 'zeroFeeGasAbstraction', label: '🪙 Zero-Fee Gas Abstraction' },
+    { key: 'autonomousToxicityRadar', label: '🛡️ Autonomous Toxicity Radar' },
+    { key: 'multimodalHlsMetrics', label: '🎥 Multimodal HLS Metrics' },
+    { key: 'bluetoothP2pProximityTrack', label: '📡 Bluetooth P2P Proximity' },
+    { key: 'smartContractEscrowAnalytics', label: '🪙 Smart Contract Escrow Audit' },
+    { key: 'cryptographicWatermarkTelemetry', label: '🛡️ Cryptographic Watermarking' },
+    { key: 'adaptiveBitrateQualityAudit', label: '⚡ Adaptive Bitrate Audit' },
+    { key: 'crossBorderRoutingMatrix', label: '🌐 Cross-Border Routing Matrix' },
+  ];
+
   return (
     <ScrollView 
       style={[styles.container, isDarkMode && styles.darkContainer]} 
       contentContainerStyle={{ flexGrow: 1, paddingBottom: 160, padding: 20 }}
       nestedScrollEnabled={true}
     >
-      <Text style={[styles.analyticsTitle, isDarkMode && styles.darkText]}>📊 Creator Analytics & Telemetry Hub</Text>
+      <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
+        <Text style={[styles.analyticsTitle, isDarkMode && styles.darkText]}>📊 Creator Analytics & Telemetry Hub</Text>
+        {isSaving && (
+          <View style={styles.syncBadge}>
+            <Text style={styles.syncBadgeText}>☁️ Syncing...</Text>
+          </View>
+        )}
+      </View>
       <Text style={[styles.analyticsSubtitle, isDarkMode && styles.darkText]}>Advanced performance telemetry, revenue attribution, heatmaps, and retention insights</Text>
 
       {/* ================= 25+ ENTERPRISE ANALYTICS & TELEMETRY LAYERS MATRIX ================= */}
       <View style={[styles.postCard, isDarkMode && styles.darkHeader, { padding: 15, marginBottom: 15, borderColor: '#3182ce', borderWidth: 2 }]}>
         <Text style={[styles.commentsHeader, isDarkMode && styles.darkText, { fontSize: 13, color: '#3182ce', fontWeight: 'bold', marginBottom: 8 }]}>🌐 25+ Enterprise Analytics & Telemetry Layers Matrix</Text>
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(210px, 1fr))', gap: '6px' }}>
-          {[
-            { label: '📉 Predictive Churn Guard', val: predictiveChurnActive, setVal: setPredictiveChurnActive },
-            { label: '🌿 Neural Sentiment Heatmap', val: neuralSentimentHeatmap, setVal: setNeuralSentimentHeatmap },
-            { label: '🛰️ Edge Caching Node Sync', val: edgeCachingNodeSync, setVal: setEdgeCachingNodeSync },
-            { label: '✍️ Biometric Engagement Score', val: biometricEngagementScoring, setVal: setBiometricEngagementScoring },
-            { label: '🔐 Quantum Packet Integrity', val: quantumPacketIntegrity, setVal: setQuantumPacketIntegrity },
-            { label: '🇺🇬 Kampala Traffic Relay', val: kampalaTrafficRelayMesh, setVal: setKampalaTrafficRelayMesh },
-            { label: '🧠 Federated AI Personalization', val: federatedAiPersonalization, setVal: setFederatedAiPersonalization },
-            { label: '🪙 Zero-Fee Gas Abstraction', val: zeroFeeGasAbstraction, setVal: setZeroFeeGasAbstraction },
-            { label: '🛡️ Autonomous Toxicity Radar', val: autonomousToxicityRadar, setVal: setAutonomousToxicityRadar },
-            { label: '🎥 Multimodal HLS Metrics', val: multimodalHlsMetrics, setVal: setMultimodalHlsMetrics },
-            { label: '📡 Bluetooth P2P Proximity', val: bluetoothP2pProximityTrack, setVal: setBluetoothP2pProximityTrack },
-            { label: '🪙 Smart Contract Escrow Audit', val: smartContractEscrowAnalytics, setVal: setSmartContractEscrowAnalytics },
-            { label: '🛡️ Cryptographic Watermarking', val: cryptographicWatermarkTelemetry, setVal: setCryptographicWatermarkTelemetry },
-            { label: '⚡ Adaptive Bitrate Audit', val: adaptiveBitrateQualityAudit, setVal: setAdaptiveBitrateQualityAudit },
-            { label: '🌐 Cross-Border Routing Matrix', val: crossBorderRoutingMatrix, setVal: setCrossBorderRoutingMatrix },
-          ].map((layer, idx) => (
-            <div key={idx} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '4px 8px', background: isDarkMode ? '#1a202c' : '#f8fafc', borderRadius: '4px', border: '1px solid #e2e8f0' }}>
-              <span style={{ fontSize: '9px', fontWeight: 'bold', color: isDarkMode ? '#fff' : '#2d3748' }}>{layer.label}</span>
-              <button 
-                onClick={() => layer.setVal(!layer.val)}
-                style={{ background: layer.val ? '#38a169' : '#e53e3e', color: '#fff', border: 'none', padding: '2px 6px', borderRadius: '4px', fontSize: '8px', fontWeight: 'bold', cursor: 'pointer' }}
-              >
-                {layer.val ? 'ACTIVE 🟢' : 'OFF 🔴'}
-              </button>
-            </div>
-          ))}
+          {layerDefinitions.map((layer) => {
+            const isActive = analyticsLayers[layer.key];
+            return (
+              <div key={layer.key} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '4px 8px', background: isDarkMode ? '#1a202c' : '#f8fafc', borderRadius: '4px', border: '1px solid #e2e8f0' }}>
+                <span style={{ fontSize: '9px', fontWeight: 'bold', color: isDarkMode ? '#fff' : '#2d3748' }}>{layer.label}</span>
+                <button 
+                  onClick={() => toggleAnalyticsLayer(layer.key)}
+                  style={{ background: isActive ? '#38a169' : '#e53e3e', color: '#fff', border: 'none', padding: '2px 6px', borderRadius: '4px', fontSize: '8px', fontWeight: 'bold', cursor: 'pointer' }}
+                >
+                  {isActive ? 'ACTIVE 🟢' : 'OFF 🔴'}
+                </button>
+              </div>
+            );
+          })}
         </div>
       </View>
 
@@ -368,4 +501,15 @@ const styles = StyleSheet.create({
   darkHeader: { backgroundColor: '#2d3748', borderColor: '#4a5568' },
   subCard: { backgroundColor: '#f7fafc', padding: 10, borderRadius: 8, borderWidth: 1, borderColor: '#e2e8f0' },
   commentsHeader: { fontSize: 13, fontWeight: 'bold', color: '#4a5568', marginBottom: 6 },
+  syncBadge: {
+    backgroundColor: 'rgba(59, 130, 246, 0.85)',
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 4,
+  },
+  syncBadgeText: {
+    color: '#ffffff',
+    fontSize: 9,
+    fontWeight: 'bold',
+  },
 });

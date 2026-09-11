@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   StyleSheet,
   Text,
@@ -8,16 +8,17 @@ import {
   ScrollView,
   Alert,
 } from 'react-native';
+import { supabase } from '../supabase'; // Adjust path if needed
 
 export default function ChatUpLiveScreen({ isDarkMode, coins, setCoins }) {
   // ChatUp Live Core States
-  const [streamHost] = useState('Borris (Talk With Nature)');
-  const [viewerCount] = useState(1420);
+  const [streamHost, setStreamHost] = useState('Borris (Talk With Nature)');
+  const [viewerCount, setViewerCount] = useState(1420);
   const [likesCount, setLikesCount] = useState(9500);
   
   // Creator Eligibility States
-  const [userFollowers] = useState(520);
-  const [userTotalViews] = useState(1250);
+  const [userFollowers, setUserFollowers] = useState(520);
+  const [userTotalViews, setUserTotalViews] = useState(1250);
 
   // Interactive Modals & Feature Toggles
   const [activeModal, setActiveModal] = useState(null); // 'guests', 'mod', 'pk', 'qa', 'wheel', 'layers'
@@ -45,11 +46,7 @@ export default function ChatUpLiveScreen({ isDarkMode, coins, setCoins }) {
   const [newQuestionInput, setNewQuestionInput] = useState('');
 
   // Chat & Toxic Filter State
-  const [comments, setComments] = useState([
-    { id: '1', user: 'Nimusiima Asifa', text: 'Amazing wildlife view! 🐘🌿' },
-    { id: '2', user: 'Stella', text: 'Let us support the community fund!' },
-    { id: '3', user: 'System', text: '✨ AI Auto-Mod Active: Safe conversation enforced.' }
-  ]);
+  const [comments, setComments] = useState([]);
   const [chatText, setChatText] = useState('');
   const [floatingBannerText, setFloatingBannerText] = useState('🎉 Welcome to ChatUp Live Expedition!');
 
@@ -75,6 +72,47 @@ export default function ChatUpLiveScreen({ isDarkMode, coins, setCoins }) {
   const [teleprompterSync, setTeleprompterSync] = useState(true);
   const [globalEmergencyBroadcastOverride, setGlobalEmergencyBroadcastOverride] = useState(true);
 
+  const commentsScrollRef = useRef();
+
+  // Fetch initial stream user info and setup real-time comment synchronization
+  useEffect(() => {
+    initLiveSession();
+
+    const channel = supabase
+      .channel('public:stream_messages')
+      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'messages' }, payload => {
+        setComments(prev => {
+          if (prev.some(m => m.id === payload.new.id)) return prev;
+          const updated = [...prev, { id: payload.new.id, user: payload.new.sender || 'Viewer', text: payload.new.content || payload.new.text }];
+          setTimeout(() => commentsScrollRef.current?.scrollToEnd({ animated: true }), 100);
+          return updated;
+        });
+      })
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, []);
+
+  const initLiveSession = async () => {
+    const { data: { user } } = await supabase.auth.getUser();
+    if (user && user.email) {
+      setStreamHost(user.email.split('@')[0]);
+    }
+
+    // Fetch initial chat logs from database
+    const { data, error } = await supabase
+      .from('messages')
+      .select('*')
+      .order('created_at', { ascending: true })
+      .limit(30);
+
+    if (!error && data) {
+      setComments(data.map(m => ({ id: m.id, user: m.sender || 'User', text: m.content || m.text })));
+    }
+  };
+
   // Check Eligibility Action
   const verifyLiveEligibility = () => {
     const minFollowers = 500;
@@ -90,8 +128,8 @@ export default function ChatUpLiveScreen({ isDarkMode, coins, setCoins }) {
     return true;
   };
 
-  // Chat Submission with AI Toxic Filter Simulation
-  const handleSendComment = () => {
+  // Chat Submission with AI Toxic Filter Simulation & Supabase persistence
+  const handleSendComment = async () => {
     if (!chatText.trim()) return;
     
     const lower = chatText.toLowerCase();
@@ -99,8 +137,18 @@ export default function ChatUpLiveScreen({ isDarkMode, coins, setCoins }) {
       return Alert.alert('AI Toxicity Filter 🛡️', 'Your message was blocked by ChatUp AI Auto-Mod for violating community guidelines.');
     }
 
-    setComments(prev => [...prev, { id: Date.now().toString(), user: 'You', text: chatText }]);
+    const textToSend = chatText;
     setChatText('');
+
+    const { data: { user } } = await supabase.auth.getUser();
+    
+    await supabase.from('messages').insert([
+      {
+        content: textToSend,
+        sender: user ? user.email.split('@')[0] : 'You',
+        user_id: user ? user.id : null
+      }
+    ]);
   };
 
   const handleTapLike = () => {
@@ -108,20 +156,29 @@ export default function ChatUpLiveScreen({ isDarkMode, coins, setCoins }) {
   };
 
   // Luxury Wheel / Gift Drop Action with Coin Deduction
-  const handleLuxuryGift = (giftName, giftEmoji, cost) => {
+  const handleLuxuryGift = async (giftName, giftEmoji, cost) => {
     if (coins < cost) {
       return Alert.alert('Insufficient Coins', `You need 🪙 ${cost} coins to drop a ${giftName} ${giftEmoji}.`);
     }
     setCoins(c => c - cost);
     setHarambeeCurrent(prev => prev + cost);
     setFloatingBannerText(`🚀 MASSIVE DROP: ${giftName} ${giftEmoji} (-${cost} Coins)!`);
-    setComments(prev => [...prev, { id: Date.now().toString(), user: 'Harambee Donor', text: `🌟 Sent luxury gift: ${giftName} ${giftEmoji}!` }]);
+
+    const { data: { user } } = await supabase.auth.getUser();
+    await supabase.from('messages').insert([
+      {
+        content: `🌟 Sent luxury gift: ${giftName} ${giftEmoji}!`,
+        sender: user ? user.email.split('@')[0] : 'Harambee Donor',
+        user_id: user ? user.id : null
+      }
+    ]);
+
     Alert.alert('Luxury Gift Sent! 🏆', `You successfully contributed a ${giftName} ${giftEmoji} to the stream!`);
   };
 
   const handleAskQuestion = () => {
     if (!newQuestionInput.trim()) return;
-    setQaQuestions(prev => [...prev, { id: Date.now().toString(), user: 'You', question: newQuestionInput }]);
+    setQaQuestions(prev => [...prev, { id: Date.now().toString(), user: streamHost, question: newQuestionInput }]);
     setNewQuestionInput('');
     Alert.alert('Q&A Submitted', 'Your question has been pinned for the host to answer!');
   };
@@ -144,7 +201,7 @@ export default function ChatUpLiveScreen({ isDarkMode, coins, setCoins }) {
         <View style={styles.topHeader}>
           <View style={styles.hostBadge}>
             <View style={{ width: 28, height: 28, borderRadius: 14, backgroundColor: '#3182ce', justifyContent: 'center', alignItems: 'center', marginRight: 6 }}>
-              <Text style={{ color: '#fff', fontWeight: 'bold', fontSize: 11 }}>B</Text>
+              <Text style={{ color: '#fff', fontWeight: 'bold', fontSize: 11 }}>{streamHost.charAt(0).toUpperCase()}</Text>
             </View>
             <View>
               <Text style={{ color: '#fff', fontSize: 11, fontWeight: 'bold' }}>{streamHost}</Text>
@@ -177,7 +234,7 @@ export default function ChatUpLiveScreen({ isDarkMode, coins, setCoins }) {
         {isPkActive && (
           <View style={styles.pkContainer}>
             <View style={styles.pkBox}>
-              <Text style={{ color: '#fff', fontSize: 10, fontWeight: 'bold' }}>Borris: {pkScoreHost}</Text>
+              <Text style={{ color: '#fff', fontSize: 10, fontWeight: 'bold' }}>{streamHost}: {pkScoreHost}</Text>
             </View>
             <Text style={{ color: '#e53e3e', fontWeight: 'bold', fontSize: 12, marginHorizontal: 6 }}>VS</Text>
             <View style={styles.pkBox}>
@@ -188,9 +245,9 @@ export default function ChatUpLiveScreen({ isDarkMode, coins, setCoins }) {
 
         {/* 2. FLOATING COMMENTS / CHAT FEED OVERLAY */}
         <View style={styles.chatOverlayContainer}>
-          <ScrollView style={{ flex: 1 }} contentContainerStyle={{ justifyContent: 'flex-end' }} showsVerticalScrollIndicator={false}>
-            {comments.map(item => (
-              <View key={item.id} style={styles.commentBubble}>
+          <ScrollView ref={commentsScrollRef} style={{ flex: 1 }} contentContainerStyle={{ justifyContent: 'flex-end' }} showsVerticalScrollIndicator={false}>
+            {comments.map((item, idx) => (
+              <View key={item.id || idx} style={styles.commentBubble}>
                 <Text style={{ color: '#90cdf4', fontWeight: 'bold', fontSize: 11, marginRight: 4 }}>{item.user}:</Text>
                 <Text style={{ color: '#fff', fontSize: 12 }}>{item.text}</Text>
               </View>
@@ -344,7 +401,7 @@ export default function ChatUpLiveScreen({ isDarkMode, coins, setCoins }) {
               {activeModal === 'layers' && (
                 <ScrollView style={{ maxHeight: 260 }}>
                   <Text style={{ color: '#cbd5e0', fontSize: 10, marginBottom: 8, textAlign: 'center' }}>Enterprise Streaming Architecture Switches</Text>
-                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '6px' }}>
+                  <View style={{ flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'space-between' }}>
                     {[
                       { label: '📡 Ultra-Low HLS', val: ultraLowLatencyHls, setVal: setUltraLowLatencyHls },
                       { label: '🤖 AI Auto-Framing', val: aiAutoFramingActive, setVal: setAiAutoFramingActive },
@@ -367,17 +424,17 @@ export default function ChatUpLiveScreen({ isDarkMode, coins, setCoins }) {
                       { label: '📜 Teleprompter', val: teleprompterSync, setVal: setTeleprompterSync },
                       { label: '🚨 SOS Override', val: globalEmergencyBroadcastOverride, setVal: setGlobalEmergencyBroadcastOverride },
                     ].map((layer, idx) => (
-                      <div key={idx} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: '#1a202c', padding: '4px 6px', borderRadius: '4px', border: '1px solid #4a5568' }}>
-                        <span style={{ fontSize: '9px', color: '#fff', fontWeight: 'bold' }}>{layer.label}</span>
-                        <button 
-                          onClick={() => layer.setVal(!layer.val)}
-                          style={{ background: layer.val ? '#38a169' : '#e53e3e', color: '#fff', border: 'none', padding: '2px 6px', borderRadius: '3px', fontSize: '8px', fontWeight: 'bold', cursor: 'pointer' }}
+                      <View key={idx} style={{ width: '48%', flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', backgroundColor: '#1a202c', padding: 6, borderRadius: 4, borderWidth: 1, borderColor: '#4a5568', marginBottom: 6 }}>
+                        <Text style={{ fontSize: 9, color: '#fff', fontWeight: 'bold', flex: 1 }}>{layer.label}</Text>
+                        <TouchableOpacity 
+                          onPress={() => layer.setVal(!layer.val)}
+                          style={{ backgroundColor: layer.val ? '#38a169' : '#e53e3e', paddingHorizontal: 6, paddingVertical: 2, borderRadius: 3 }}
                         >
-                          {layer.val ? 'ON' : 'OFF'}
-                        </button>
-                      </div>
+                          <Text style={{ color: '#fff', fontSize: 8, fontWeight: 'bold' }}>{layer.val ? 'ON' : 'OFF'}</Text>
+                        </TouchableOpacity>
+                      </View>
                     ))}
-                  </div>
+                  </View>
                 </ScrollView>
               )}
 

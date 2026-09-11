@@ -16,14 +16,14 @@ import {
 import * as ImagePicker from 'expo-image-picker';
 import { Audio } from 'expo-av';
 import { manipulateAsync, SaveFormat } from 'expo-image-manipulator';
-import { Image } from 'expo-image'; // 👈 Option 3: Fast Disk/Memory Image Caching
+import { Image } from 'expo-image';
+import * as FileSystem from 'expo-file-system';
 import { supabase } from '../../Services/supabaseClient';
 
 const { width, height } = Dimensions.get('window');
 
 /**
  * OPTION 2: Optimized Audio Recording Preset for Voice Notes
- * Uses AAC-LC at 64kbps / 32kHz sample rate (reduces size to ~60-120 KB)
  */
 const OPTIMIZED_VOICE_RECORDING_PRESET = {
   isMeteringEnabled: true,
@@ -54,8 +54,6 @@ const OPTIMIZED_VOICE_RECORDING_PRESET = {
 
 /**
  * Resizes and compresses local image files to save bandwidth
- * @param {string} uri - Local file URI (file://...)
- * @returns {Promise<string>} - Compressed local URI
  */
 async function compressImage(uri) {
   try {
@@ -67,15 +65,13 @@ async function compressImage(uri) {
     return result.uri;
   } catch (error) {
     console.error('Image compression failed, using original:', error);
-    return uri; // Fallback to original image if compression fails
+    return uri;
   }
 }
 
 /**
- * Uploads a local Expo URI (photo/audio/doc) directly to Supabase Storage
- * @param {string} localUri - Local Expo URI (file://...)
- * @param {string} folder - Folder path inside bucket ('audio', 'photos', 'docs')
- * @returns {Promise<string|null>} - Public HTTPS Cloud URL
+ * Uploads any local URI (photo/audio/doc) directly to Supabase Storage 
+ * using an absolute file path structure compatible with React Native fetch & Supabase.
  */
 async function uploadMediaToSupabase(localUri, folder = 'uploads') {
   try {
@@ -83,32 +79,41 @@ async function uploadMediaToSupabase(localUri, folder = 'uploads') {
 
     let targetUri = localUri;
 
-    // Automatically compress images before converting to blob and uploading
     if (folder === 'photos' || folder === 'docs') {
       targetUri = await compressImage(localUri);
     }
 
-    // Convert local URI file to binary Blob
-    const response = await fetch(targetUri);
-    const blob = await response.blob();
-
-    // Extract file extension or set fallback
     const uriParts = targetUri.split('.');
     const fileExt = uriParts[uriParts.length - 1].split('?')[0] || (folder === 'audio' ? 'm4a' : 'jpg');
     const fileName = `${folder}/${Date.now()}_${Math.floor(Math.random() * 1000)}.${fileExt}`;
 
-    let contentType = 'image/jpeg';
+    let mimeType = 'image/jpeg';
     if (folder === 'audio') {
-      contentType = 'audio/m4a';
+      mimeType = 'audio/m4a';
     } else if (fileExt === 'png') {
-      contentType = 'image/png';
+      mimeType = 'image/png';
+    } else if (fileExt === 'pdf') {
+      mimeType = 'application/pdf';
     }
 
-    // Upload Blob to Supabase Storage bucket 'chat-attachments'
+    // Read the file as base64 string
+    const base64 = await FileSystem.readAsStringAsync(targetUri, {
+      encoding: FileSystem.EncodingType.Base64,
+    });
+
+    // Convert base64 to binary string array buffer equivalent via standard Uint8Array
+    const binaryString = atob(base64);
+    const len = binaryString.length;
+    const bytes = new Uint8Array(len);
+    for (let i = 0; i < len; i++) {
+      bytes[i] = binaryString.charCodeAt(i);
+    }
+
+    // Upload raw bytes buffer directly to Supabase storage bucket 'chat-images'
     const { data, error } = await supabase.storage
-      .from('chat-attachments')
-      .upload(fileName, blob, {
-        contentType,
+      .from('chat-images')
+      .upload(fileName, bytes.buffer, {
+        contentType: mimeType,
         upsert: false,
       });
 
@@ -118,9 +123,9 @@ async function uploadMediaToSupabase(localUri, folder = 'uploads') {
       return null;
     }
 
-    // Get permanent public HTTPS URL
+    // Retrieve public HTTPS URL
     const { data: publicUrlData } = supabase.storage
-      .from('chat-attachments')
+      .from('chat-images')
       .getPublicUrl(data.path);
 
     return publicUrlData.publicUrl;
@@ -186,7 +191,12 @@ function formatDateLabel(dateString) {
   return msgDate.toLocaleDateString([], { month: 'short', day: 'numeric', year: 'numeric' });
 }
 
-export default function ChatRoomScreen({ isDarkMode }) {
+export default function ChatRoomScreen({ 
+  isDarkMode, 
+  contactName = 'Nimusiima Asifa', 
+  contactHandle = '@asifa_n', 
+  contactAvatar = 'N' 
+}) {
   const [messages, setMessages] = useState([]);
   const [inputText, setInputText] = useState('');
   const [isTyping, setIsTyping] = useState(false);
@@ -278,7 +288,7 @@ export default function ChatRoomScreen({ isDarkMode }) {
   ];
 
   const forwardContacts = [
-    { id: '1', name: 'Nimusiima Asifa', handle: '@asifa_n' },
+    { id: '1', name: contactName, handle: contactHandle },
     { id: '2', name: 'Talk with Nature Official', handle: '@nature_ug' },
     { id: '3', name: 'Supabase Devs', handle: '@supabase_hq' },
     { id: '4', name: 'Kampala Tech Hub', handle: '@kampala_mesh' },
@@ -325,7 +335,7 @@ export default function ChatRoomScreen({ isDarkMode }) {
     }
   };
 
-  // 🎙️ EXPO-AV VOICE RECORDING & PLAYBACK HANDLERS (OPTION 2: AUDIO COMPRESSION APPLIED)
+  // 🎙️ EXPO-AV VOICE RECORDING & PLAYBACK HANDLERS
   const startVoiceRecording = async () => {
     if (isBlocked) return;
     try {
@@ -340,7 +350,6 @@ export default function ChatRoomScreen({ isDarkMode }) {
         playsInSilentModeIOS: true,
       });
 
-      // 👈 OPTION 2: Uses optimized 64kbps preset instead of raw uncompressed audio
       const { recording: newRecording } = await Audio.Recording.createAsync(
         OPTIMIZED_VOICE_RECORDING_PRESET
       );
@@ -369,7 +378,6 @@ export default function ChatRoomScreen({ isDarkMode }) {
       setRecording(null);
       setRecordingSeconds(0);
 
-      // Upload local recording to Supabase Storage bucket
       const cloudAudioUrl = await uploadMediaToSupabase(localUri, 'audio');
 
       if (!cloudAudioUrl) {
@@ -377,7 +385,6 @@ export default function ChatRoomScreen({ isDarkMode }) {
         return;
       }
 
-      // Insert Cloud HTTPS URL into Database
       const { data, error } = await supabase.from('messages').insert([{
         sender: 'You',
         text: `🎤 [Voice Note • ${durationFormatted}]`,
@@ -585,7 +592,7 @@ export default function ChatRoomScreen({ isDarkMode }) {
 
       const { data, error } = await supabase
         .from('messages')
-        .insert([{ sender: 'Nimusiima Asifa', text: randomReply }])
+        .insert([{ sender: contactName, text: randomReply }])
         .select();
 
       if (!error && data && data.length > 0) {
@@ -700,7 +707,6 @@ export default function ChatRoomScreen({ isDarkMode }) {
     }
     setIsScanningModalOpen(false);
 
-    // Upload first page scan to Supabase Storage with compression
     const cloudImageUrl = await uploadMediaToSupabase(scanPages[0], 'docs');
     const docName = `🔐 📄 Scanned_PDF_${Math.floor(Math.random() * 1000)} (${scanPages.length} Pages)`;
 
@@ -725,7 +731,6 @@ export default function ChatRoomScreen({ isDarkMode }) {
     if (!result.canceled && result.assets && result.assets[0]) {
       const localUri = result.assets[0].uri;
 
-      // Upload local photo to Supabase Storage with compression
       const cloudImageUrl = await uploadMediaToSupabase(localUri, 'photos');
 
       if (!cloudImageUrl) {
@@ -753,7 +758,6 @@ export default function ChatRoomScreen({ isDarkMode }) {
     if (!result.canceled && result.assets && result.assets[0]) {
       const localUri = result.assets[0].uri;
 
-      // Upload local photo to Supabase Storage with compression
       const cloudImageUrl = await uploadMediaToSupabase(localUri, 'photos');
 
       if (!cloudImageUrl) {
@@ -808,15 +812,15 @@ export default function ChatRoomScreen({ isDarkMode }) {
     const innerContent = (
       <View style={[styles.container, isDarkMode && styles.darkContainer]}>
 
-        {/* Clean Chat Header */}
+        {/* Clean Dynamic Chat Header */}
         <View style={[styles.header, isDarkMode && styles.darkHeader]}>
           <View style={styles.headerInfo}>
             <View style={[styles.avatar, { backgroundColor: currentTheme.primary }]}>
-              <Text style={styles.avatarText}>N</Text>
+              <Text style={styles.avatarText}>{contactAvatar}</Text>
               <View style={styles.onlineDot} />
             </View>
             <View style={{ flex: 1 }}>
-              <Text style={[styles.headerName, isDarkMode && styles.darkText]}>Nimusiima Asifa</Text>
+              <Text style={[styles.headerName, isDarkMode && styles.darkText]}>{contactName}</Text>
               <Text style={styles.headerStatus}>
                 {isBlocked ? 'Contact Blocked 🚫' : (isTyping ? 'typing...' : 'Online • End-to-End Encrypted 🔒')}
               </Text>
@@ -934,7 +938,6 @@ export default function ChatRoomScreen({ isDarkMode }) {
                       <View>
                         {mediaUri ? (
                           <TouchableOpacity onPress={() => setFullscreenImage(mediaUri)}>
-                            {/* 👈 OPTION 3: High-Performance Disk Caching with expo-image */}
                             <Image 
                               source={{ uri: mediaUri }} 
                               style={styles.chatImageThumbnail}
@@ -989,7 +992,7 @@ export default function ChatRoomScreen({ isDarkMode }) {
         {/* Typing Indicator Bar */}
         {isTyping && !isBlocked && (
           <View style={styles.typingIndicatorBox}>
-            <Text style={styles.typingText}>Nimusiima is typing...</Text>
+            <Text style={styles.typingText}>{contactName} is typing...</Text>
           </View>
         )}
 
@@ -1072,9 +1075,9 @@ export default function ChatRoomScreen({ isDarkMode }) {
           <View style={styles.callOverlay}>
             <View style={styles.callCard}>
               <View style={[styles.callAvatarLarge, { backgroundColor: currentTheme.primary }]}>
-                <Text style={{ fontSize: 40, color: '#fff', fontWeight: 'bold' }}>N</Text>
+                <Text style={{ fontSize: 40, color: '#fff', fontWeight: 'bold' }}>{contactAvatar}</Text>
               </View>
-              <Text style={styles.callContactName}>Nimusiima Asifa</Text>
+              <Text style={styles.callContactName}>{contactName}</Text>
               <Text style={styles.callStatusText}>Secure Voice Call • {formatCallTime(callDurationSeconds)}</Text>
 
               <View style={styles.callActionsRow}>
@@ -1103,33 +1106,29 @@ export default function ChatRoomScreen({ isDarkMode }) {
           </View>
         </Modal>
 
-        {/* ENHANCED VIDEO CALL MODAL (FILTERS + SCREEN SHARING + STREAM VIEWS) */}
+        {/* ENHANCED VIDEO CALL MODAL */}
         <Modal visible={videoCallModalVisible} transparent={true} animationType="fade">
           <View style={styles.videoCallOverlay}>
-            {/* Main Video Stream Container */}
             <View style={{ flex: 1, backgroundColor: '#1a202c', justifyContent: 'center', alignItems: 'center' }}>
               {isScreenSharing ? (
                 <View style={{ width: '100%', height: '100%', justifyContent: 'center', alignItems: 'center', backgroundColor: '#2d3748' }}>
                   <Text style={{ fontSize: 50, marginBottom: 10 }}>🖥️</Text>
                   <Text style={{ color: '#fff', fontSize: 16, fontWeight: 'bold' }}>Screen Sharing Active</Text>
-                  <Text style={{ color: '#a0aec0', fontSize: 12, marginTop: 4 }}>Broadcasting device screen to Nimusiima Asifa</Text>
+                  <Text style={{ color: '#a0aec0', fontSize: 12, marginTop: 4 }}>Broadcasting device screen to {contactName}</Text>
                 </View>
               ) : isVideoCameraOff ? (
                 <Text style={{ color: '#fff', fontSize: 18, fontWeight: 'bold' }}>Camera Off 📷</Text>
               ) : (
                 <View style={{ width: '100%', height: '100%', justifyContent: 'center', alignItems: 'center', backgroundColor: '#000' }}>
-                  {/* Remote Peer Video Container */}
                   <View style={{ width: '100%', height: '100%', justifyContent: 'center', alignItems: 'center' }}>
                     <View style={[styles.callAvatarLarge, { backgroundColor: currentTheme.primary, marginBottom: 12 }]}>
-                      <Text style={{ fontSize: 40, color: '#fff', fontWeight: 'bold' }}>N</Text>
+                      <Text style={{ fontSize: 40, color: '#fff', fontWeight: 'bold' }}>{contactAvatar}</Text>
                     </View>
-                    <Text style={{ color: '#fff', fontSize: 16, fontWeight: 'bold' }}>Nimusiima Asifa (Live)</Text>
+                    <Text style={{ color: '#fff', fontSize: 16, fontWeight: 'bold' }}>{contactName} (Live)</Text>
                   </View>
 
-                  {/* Filter Color Tint Overlay */}
                   <View style={[StyleSheet.absoluteFillObject, { backgroundColor: selectedFilterObj.color, pointerEvents: 'none' }]} />
 
-                  {/* Local Self-View Inset Box */}
                   <View style={{ position: 'absolute', bottom: 120, right: 20, width: 100, height: 140, backgroundColor: '#2d3748', borderRadius: 12, borderWidth: 2, borderColor: '#fff', justifyContent: 'center', alignItems: 'center', overflow: 'hidden' }}>
                     <Text style={{ fontSize: 24 }}>🧑‍💻</Text>
                     <Text style={{ color: '#fff', fontSize: 9, fontWeight: 'bold', marginTop: 4 }}>You (HD)</Text>
@@ -1138,15 +1137,13 @@ export default function ChatRoomScreen({ isDarkMode }) {
               )}
             </View>
 
-            {/* Top Video Call Bar */}
             <View style={styles.videoCallTopBar}>
-              <Text style={{ color: '#fff', fontWeight: 'bold', fontSize: 16 }}>Nimusiima Asifa</Text>
+              <Text style={{ color: '#fff', fontWeight: 'bold', fontSize: 16 }}>{contactName}</Text>
               <Text style={{ color: '#cbd5e0', fontSize: 11 }}>
                 Encrypted Video • {formatCallTime(callDurationSeconds)} • Filter: {activeVideoFilter}
               </Text>
             </View>
 
-            {/* Live Filters Tray Selector */}
             {showFilterPicker && (
               <View style={{ position: 'absolute', bottom: 110, left: 10, right: 10, backgroundColor: 'rgba(0,0,0,0.85)', borderRadius: 16, padding: 10, zIndex: 60 }}>
                 <Text style={{ color: '#fff', fontSize: 12, fontWeight: 'bold', marginBottom: 8, textAlign: 'center' }}>✨ Video Call Filters (8 Options)</Text>
@@ -1167,7 +1164,6 @@ export default function ChatRoomScreen({ isDarkMode }) {
               </View>
             )}
 
-            {/* Bottom Call Action Controls */}
             <View style={styles.videoCallBottomBar}>
               <TouchableOpacity 
                 style={[styles.videoCallControlBtn, isMutedCallMic && { backgroundColor: '#e53e3e' }]} 
@@ -1204,7 +1200,7 @@ export default function ChatRoomScreen({ isDarkMode }) {
           </View>
         </Modal>
 
-        {/* Expanded Chat Settings Modal (Contains 10 Super-Layers Matrix + Wallpaper) */}
+        {/* Expanded Chat Settings Modal */}
         <Modal visible={settingsModalVisible} transparent={true} animationType="slide">
           <Pressable style={styles.modalOverlay} onPress={() => setSettingsModalVisible(false)}>
             <View style={[styles.trayContainer, isDarkMode && styles.darkContainer, { maxHeight: '90%' }]}>
@@ -1212,7 +1208,6 @@ export default function ChatRoomScreen({ isDarkMode }) {
                 <View style={styles.trayIndicatorBar} />
                 <Text style={[styles.trayTitle, isDarkMode && styles.darkText]}>⚙️ Chat Room Settings & Matrix</Text>
 
-                {/* 10 SUPER-LAYERS MATRIX INTEGRATED INTO SETTINGS */}
                 <View style={{ backgroundColor: isDarkMode ? '#2d3748' : '#faf5ff', borderColor: '#9333ea', borderWidth: 1.5, borderRadius: 10, padding: 10, marginBottom: 15 }}>
                   <Text style={{ fontSize: 12, color: '#9333ea', fontWeight: 'bold', marginBottom: 8 }}>🛡️ 10 Super-Layers Security Matrix</Text>
                   <View style={{ gap: 6 }}>
@@ -1241,7 +1236,6 @@ export default function ChatRoomScreen({ isDarkMode }) {
                   </View>
                 </View>
                 
-                {/* Wallpaper & Accent Theme Switcher */}
                 <View style={{ marginBottom: 15, paddingVertical: 8, borderBottomWidth: 1, borderBottomColor: '#edf2f7' }}>
                   <Text style={[styles.trayText, isDarkMode && styles.darkText, { marginBottom: 8 }]}>🎨 Accent Theme & Wallpaper</Text>
                   <View style={{ flexDirection: 'row', justifyContent: 'space-around', marginBottom: 10 }}>
@@ -1318,7 +1312,6 @@ export default function ChatRoomScreen({ isDarkMode }) {
               <ScrollView horizontal contentContainerStyle={{ paddingVertical: 10 }} style={{ maxHeight: 130 }}>
                 {messages.filter(m => m.image_url || m.text?.includes('Scanned')).map((m, idx) => (
                   <View key={idx} style={{ marginRight: 10 }}>
-                    {/* 👈 OPTION 3: Fast Caching Image inside Media Vault */}
                     <Image 
                       source={{ uri: m.image_url || 'https://via.placeholder.com/80' }} 
                       style={{ width: 90, height: 110, borderRadius: 8 }} 
@@ -1335,7 +1328,7 @@ export default function ChatRoomScreen({ isDarkMode }) {
           </Pressable>
         </Modal>
 
-        {/* Message Options Modal (Delete for Me / Delete for Everyone / Forward / Copy) */}
+        {/* Message Options Modal */}
         <Modal visible={messageOptionsModalVisible} transparent={true} animationType="fade">
           <Pressable style={styles.modalOverlay} onPress={() => setMessageOptionsModalVisible(false)}>
             <View style={[styles.trayContainer, isDarkMode && styles.darkContainer]}>
@@ -1401,7 +1394,6 @@ export default function ChatRoomScreen({ isDarkMode }) {
               <ScrollView horizontal contentContainerStyle={{ paddingVertical: 10 }} style={{ maxHeight: 130 }}>
                 {scanPages.map((pageUri, idx) => (
                   <View key={idx} style={{ marginRight: 10, position: 'relative' }}>
-                    {/* 👈 OPTION 3: Fast Caching Image inside Document Scanner Studio */}
                     <Image 
                       source={{ uri: pageUri }} 
                       style={{ width: 80, height: 110, borderRadius: 6 }} 
@@ -1497,7 +1489,6 @@ export default function ChatRoomScreen({ isDarkMode }) {
               <Text style={styles.closeFullscreenText}>✕ Close</Text>
             </TouchableOpacity>
             {fullscreenImage && (
-              /* 👈 OPTION 3: High-Performance Disk Caching in Fullscreen Viewer */
               <Image 
                 source={{ uri: fullscreenImage }} 
                 style={styles.fullscreenImage} 
@@ -1605,7 +1596,6 @@ const styles = StyleSheet.create({
   closeFullscreenBtn: { position: 'absolute', top: 40, right: 20, zIndex: 10, backgroundColor: 'rgba(255,255,255,0.2)', paddingHorizontal: 12, paddingVertical: 6, borderRadius: 20 },
   closeFullscreenText: { color: '#fff', fontWeight: 'bold', fontSize: 14 },
   fullscreenImage: { width: '100%', height: '80%' },
-  // Call Modals Styles
   callOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.85)', justifyContent: 'center', alignItems: 'center', padding: 20 },
   callCard: { width: '100%', maxWidth: 340, backgroundColor: '#1a202c', borderRadius: 24, padding: 30, alignItems: 'center', borderWidth: 1, borderColor: '#4a5568' },
   callAvatarLarge: { width: 90, height: 90, borderRadius: 45, justifyContent: 'center', alignItems: 'center', marginBottom: 16 },

@@ -11,8 +11,13 @@ import {
   Platform,
   Switch,
 } from 'react-native';
+import { BannerAd, BannerAdSize, TestIds, RewardedAd, RewardedAdEventType } from 'react-native-google-mobile-ads';
 
-export default function GlobalAISupervisorScreen({ isDarkMode }) {
+// Dynamic Google AdMob Unit IDs (Automatic Test IDs during development)
+const bannerAdUnitId = __DEV__ ? TestIds.BANNER : 'ca-app-pub-xxxxxxxxoxxxxxxx/xxxxxxxxxx';
+const rewardedAdUnitId = __DEV__ ? TestIds.REWARDED : 'ca-app-pub-xxxxxxxxoxxxxxxx/xxxxxxxxxx';
+
+export default function GlobalAISupervisorScreen({ coins, setCoins, isDarkMode }) {
   // Master Supervisor Switch & Sensitivity Controls
   const [supervisorMasterActive, setSupervisorMasterActive] = useState(true);
   const [auditSensitivity, setAuditSensitivity] = useState('Strict Zero-Tolerance 🛡️');
@@ -34,6 +39,10 @@ export default function GlobalAISupervisorScreen({ isDarkMode }) {
     { id: 't_5', time: '10:15 AM', text: 'Predictive Scaling: Allocated +2 HLS edge nodes anticipating evening match traffic.' },
     { id: 't_6', time: '11:00 AM', text: 'AI Shadow-Banned 1 persistent bot scraper silently.' }
   ]);
+
+  // Monetization & Rewarded Ad States
+  const [rewardedAdLoaded, setRewardedAdLoaded] = useState(false);
+  const [rewardedAdInstance, setRewardedAdInstance] = useState(null);
 
   // NEW SUPER-LAYER 1: QUANTUM POST-DECRYPTION RESILIENCE SHIELD
   const [quantumShieldActive, setQuantumShieldActive] = useState(true);
@@ -163,6 +172,54 @@ export default function GlobalAISupervisorScreen({ isDarkMode }) {
     { module: 'Supabase Database & Row-Level Security', status: 'Protected 🛡️', load: '18ms API', security: 'Strict RLS' }
   ]);
 
+  // Initialize AdMob Rewarded Ad
+  useEffect(() => {
+    initRewardedAd();
+  }, []);
+
+  const initRewardedAd = () => {
+    try {
+      const rewardedAd = RewardedAd.createForAdRequest(rewardedAdUnitId, {
+        requestNonPersonalizedAdsOnly: true,
+      });
+
+      const unsubscribeLoaded = rewardedAd.addAdEventListener(RewardedAdEventType.LOADED, () => {
+        setRewardedAdLoaded(true);
+      });
+
+      const unsubscribeEarned = rewardedAd.addAdEventListener(RewardedAdEventType.EARNED_REWARD, () => {
+        if (setCoins) {
+          setCoins(prev => prev + 100);
+        }
+        Alert.alert('💰 Ad Reward Credited!', 'Successfully earned +100 Coins system supervisor bonus!');
+      });
+
+      rewardedAd.load();
+      setRewardedAdInstance(rewardedAd);
+
+      return () => {
+        unsubscribeLoaded();
+        unsubscribeEarned();
+      };
+    } catch (e) {
+      console.log('Rewarded Ad initialization notice:', e);
+    }
+  };
+
+  const handleShowRewardedAd = () => {
+    if (rewardedAdLoaded && rewardedAdInstance) {
+      rewardedAdInstance.show();
+      setRewardedAdLoaded(false);
+      rewardedAdInstance.load();
+    } else {
+      // Fallback simulation for web/preview
+      if (setCoins) {
+        setCoins(prev => prev + 100);
+      }
+      Alert.alert('💰 Ad Reward Credited (Simulated)', 'Watch ad completed! +100 coins added to your ChatUp wallet balance.');
+    }
+  };
+
   // Simulated Real-Time Autonomous Daemon Heartbeat
   useEffect(() => {
     if (!supervisorMasterActive) return;
@@ -233,6 +290,37 @@ export default function GlobalAISupervisorScreen({ isDarkMode }) {
   return (
     <ScrollView style={[styles.container, isDarkMode && styles.darkContainer]} contentContainerStyle={{ padding: 12, paddingBottom: 120 }}>
       
+      {/* ================= GOOGLE ADMOB DYNAMIC BANNER ================= */}
+      <View style={styles.monetizationAdCard}>
+        <Text style={styles.adTagLabel}>Sponsored Security Banner 📢 • AdMob Banner</Text>
+        <View style={{ alignItems: 'center', marginVertical: 4 }}>
+          <BannerAd
+            unitId={bannerAdUnitId}
+            size={BannerAdSize.ANCHORED_ADAPTIVE_BANNER}
+            requestOptions={{
+              requestNonPersonalizedAdsOnly: true,
+            }}
+            onAdLoaded={() => console.log('AdMob Supervisor Banner loaded successfully')}
+            onAdFailedToLoad={(error) => console.log('AdMob Supervisor Banner load error: ', error)}
+          />
+        </View>
+      </View>
+
+      {/* ================= REWARDED AD SYSTEM REWARD WIDGET ================= */}
+      <View style={styles.creatorMonetizationCard}>
+        <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
+          <View style={{ flex: 1, marginRight: 10 }}>
+            <Text style={{ fontSize: 12, fontWeight: 'bold', color: '#2b6cb0' }}>🪙 Supervisor Security Bonus</Text>
+            <Text style={{ fontSize: 14, fontWeight: 'bold', color: '#2d3748', marginTop: 2 }}>
+              Watch a sponsor clip to earn +100 coins!
+            </Text>
+          </View>
+          <TouchableOpacity style={styles.watchRewardAdBtn} onPress={handleShowRewardedAd}>
+            <Text style={{ color: '#fff', fontSize: 11, fontWeight: 'bold' }}>Watch Ad (+100 🪙) 🎁</Text>
+          </TouchableOpacity>
+        </View>
+      </View>
+
       {/* SUPER ADMIN HEADER & MASTER SWITCH */}
       <View style={[styles.headerCard, isDarkMode && styles.darkCard, { borderColor: supervisorMasterActive ? '#38a169' : '#e53e3e', borderWidth: 2 }]}>
         <View style={{ flex: 1, marginRight: 8 }}>
@@ -668,4 +756,10 @@ const styles = StyleSheet.create({
   chatInput: { borderWidth: 1, borderColor: '#cbd5e0', borderRadius: 8, paddingHorizontal: 10, height: 38, backgroundColor: '#f7fafc', color: '#2d3748', fontSize: 12 },
   darkInput: { backgroundColor: '#1a202c', borderColor: '#4a5568', color: '#fff' },
   chatSendBtn: { backgroundColor: '#3182ce', justifyContent: 'center', alignItems: 'center', paddingHorizontal: 14, borderRadius: 8, marginLeft: 6 },
+
+  // Monetization Ad Styles
+  monetizationAdCard: { backgroundColor: '#fff', borderWidth: 1, borderColor: '#e2e8f0', borderRadius: 8, padding: 8, marginBottom: 12, alignItems: 'center' },
+  adTagLabel: { fontSize: 9, color: '#a0aec0', textTransform: 'uppercase', fontWeight: 'bold', marginBottom: 2 },
+  creatorMonetizationCard: { backgroundColor: '#ebf8ff', borderWidth: 1, borderColor: '#bee3f8', borderRadius: 8, padding: 12, marginBottom: 12 },
+  watchRewardAdBtn: { backgroundColor: '#3182ce', paddingHorizontal: 12, paddingVertical: 6, borderRadius: 6 },
 });

@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { View, TextInput, TouchableOpacity, Text, StyleSheet, ScrollView } from 'react-native';
 import { supabase } from '../supabase'; // Adjust this path if your supabase.js file is in a different folder
 
@@ -8,12 +8,13 @@ export default function ChatScreen() {
   const [isTyping, setIsTyping] = useState(false);
   const [chatMood, setChatMood] = useState('neutral');
   const [isOnline, setIsOnline] = useState(true);
+  const [messages, setMessages] = useState([]);
+  const [currentUserEmail, setCurrentUserEmail] = useState('');
 
   // Feature Toggles for Drawers & Panels
   const [isRecordingVoice, setIsRecordingVoice] = useState(false);
   const [showEmojiPicker, setShowEmojiPicker] = useState(false);
   const [showStickers, setShowStickers] = useState(false);
-  const [selectedReaction, setSelectedReaction] = useState(null);
 
   // ================= 20+ ADVANCED CHAT & FINTECH LAYERS =================
   const [quantumMessageEncryption, setQuantumMessageEncryption] = useState(true);
@@ -37,6 +38,53 @@ export default function ChatScreen() {
   const [multiCurrencyWalletSync, setMultiCurrencyWalletSync] = useState(true);
   const [globalEmergencySosChatRelay, setGlobalEmergencySosChatRelay] = useState(true);
   const [showEnterpriseLayers, setShowEnterpriseLayers] = useState(false);
+
+  const scrollViewRef = useRef();
+
+  // Fetch messages and subscribe to live database changes
+  useEffect(() => {
+    initUserAndMessages();
+
+    // Setup Supabase Realtime channel for instant message sync
+    const channel = supabase
+      .channel('public:messages')
+      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'messages' }, payload => {
+        setMessages(prev => {
+          if (prev.some(msg => msg.id === payload.new.id)) return prev;
+          const updated = [...prev, payload.new];
+          setTimeout(() => scrollViewRef.current?.scrollToEnd({ animated: true }), 100);
+          return updated;
+        });
+      })
+      .on('postgres_changes', { event: 'DELETE', schema: 'public', table: 'messages' }, payload => {
+        setMessages(prev => prev.filter(msg => msg.id !== payload.old.id));
+      })
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, []);
+
+  const initUserAndMessages = async () => {
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) return;
+
+    setCurrentUserEmail(user.email || 'User');
+
+    const { data, error } = await supabase
+      .from('messages')
+      .select('*')
+      .eq('user_id', user.id) // Ensures private, independent account isolation
+      .order('created_at', { ascending: true });
+    
+    if (error) {
+      console.log('Error fetching messages: ', error.message);
+    } else {
+      setMessages(data || []);
+      setTimeout(() => scrollViewRef.current?.scrollToEnd({ animated: false }), 200);
+    }
+  };
 
   // 1. Mobile Money & Bill Splitting Command Handler (/send and /split)
   const handleChatCommand = (text) => {
@@ -86,20 +134,34 @@ export default function ChatScreen() {
     }
     
     try {
-      const { error } = await supabase
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) {
+        alert('Authentication Error: Please log in again.');
+        return;
+      }
+
+      const { data, error } = await supabase
         .from('messages')
         .insert([
           { 
             content: inputText, 
-            mood: chatMood 
+            mood: chatMood,
+            user_id: user.id // Ties this message specifically to this independent account
           }
-        ]);
+        ])
+        .select();
 
       if (error) {
         alert(`Database Error: ${error.message}`);
-      } else {
+      } else if (data && data.length > 0) {
         setInputText('');
         setIsTyping(false);
+        setMessages(prev => {
+          if (prev.some(msg => msg.id === data[0].id)) return prev;
+          const updated = [...prev, data[0]];
+          setTimeout(() => scrollViewRef.current?.scrollToEnd({ animated: true }), 100);
+          return updated;
+        });
       }
     } catch (err) {
       alert(`Database Error: Could not send message to Supabase database.`);
@@ -151,15 +213,15 @@ export default function ChatScreen() {
               { label: '💱 Multi-Currency Sync', val: multiCurrencyWalletSync, setVal: setMultiCurrencyWalletSync },
               { label: '🚨 Global Emergency SOS', val: globalEmergencySosChatRelay, setVal: setGlobalEmergencySosChatRelay },
             ].map((layer, idx) => (
-              <div key={idx} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', background: '#0f172a', padding: '3px 6px', borderRadius: '4px', width: '48%', border: '1px solid #334155' }}>
-                <span style={{ fontSize: '9px', color: '#fff', fontWeight: 'bold' }}>{layer.label}</span>
-                <button 
-                  onClick={() => layer.setVal(!layer.val)}
-                  style={{ background: layer.val ? '#38a169' : '#e53e3e', color: '#fff', border: 'none', padding: '2px 4px', borderRadius: '3px', fontSize: '8px', fontWeight: 'bold', cursor: 'pointer' }}
+              <View key={idx} style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', backgroundColor: '#0f172a', padding: 6, borderRadius: 4, width: '48%', borderWidth: 1, borderColor: '#334155', marginBottom: 4 }}>
+                <Text style={{ fontSize: 9, color: '#fff', fontWeight: 'bold', flex: 1 }}>{layer.label}</Text>
+                <TouchableOpacity 
+                  onPress={() => layer.setVal(!layer.val)}
+                  style={{ backgroundColor: layer.val ? '#38a169' : '#e53e3e', paddingVertical: 2, paddingHorizontal: 6, borderRadius: 3 }}
                 >
-                  {layer.val ? 'ON' : 'OFF'}
-                </button>
-              </div>
+                  <Text style={{ color: '#fff', fontSize: 8, fontWeight: 'bold' }}>{layer.val ? 'ON' : 'OFF'}</Text>
+                </TouchableOpacity>
+              </View>
             ))}
           </ScrollView>
         </View>
@@ -169,7 +231,7 @@ export default function ChatScreen() {
       <View style={styles.statusHeader}>
         <View style={styles.statusRow}>
           <View style={[styles.onlineDot, { backgroundColor: isOnline ? '#2ecc71' : '#95a5a6' }]} />
-          <Text style={styles.statusText}>{isOnline ? 'Active Now' : 'Offline'}</Text>
+          <Text style={styles.statusText}>{currentUserEmail ? `Logged in as: ${currentUserEmail}` : (isOnline ? 'Active Now' : 'Offline')}</Text>
         </View>
         <Text style={styles.moodIndicator}>Mood: {chatMood.toUpperCase()}</Text>
       </View>
@@ -180,18 +242,19 @@ export default function ChatScreen() {
       </View>
 
       {/* Message Area */}
-      <ScrollView style={styles.chatMessageArea}>
-        <View style={styles.messageBubbleContainer}>
-          <Text style={styles.messageBubbleText}>Jambo! Test commands like /send 50000 to John or /split 30000 among 3. 🇺🇬</Text>
-          <View style={styles.reactionRow}>
-            <TouchableOpacity onPress={() => setSelectedReaction('❤️')} style={styles.reactionBadge}>
-              <Text>❤️ {selectedReaction === '❤️' ? '1' : ''}</Text>
-            </TouchableOpacity>
-            <TouchableOpacity onPress={() => setSelectedReaction('🔥')} style={styles.reactionBadge}>
-              <Text>🔥 {selectedReaction === '🔥' ? '1' : ''}</Text>
-            </TouchableOpacity>
+      <ScrollView ref={scrollViewRef} style={styles.chatMessageArea} contentContainerStyle={{ paddingBottom: 20 }}>
+        {messages.length === 0 ? (
+          <View style={styles.messageBubbleContainer}>
+            <Text style={styles.messageBubbleText}>Jambo! Your private account is ready. Send a message or test /send 50000. 🇺🇬</Text>
           </View>
-        </View>
+        ) : (
+          messages.map((msg, index) => (
+            <View key={msg.id || index} style={[styles.messageBubbleContainer, { marginBottom: 10 }]}>
+              <Text style={styles.messageBubbleText}>{msg.content}</Text>
+              <Text style={{ fontSize: 9, color: '#888', marginTop: 4 }}>Mood: {msg.mood}</Text>
+            </View>
+          ))
+        )}
       </ScrollView>
 
       {/* POPUP PANELS */}
@@ -284,8 +347,6 @@ const styles = StyleSheet.create({
   chatMessageArea: { flex: 1, marginVertical: 10 },
   messageBubbleContainer: { backgroundColor: '#f1f2f6', padding: 12, borderRadius: 12, alignSelf: 'flex-start', maxWidth: '80%' },
   messageBubbleText: { fontSize: 14, color: '#333' },
-  reactionRow: { flexDirection: 'row', marginTop: 8 },
-  reactionBadge: { backgroundColor: '#dfe4ea', paddingHorizontal: 8, paddingVertical: 4, borderRadius: 12, marginRight: 6 },
   popupPanel: { backgroundColor: '#f8f9fa', borderWidth: 1, borderColor: '#e9ecef', borderRadius: 10, padding: 12, marginBottom: 10 },
   panelTitle: { fontSize: 12, fontWeight: 'bold', color: '#555', marginBottom: 8 },
   recordingText: { color: '#c0392b', fontWeight: 'bold', fontSize: 12, marginBottom: 8 },

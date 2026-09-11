@@ -25,32 +25,33 @@ export default function AdminControlPanelScreen({ isDarkMode, superAdminAccessEn
   const [broadcastText, setBroadcastText] = useState('');
   const [searchQuery, setSearchQuery] = useState('');
   const [searchedUserResult, setSearchedUserResult] = useState(null);
+  const [isSaving, setIsSaving] = useState(false);
 
-  // ================= 20+ MASTER ARCHITECTURAL GLOBAL SWITCHES STATE =================
-  const [meshTransmission, setMeshTransmission] = useState(true);
-  const [aiVoiceTranslation, setAiVoiceTranslation] = useState(true);
-  const [godModeVisibility, setGodModeVisibility] = useState(true);
-  const [adNetworkGlobal, setAdNetworkGlobal] = useState(true);
-  const [emergencySosGlobal, setEmergencySosGlobal] = useState(true);
-  const [drmWatermarkGlobal, setDrmWatermarkGlobal] = useState(true);
-  const [newRegistrations, setNewRegistrations] = useState(true);
-  const [payoutGatewayActive, setPayoutGatewayActive] = useState(true);
-  const [liveStreamingGlobal, setLiveStreamingGlobal] = useState(true);
-  const [chatMediaUploads, setChatMediaUploads] = useState(true);
-  const [maintenanceMode, setMaintenanceMode] = useState(false);
-  const [strictSpamFirewall, setStrictSpamFirewall] = useState(true);
-  
-  // New Layers Added to Reach 20+ Global Architectural Control Switches
-  const [quantumEncryptionLayer, setQuantumEncryptionLayer] = useState(true);
-  const [kampalaEdgeRelaySync, setKampalaEdgeRelaySync] = useState(true);
-  const [biometricWatermarkCore, setBiometricWatermarkCore] = useState(true);
-  const [federatedOnDeviceAiEngine, setFederatedOnDeviceAiEngine] = useState(true);
-  const [bluetoothP2pMeshRelay, setBluetoothP2pMeshRelay] = useState(true);
-  const [autonomousMessageEscrow, setAutonomousMessageEscrow] = useState(true);
-  const [zeroFeeGasSubsidizer, setZeroFeeGasSubsidizer] = useState(true);
-  const [aiAutonomousToxicityGuard, setAiAutonomousToxicityGuard] = useState(true);
-  const [realtimeSentimentMesh, setRealtimeSentimentMesh] = useState(true);
-  const [multimodalHlsAdaptive, setMultimodalHlsAdaptive] = useState(true);
+  // ================= 22 MASTER ARCHITECTURAL GLOBAL SWITCHES STATE =================
+  const [switchesState, setSwitchesState] = useState({
+    meshTransmission: true,
+    aiVoiceTranslation: true,
+    godModeVisibility: true,
+    adNetworkGlobal: true,
+    emergencySosGlobal: true,
+    drmWatermarkGlobal: true,
+    newRegistrations: true,
+    payoutGatewayActive: true,
+    liveStreamingGlobal: true,
+    chatMediaUploads: true,
+    maintenanceMode: false,
+    strictSpamFirewall: true,
+    quantumEncryptionLayer: true,
+    kampalaEdgeRelaySync: true,
+    biometricWatermarkCore: true,
+    federatedOnDeviceAiEngine: true,
+    bluetoothP2pMeshRelay: true,
+    autonomousMessageEscrow: true,
+    zeroFeeGasSubsidizer: true,
+    aiAutonomousToxicityGuard: true,
+    realtimeSentimentMesh: true,
+    multimodalHlsAdaptive: true,
+  });
 
   // Threat Logs State
   const [threatLogs] = useState([
@@ -60,6 +61,7 @@ export default function AdminControlPanelScreen({ isDarkMode, superAdminAccessEn
 
   useEffect(() => {
     fetchLiveAdminData();
+    fetchAdminSwitches();
 
     const presenceChannel = supabase.channel('chatup_global_presence', {
       config: { presence: { key: '@super_admin_borris' } },
@@ -83,6 +85,45 @@ export default function AdminControlPanelScreen({ isDarkMode, superAdminAccessEn
       supabase.removeChannel(presenceChannel);
     };
   }, []);
+
+  const fetchAdminSwitches = async () => {
+    try {
+      const { data, error } = await supabase
+        .from('admin_system_switches')
+        .select('*')
+        .eq('id', 1)
+        .single();
+
+      if (data && !error) {
+        setSwitchesState({
+          meshTransmission: data.mesh_transmission ?? true,
+          aiVoiceTranslation: data.ai_voice_translation ?? true,
+          godModeVisibility: data.god_mode_visibility ?? true,
+          adNetworkGlobal: data.ad_network_global ?? true,
+          emergencySosGlobal: data.emergency_sos_global ?? true,
+          drmWatermarkGlobal: data.drm_watermark_global ?? true,
+          newRegistrations: data.new_registrations ?? true,
+          payoutGatewayActive: data.payout_gateway_active ?? true,
+          liveStreamingGlobal: data.live_streaming_global ?? true,
+          chatMediaUploads: data.chat_media_uploads ?? true,
+          maintenanceMode: data.maintenance_mode ?? false,
+          strictSpamFirewall: data.strict_spam_firewall ?? true,
+          quantumEncryptionLayer: data.quantum_encryption_layer ?? true,
+          kampalaEdgeRelaySync: data.kampala_edge_relay_sync ?? true,
+          biometricWatermarkCore: data.biometric_watermark_core ?? true,
+          federatedOnDeviceAiEngine: data.federated_on_device_ai_engine ?? true,
+          bluetoothP2pMeshRelay: data.bluetooth_p2p_mesh_relay ?? true,
+          autonomousMessageEscrow: data.autonomous_message_escrow ?? true,
+          zeroFeeGasSubsidizer: data.zero_fee_gas_subsidizer ?? true,
+          aiAutonomousToxicityGuard: data.ai_autonomous_toxicity_guard ?? true,
+          realtimeSentimentMesh: data.realtime_sentiment_mesh ?? true,
+          multimodalHlsAdaptive: data.multimodal_hls_adaptive ?? true,
+        });
+      }
+    } catch (err) {
+      console.log('Using local switch defaults.');
+    }
+  };
 
   const fetchLiveAdminData = async () => {
     try {
@@ -109,6 +150,16 @@ export default function AdminControlPanelScreen({ isDarkMode, superAdminAccessEn
         ]);
       }
 
+      const { data: appealData } = await supabase.from('content_appeals').select('*').eq('status', 'Pending').limit(20);
+      if (appealData && appealData.length > 0) {
+        setAppeals(appealData);
+      } else {
+        setAppeals([
+          { id: '1', creator: '@wildlife_ug', reason: 'Video flagged for copyright review', status: 'Pending Review' },
+          { id: '2', creator: '@kampala_node_04', reason: 'Automated spam filter block override', status: 'Flagged' },
+        ]);
+      }
+
       const { data: auditData } = await supabase.from('staff_audit_logs').select('*').order('timestamp', { ascending: false }).limit(20);
       if (auditData && auditData.length > 0) {
         setAuditLogs(auditData.map(log => ({
@@ -124,11 +175,6 @@ export default function AdminControlPanelScreen({ isDarkMode, superAdminAccessEn
           { id: 'l2', staff: 'Staff_ID_05 (Finance)', action: 'Processed MoMo batch payout queue', time: '12:05 PM', ip: '192.168.1.88' },
         ]);
       }
-
-      setAppeals([
-        { id: '1', creator: '@wildlife_ug', reason: 'Video flagged for copyright review', status: 'Pending Review' },
-        { id: '2', creator: '@kampala_node_04', reason: 'Automated spam filter block override', status: 'Flagged' },
-      ]);
     } catch (error) {
       console.log('Error syncing admin data:', error);
     }
@@ -142,121 +188,55 @@ export default function AdminControlPanelScreen({ isDarkMode, superAdminAccessEn
     } catch (err) {}
   };
 
-  const handleToggleSwitch = async (type, val) => {
-    switch (type) {
-      case 'master_admin':
-        setSuperAdminAccessEnabled(val);
-        await logAdminActionToSupabase(`Toggled Master Super-Admin Panel Access to ${val ? 'ON' : 'OFF'}`);
-        Alert.alert('Master Super-Admin Kill-Switch 👑', `Admin Console & Treasury visibility is now ${val ? 'UNLOCKED 🟢' : 'LOCKED & HIDDEN 🔴'}.`);
-        break;
-      case 'mesh':
-        setMeshTransmission(val);
-        await logAdminActionToSupabase(`Toggled Master Mesh Transmission to ${val ? 'ENABLED' : 'DISABLED'}`);
-        Alert.alert('Master Transmission Switch 🛰️', `Local mesh data transmissions are now ${val ? 'ENABLED 🟢' : 'DISABLED 🔴'}.`);
-        break;
-      case 'ai':
-        setAiVoiceTranslation(val);
-        await logAdminActionToSupabase(`Toggled AI Voice Translation to ${val ? 'ACTIVE' : 'RESTRICTED'}`);
-        Alert.alert('AI Feature Control 🤖', `AI voice cloning and translation are now ${val ? 'ACTIVE 🟢' : 'RESTRICTED 🔴'}.`);
-        break;
-      case 'godmode':
-        setGodModeVisibility(val);
-        await logAdminActionToSupabase(`Toggled God-Mode E2EE Bypass to ${val ? 'ACTIVE' : 'LOCKED'}`);
-        Alert.alert('God-Mode E2EE Bypass 🔓', `Administrative inspection keys are now ${val ? 'ACTIVE ⚠️' : 'LOCKED 🔒'}.`);
-        break;
-      case 'ads':
-        setAdNetworkGlobal(val);
-        await logAdminActionToSupabase(`Toggled In-App Ad Network to ${val ? 'RUNNING' : 'MUTED'}`);
-        Alert.alert('In-App Advertising Suite 📢', `Master ad network ingestion is now ${val ? 'RUNNING 🟢' : 'MUTED 🔴'}.`);
-        break;
-      case 'sos':
-        setEmergencySosGlobal(val);
-        await logAdminActionToSupabase(`Toggled Med-SOS Relay to ${val ? 'ARMED' : 'STANDBY'}`);
-        Alert.alert('Med-SOS & Neighborhood Watch 🚨', `Emergency alert broadcast relays are now ${val ? 'ARMED 🟢' : 'STANDBY ⚪'}.`);
-        break;
-      case 'drm':
-        setDrmWatermarkGlobal(val);
-        await logAdminActionToSupabase(`Toggled DRM Watermarking to ${val ? 'ENFORCED' : 'DISABLED'}`);
-        Alert.alert('Anti-Piracy Watermarking 🛡️', `Dynamic cryptographic watermarking is now ${val ? 'ENFORCED 🟢' : 'DISABLED 🔴'}.`);
-        break;
-      case 'registrations':
-        setNewRegistrations(val);
-        await logAdminActionToSupabase(`Toggled New User Registrations to ${val ? 'OPEN' : 'CLOSED'}`);
-        Alert.alert('User Registration Portal 👤', `New account creations are now ${val ? 'OPEN 🟢' : 'CLOSED 🔴'}.`);
-        break;
-      case 'payouts':
-        setPayoutGatewayActive(val);
-        await logAdminActionToSupabase(`Toggled Flutterwave Payout Gateway to ${val ? 'ACTIVE' : 'PAUSED'}`);
-        Alert.alert('Flutterwave Gateway 🪙', `Automated treasury withdrawals are now ${val ? 'ACTIVE 🟢' : 'PAUSED 🔴'}.`);
-        break;
-      case 'livestream':
-        setLiveStreamingGlobal(val);
-        await logAdminActionToSupabase(`Toggled Live Streaming Suite to ${val ? 'LIVE' : 'SUSPENDED'}`);
-        Alert.alert('Live Broadcast Suite 📹', `Live video rooms and church broadcasts are now ${val ? 'ACTIVE 🟢' : 'SUSPENDED 🔴'}.`);
-        break;
-      case 'media':
-        setChatMediaUploads(val);
-        await logAdminActionToSupabase(`Toggled Chat Media Uploads to ${val ? 'ALLOWED' : 'LOCKED'}`);
-        Alert.alert('Chat Media Vault 🖼️', `Image, document, and voice uploads are now ${val ? 'ALLOWED 🟢' : 'LOCKED 🔴'}.`);
-        break;
-      case 'maintenance':
-        setMaintenanceMode(val);
-        await logAdminActionToSupabase(`Toggled System Maintenance Mode to ${val ? 'ACTIVE' : 'OFF'}`);
-        Alert.alert('Maintenance Mode ⚠️', `System lockdown state is now ${val ? 'ACTIVE 🔴' : 'NORMAL 🟢'}.`);
-        break;
-      case 'quantum':
-        setQuantumEncryptionLayer(val);
-        await logAdminActionToSupabase(`Toggled Quantum Encryption Layer to ${val ? 'ACTIVE' : 'BYPASSED'}`);
-        Alert.alert('Quantum Lattice Security 🔐', `Post-quantum cryptographic envelopes are now ${val ? 'ACTIVE 🟢' : 'BYPASSED 🔴'}.`);
-        break;
-      case 'kampala_edge':
-        setKampalaEdgeRelaySync(val);
-        await logAdminActionToSupabase(`Toggled Kampala Edge Relay to ${val ? 'SYNCED' : 'OFF'}`);
-        Alert.alert('Kampala Edge Relay 🇺🇬', `Local regional data caching nodes are now ${val ? 'SYNCED 🟢' : 'OFF 🔴'}.`);
-        break;
-      case 'biometric_wm':
-        setBiometricWatermarkCore(val);
-        await logAdminActionToSupabase(`Toggled Biometric Watermark Core to ${val ? 'ENFORCED' : 'OFF'}`);
-        Alert.alert('Biometric Sender Watermark ✍️', `Forensic user tagging is now ${val ? 'ENFORCED 🟢' : 'OFF 🔴'}.`);
-        break;
-      case 'federated_ai':
-        setFederatedOnDeviceAiEngine(val);
-        await logAdminActionToSupabase(`Toggled Federated On-Device AI Engine to ${val ? 'ACTIVE' : 'PAUSED'}`);
-        Alert.alert('Federated On-Device AI 🧠', `Decentralized neural processing is now ${val ? 'ACTIVE 🟢' : 'PAUSED 🔴'}.`);
-        break;
-      case 'bluetooth_mesh':
-        setBluetoothP2pMeshRelay(val);
-        await logAdminActionToSupabase(`Toggled Bluetooth P2P Mesh Relay to ${val ? 'ENABLED' : 'DISABLED'}`);
-        Alert.alert('Bluetooth P2P Mesh 🛰️', `Offline direct device relay is now ${val ? 'ENABLED 🟢' : 'DISABLED 🔴'}.`);
-        break;
-      case 'escrow':
-        setAutonomousMessageEscrow(val);
-        await logAdminActionToSupabase(`Toggled Autonomous Message Escrow to ${val ? 'SECURED' : 'UNSECURED'}`);
-        Alert.alert('Autonomous Message Escrow 🪙', `Smart contract delivery escrow is now ${val ? 'SECURED 🟢' : 'UNSECURED 🔴'}.`);
-        break;
-      case 'gas_subsidizer':
-        setZeroFeeGasSubsidizer(val);
-        await logAdminActionToSupabase(`Toggled Zero-Fee Gas Subsidizer to ${val ? 'ACTIVE' : 'PAUSED'}`);
-        Alert.alert('Zero-Fee Gas Subsidizer 🪙', `Platform-sponsored transaction gas is now ${val ? 'ACTIVE 🟢' : 'PAUSED 🔴'}.`);
-        break;
-      case 'toxicity_guard':
-        setAiAutonomousToxicityGuard(val);
-        await logAdminActionToSupabase(`Toggled AI Toxicity Guard to ${val ? 'ACTIVE' : 'DISABLED'}`);
-        Alert.alert('AI Toxicity Guard 🛡️', `Automated content filtering is now ${val ? 'ACTIVE 🟢' : 'DISABLED 🔴'}.`);
-        break;
-      case 'sentiment':
-        setRealtimeSentimentMesh(val);
-        await logAdminActionToSupabase(`Toggled Real-Time Sentiment Mesh to ${val ? 'TRACKING' : 'OFF'}`);
-        Alert.alert('Real-Time Sentiment Mesh 🌿', `Community mood telemetry is now ${val ? 'TRACKING 🟢' : 'OFF 🔴'}.`);
-        break;
-      case 'hls_adaptive':
-        setMultimodalHlsAdaptive(val);
-        await logAdminActionToSupabase(`Toggled Multimodal HLS Adaptive to ${val ? 'OPTIMIZED' : 'STANDARD'}`);
-        Alert.alert('Multimodal HLS Adaptive 🎥', `Adaptive bitrate streaming is now ${val ? 'OPTIMIZED 🟢' : 'STANDARD 🔴'}.`);
-        break;
-      default:
-        break;
+  const syncSwitchesToSupabase = async (updatedSwitches) => {
+    setIsSaving(true);
+    try {
+      await supabase.from('admin_system_switches').upsert({
+        id: 1,
+        mesh_transmission: updatedSwitches.meshTransmission,
+        ai_voice_translation: updatedSwitches.aiVoiceTranslation,
+        god_mode_visibility: updatedSwitches.godModeVisibility,
+        ad_network_global: updatedSwitches.adNetworkGlobal,
+        emergency_sos_global: updatedSwitches.emergencySosGlobal,
+        drm_watermark_global: updatedSwitches.drmWatermarkGlobal,
+        new_registrations: updatedSwitches.newRegistrations,
+        payout_gateway_active: updatedSwitches.payoutGatewayActive,
+        live_streaming_global: updatedSwitches.liveStreamingGlobal,
+        chat_media_uploads: updatedSwitches.chatMediaUploads,
+        maintenance_mode: updatedSwitches.maintenanceMode,
+        strict_spam_firewall: updatedSwitches.strictSpamFirewall,
+        quantum_encryption_layer: updatedSwitches.quantumEncryptionLayer,
+        kampala_edge_relay_sync: updatedSwitches.kampalaEdgeRelaySync,
+        biometric_watermark_core: updatedSwitches.biometricWatermarkCore,
+        federated_on_device_ai_engine: updatedSwitches.federatedOnDeviceAiEngine,
+        bluetooth_p2p_mesh_relay: updatedSwitches.bluetoothP2pMeshRelay,
+        autonomous_message_escrow: updatedSwitches.autonomousMessageEscrow,
+        zero_fee_gas_subsidizer: updatedSwitches.zeroFeeGasSubsidizer,
+        ai_autonomous_toxicity_guard: updatedSwitches.aiAutonomousToxicityGuard,
+        realtime_sentiment_mesh: updatedSwitches.realtimeSentimentMesh,
+        multimodal_hls_adaptive: updatedSwitches.multimodalHlsAdaptive,
+        updated_at: new Date(),
+      });
+    } catch (err) {
+      console.error('Failed to sync switches:', err.message);
+    } finally {
+      setIsSaving(false);
     }
+  };
+
+  const handleToggleSwitch = async (key, val, label) => {
+    if (key === 'master_admin') {
+      setSuperAdminAccessEnabled(val);
+      await logAdminActionToSupabase(`Toggled Master Super-Admin Panel Access to ${val ? 'ON' : 'OFF'}`);
+      Alert.alert('Master Super-Admin Kill-Switch 👑', `Admin Console & Treasury visibility is now ${val ? 'UNLOCKED 🟢' : 'LOCKED & HIDDEN 🔴'}.`);
+      return;
+    }
+
+    const updated = { ...switchesState, [key]: val };
+    setSwitchesState(updated);
+    await syncSwitchesToSupabase(updated);
+    await logAdminActionToSupabase(`Toggled ${label} to ${val ? 'ENABLED/ACTIVE' : 'DISABLED/OFF'}`);
+    Alert.alert('System Switch Updated ⚡', `${label} is now ${val ? 'ACTIVE 🟢' : 'DISABLED 🔴'}.`);
   };
 
   const handleApprovePayout = async (id, creator, amount) => {
@@ -275,6 +255,9 @@ export default function AdminControlPanelScreen({ isDarkMode, superAdminAccessEn
   const handleResolveAppeal = async (id, decision) => {
     setAppeals(prev => prev.filter(item => item.id !== id));
     await logAdminActionToSupabase(`Resolved video appeal #${id}: Action -> ${decision}`);
+    try {
+      await supabase.from('content_appeals').update({ status: decision === 'restore' ? 'Restored' : 'Taken Down' }).eq('id', id);
+    } catch (e) {}
     Alert.alert('Appeal Processed ⚖️', `Content has been ${decision === 'restore' ? 'restored to platform' : 'permanently taken down'}.`);
   };
 
@@ -328,7 +311,7 @@ export default function AdminControlPanelScreen({ isDarkMode, superAdminAccessEn
         <View style={styles.headerTopRow}>
           <Text style={[styles.headerTitle, isDarkMode && styles.darkText]}>👑 Master Super-Admin Enterprise Console</Text>
           <View style={styles.statusBadge}>
-            <Text style={styles.statusBadgeText}>SUPABASE REALTIME LIVE 🟢</Text>
+            <Text style={styles.statusBadgeText}>{isSaving ? '☁️ SYNCING...' : 'SUPABASE LIVE 🟢'}</Text>
           </View>
         </View>
         <Text style={styles.headerSub}>Supreme platform authority, regional telemetry, Flutterwave treasury routing, and live WebSocket presence.</Text>
@@ -417,16 +400,6 @@ export default function AdminControlPanelScreen({ isDarkMode, superAdminAccessEn
             ) : (
               <Text style={{ fontSize: 12, color: '#718096', textAlign: 'center', padding: 20 }}>All pending creator payouts have been disbursed.</Text>
             )}
-
-            <View style={[styles.card, isDarkMode && styles.darkCard, { marginTop: 4 }]}>
-              <Text style={[styles.sectionTitle, isDarkMode && styles.darkText]}>📊 Standard Revenue Split Configuration</Text>
-              <Text style={{ fontSize: 11, color: '#718096', lineHeight: 18 }}>
-                • Standard Live Gifts & Tickets: 35% Platform / 65% Creator{'\n'}
-                • Channel Subscriptions: 30% Platform / 70% Creator{'\n'}
-                • In-App Advertising: 40% Platform / 60% Creator{'\n'}
-                • Creator Growth Tiers: Starter (65%), Pro (70% for 500k+ UGX), Elite (75% for 2M+ UGX)
-              </Text>
-            </View>
           </View>
         )}
 
@@ -481,16 +454,6 @@ export default function AdminControlPanelScreen({ isDarkMode, superAdminAccessEn
                 <Text style={{ fontSize: 9, color: '#a0aec0' }}>🕒 {log.time} • IP: {log.ip}</Text>
               </View>
             ))}
-
-            <View style={[styles.card, isDarkMode && styles.darkCard, { marginTop: 4 }]}>
-              <Text style={[styles.sectionTitle, isDarkMode && styles.darkText]}>📊 Staff Productivity & RBAC Tiers</Text>
-              <Text style={{ fontSize: 11, color: '#718096', lineHeight: 18 }}>
-                • Support Staff Tier: Restricted to helpdesk & MoMo queues.{'\n'}
-                • Content Moderators: Review flagged items & appeals.{'\n'}
-                • Finance Operations: Transaction history & payout splits.{'\n'}
-                • Senior Managers: Escalations requiring super-admin approval.
-              </Text>
-            </View>
           </View>
         )}
 
@@ -523,10 +486,6 @@ export default function AdminControlPanelScreen({ isDarkMode, superAdminAccessEn
                 <Text style={{ fontSize: 10, color: '#38a169', fontWeight: 'bold' }}>{th.status}</Text>
               </View>
             ))}
-
-            <TouchableOpacity style={styles.actionRowBtn} onPress={() => Alert.alert('Evidence Export', 'Encrypted evidentiary chat transcripts and media logs exported for law enforcement compliance.')}>
-              <Text style={{ fontSize: 12, fontWeight: 'bold', color: '#e53e3e' }}>📥 Export Encrypted Evidence for Law Enforcement</Text>
-            </TouchableOpacity>
           </View>
         )}
 
@@ -543,7 +502,7 @@ export default function AdminControlPanelScreen({ isDarkMode, superAdminAccessEn
               </View>
               <Switch
                 value={superAdminAccessEnabled}
-                onValueChange={(val) => handleToggleSwitch('master_admin', val)}
+                onValueChange={(val) => handleToggleSwitch('master_admin', val, 'Master Super-Admin Panel Access')}
                 trackColor={{ false: '#cbd5e0', true: '#2563eb' }}
               />
             </View>
@@ -555,8 +514,8 @@ export default function AdminControlPanelScreen({ isDarkMode, superAdminAccessEn
                 <Text style={{ fontSize: 10, color: '#718096' }}>Enable or disable local mesh data transmissions platform-wide.</Text>
               </View>
               <Switch
-                value={meshTransmission}
-                onValueChange={(val) => handleToggleSwitch('mesh', val)}
+                value={switchesState.meshTransmission}
+                onValueChange={(val) => handleToggleSwitch('meshTransmission', val, 'Master Offline Mesh Transmission')}
                 trackColor={{ false: '#cbd5e0', true: '#3182ce' }}
               />
             </View>
@@ -568,8 +527,8 @@ export default function AdminControlPanelScreen({ isDarkMode, superAdminAccessEn
                 <Text style={{ fontSize: 10, color: '#718096' }}>Enable, restrict, or disable AI voice cloning and real-time translation.</Text>
               </View>
               <Switch
-                value={aiVoiceTranslation}
-                onValueChange={(val) => handleToggleSwitch('ai', val)}
+                value={switchesState.aiVoiceTranslation}
+                onValueChange={(val) => handleToggleSwitch('aiVoiceTranslation', val, 'Master AI Voice-Translation')}
                 trackColor={{ false: '#cbd5e0', true: '#3182ce' }}
               />
             </View>
@@ -581,8 +540,8 @@ export default function AdminControlPanelScreen({ isDarkMode, superAdminAccessEn
                 <Text style={{ fontSize: 10, color: '#718096' }}>Intentional TLS/RLS inspection bypass for dispute resolution.</Text>
               </View>
               <Switch
-                value={godModeVisibility}
-                onValueChange={(val) => handleToggleSwitch('godmode', val)}
+                value={switchesState.godModeVisibility}
+                onValueChange={(val) => handleToggleSwitch('godModeVisibility', val, 'God-Mode Messaging Visibility')}
                 trackColor={{ false: '#cbd5e0', true: '#3182ce' }}
               />
             </View>
@@ -594,8 +553,8 @@ export default function AdminControlPanelScreen({ isDarkMode, superAdminAccessEn
                 <Text style={{ fontSize: 10, color: '#718096' }}>Turn platform-wide ad insertion networks ON or OFF.</Text>
               </View>
               <Switch
-                value={adNetworkGlobal}
-                onValueChange={(val) => handleToggleSwitch('ads', val)}
+                value={switchesState.adNetworkGlobal}
+                onValueChange={(val) => handleToggleSwitch('adNetworkGlobal', val, 'In-App Advertising Suite')}
                 trackColor={{ false: '#cbd5e0', true: '#3182ce' }}
               />
             </View>
@@ -607,8 +566,8 @@ export default function AdminControlPanelScreen({ isDarkMode, superAdminAccessEn
                 <Text style={{ fontSize: 10, color: '#718096' }}>Global master override for emergency security sirens and emergency dispatch.</Text>
               </View>
               <Switch
-                value={emergencySosGlobal}
-                onValueChange={(val) => handleToggleSwitch('sos', val)}
+                value={switchesState.emergencySosGlobal}
+                onValueChange={(val) => handleToggleSwitch('emergencySosGlobal', val, 'Med-SOS Relay')}
                 trackColor={{ false: '#cbd5e0', true: '#3182ce' }}
               />
             </View>
@@ -620,8 +579,8 @@ export default function AdminControlPanelScreen({ isDarkMode, superAdminAccessEn
                 <Text style={{ fontSize: 10, color: '#718096' }}>Enforce dynamic user tracking watermarks on all video streams.</Text>
               </View>
               <Switch
-                value={drmWatermarkGlobal}
-                onValueChange={(val) => handleToggleSwitch('drm', val)}
+                value={switchesState.drmWatermarkGlobal}
+                onValueChange={(val) => handleToggleSwitch('drmWatermarkGlobal', val, 'Anti-Piracy Watermarking')}
                 trackColor={{ false: '#cbd5e0', true: '#3182ce' }}
               />
             </View>
@@ -633,8 +592,8 @@ export default function AdminControlPanelScreen({ isDarkMode, superAdminAccessEn
                 <Text style={{ fontSize: 10, color: '#718096' }}>Allow or block new user account sign-ups across the platform.</Text>
               </View>
               <Switch
-                value={newRegistrations}
-                onValueChange={(val) => handleToggleSwitch('registrations', val)}
+                value={switchesState.newRegistrations}
+                onValueChange={(val) => handleToggleSwitch('newRegistrations', val, 'New User Registration Portal')}
                 trackColor={{ false: '#cbd5e0', true: '#3182ce' }}
               />
             </View>
@@ -646,8 +605,8 @@ export default function AdminControlPanelScreen({ isDarkMode, superAdminAccessEn
                 <Text style={{ fontSize: 10, color: '#718096' }}>Enable or pause automated creator withdrawals and MoMo dispatches.</Text>
               </View>
               <Switch
-                value={payoutGatewayActive}
-                onValueChange={(val) => handleToggleSwitch('payouts', val)}
+                value={switchesState.payoutGatewayActive}
+                onValueChange={(val) => handleToggleSwitch('payoutGatewayActive', val, 'Flutterwave Payout Gateway')}
                 trackColor={{ false: '#cbd5e0', true: '#3182ce' }}
               />
             </View>
@@ -659,8 +618,8 @@ export default function AdminControlPanelScreen({ isDarkMode, superAdminAccessEn
                 <Text style={{ fontSize: 10, color: '#718096' }}>Control live broadcast streaming capability platform-wide.</Text>
               </View>
               <Switch
-                value={liveStreamingGlobal}
-                onValueChange={(val) => handleToggleSwitch('livestream', val)}
+                value={switchesState.liveStreamingGlobal}
+                onValueChange={(val) => handleToggleSwitch('liveStreamingGlobal', val, 'Live Streaming Suite')}
                 trackColor={{ false: '#cbd5e0', true: '#3182ce' }}
               />
             </View>
@@ -672,8 +631,8 @@ export default function AdminControlPanelScreen({ isDarkMode, superAdminAccessEn
                 <Text style={{ fontSize: 10, color: '#718096' }}>Allow or restrict sending media attachments inside chat rooms.</Text>
               </View>
               <Switch
-                value={chatMediaUploads}
-                onValueChange={(val) => handleToggleSwitch('media', val)}
+                value={switchesState.chatMediaUploads}
+                onValueChange={(val) => handleToggleSwitch('chatMediaUploads', val, 'Chat Media Vault Uploads')}
                 trackColor={{ false: '#cbd5e0', true: '#3182ce' }}
               />
             </View>
@@ -685,8 +644,8 @@ export default function AdminControlPanelScreen({ isDarkMode, superAdminAccessEn
                 <Text style={{ fontSize: 10, color: '#718096' }}>Post-quantum cryptographic envelope encryption.</Text>
               </View>
               <Switch
-                value={quantumEncryptionLayer}
-                onValueChange={(val) => handleToggleSwitch('quantum', val)}
+                value={switchesState.quantumEncryptionLayer}
+                onValueChange={(val) => handleToggleSwitch('quantumEncryptionLayer', val, 'Quantum Lattice Security')}
                 trackColor={{ false: '#cbd5e0', true: '#3182ce' }}
               />
             </View>
@@ -698,8 +657,8 @@ export default function AdminControlPanelScreen({ isDarkMode, superAdminAccessEn
                 <Text style={{ fontSize: 10, color: '#718096' }}>Local regional data caching nodes synchronization.</Text>
               </View>
               <Switch
-                value={kampalaEdgeRelaySync}
-                onValueChange={(val) => handleToggleSwitch('kampala_edge', val)}
+                value={switchesState.kampalaEdgeRelaySync}
+                onValueChange={(val) => handleToggleSwitch('kampalaEdgeRelaySync', val, 'Kampala Edge Relay Sync')}
                 trackColor={{ false: '#cbd5e0', true: '#3182ce' }}
               />
             </View>
@@ -711,8 +670,8 @@ export default function AdminControlPanelScreen({ isDarkMode, superAdminAccessEn
                 <Text style={{ fontSize: 10, color: '#718096' }}>Forensic user signature stamping on messages.</Text>
               </View>
               <Switch
-                value={biometricWatermarkCore}
-                onValueChange={(val) => handleToggleSwitch('biometric_wm', val)}
+                value={switchesState.biometricWatermarkCore}
+                onValueChange={(val) => handleToggleSwitch('biometricWatermarkCore', val, 'Biometric Sender Watermark')}
                 trackColor={{ false: '#cbd5e0', true: '#3182ce' }}
               />
             </View>
@@ -724,8 +683,8 @@ export default function AdminControlPanelScreen({ isDarkMode, superAdminAccessEn
                 <Text style={{ fontSize: 10, color: '#718096' }}>Decentralized neural model training and inference.</Text>
               </View>
               <Switch
-                value={federatedOnDeviceAiEngine}
-                onValueChange={(val) => handleToggleSwitch('federated_ai', val)}
+                value={switchesState.federatedOnDeviceAiEngine}
+                onValueChange={(val) => handleToggleSwitch('federatedOnDeviceAiEngine', val, 'Federated On-Device AI Engine')}
                 trackColor={{ false: '#cbd5e0', true: '#3182ce' }}
               />
             </View>
@@ -737,8 +696,8 @@ export default function AdminControlPanelScreen({ isDarkMode, superAdminAccessEn
                 <Text style={{ fontSize: 10, color: '#718096' }}>Direct offline device-to-device packet forwarding.</Text>
               </View>
               <Switch
-                value={bluetoothP2pMeshRelay}
-                onValueChange={(val) => handleToggleSwitch('bluetooth_mesh', val)}
+                value={switchesState.bluetoothP2pMeshRelay}
+                onValueChange={(val) => handleToggleSwitch('bluetoothP2pMeshRelay', val, 'Bluetooth P2P Mesh Relay')}
                 trackColor={{ false: '#cbd5e0', true: '#3182ce' }}
               />
             </View>
@@ -750,8 +709,8 @@ export default function AdminControlPanelScreen({ isDarkMode, superAdminAccessEn
                 <Text style={{ fontSize: 10, color: '#718096' }}>Smart contract conditional message delivery.</Text>
               </View>
               <Switch
-                value={autonomousMessageEscrow}
-                onValueChange={(val) => handleToggleSwitch('escrow', val)}
+                value={switchesState.autonomousMessageEscrow}
+                onValueChange={(val) => handleToggleSwitch('autonomousMessageEscrow', val, 'Autonomous Message Escrow')}
                 trackColor={{ false: '#cbd5e0', true: '#3182ce' }}
               />
             </View>
@@ -763,8 +722,8 @@ export default function AdminControlPanelScreen({ isDarkMode, superAdminAccessEn
                 <Text style={{ fontSize: 10, color: '#718096' }}>Platform-sponsored transaction fee abstraction.</Text>
               </View>
               <Switch
-                value={zeroFeeGasSubsidizer}
-                onValueChange={(val) => handleToggleSwitch('gas_subsidizer', val)}
+                value={switchesState.zeroFeeGasSubsidizer}
+                onValueChange={(val) => handleToggleSwitch('zeroFeeGasSubsidizer', val, 'Zero-Fee Gas Subsidizer')}
                 trackColor={{ false: '#cbd5e0', true: '#3182ce' }}
               />
             </View>
@@ -776,8 +735,8 @@ export default function AdminControlPanelScreen({ isDarkMode, superAdminAccessEn
                 <Text style={{ fontSize: 10, color: '#718096' }}>Real-time automated content filtering and blocking.</Text>
               </View>
               <Switch
-                value={aiAutonomousToxicityGuard}
-                onValueChange={(val) => handleToggleSwitch('toxicity_guard', val)}
+                value={switchesState.aiAutonomousToxicityGuard}
+                onValueChange={(val) => handleToggleSwitch('aiAutonomousToxicityGuard', val, 'AI Autonomous Toxicity Guard')}
                 trackColor={{ false: '#cbd5e0', true: '#3182ce' }}
               />
             </View>
@@ -789,8 +748,8 @@ export default function AdminControlPanelScreen({ isDarkMode, superAdminAccessEn
                 <Text style={{ fontSize: 10, color: '#718096' }}>Community mood and engagement telemetry.</Text>
               </View>
               <Switch
-                value={realtimeSentimentMesh}
-                onValueChange={(val) => handleToggleSwitch('sentiment', val)}
+                value={switchesState.realtimeSentimentMesh}
+                onValueChange={(val) => handleToggleSwitch('realtimeSentimentMesh', val, 'Real-Time Sentiment Mesh')}
                 trackColor={{ false: '#cbd5e0', true: '#3182ce' }}
               />
             </View>
@@ -802,8 +761,8 @@ export default function AdminControlPanelScreen({ isDarkMode, superAdminAccessEn
                 <Text style={{ fontSize: 10, color: '#718096' }}>Dynamic video stream bandwidth optimization.</Text>
               </View>
               <Switch
-                value={multimodalHlsAdaptive}
-                onValueChange={(val) => handleToggleSwitch('hls_adaptive', val)}
+                value={switchesState.multimodalHlsAdaptive}
+                onValueChange={(val) => handleToggleSwitch('multimodalHlsAdaptive', val, 'Multimodal HLS Adaptive')}
                 trackColor={{ false: '#cbd5e0', true: '#3182ce' }}
               />
             </View>
@@ -815,8 +774,8 @@ export default function AdminControlPanelScreen({ isDarkMode, superAdminAccessEn
                 <Text style={{ fontSize: 10, color: '#718096' }}>Turn ON to place the entire application into maintenance mode.</Text>
               </View>
               <Switch
-                value={maintenanceMode}
-                onValueChange={(val) => handleToggleSwitch('maintenance', val)}
+                value={switchesState.maintenanceMode}
+                onValueChange={(val) => handleToggleSwitch('maintenanceMode', val, 'Global Emergency Maintenance Lockdown')}
                 trackColor={{ false: '#cbd5e0', true: '#e53e3e' }}
               />
             </View>
@@ -860,7 +819,6 @@ const styles = StyleSheet.create({
   restoreBtn: { backgroundColor: '#16a34a', paddingHorizontal: 12, paddingVertical: 6, borderRadius: 6 },
   banBtn: { backgroundColor: '#dc2626', paddingHorizontal: 12, paddingVertical: 6, borderRadius: 6 },
   resolveBtn: { backgroundColor: '#2563eb', paddingHorizontal: 12, paddingVertical: 6, borderRadius: 6, alignSelf: 'flex-start', marginTop: 4 },
-  actionRowBtn: { backgroundColor: '#ffffff', borderWidth: 1, borderColor: '#cbd5e0', padding: 12, borderRadius: 8, marginBottom: 10, alignItems: 'center' },
   switchRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: '#f1f5f9' },
   rowLabel: { fontSize: 12, color: '#0f172a', fontWeight: '600' },
 });

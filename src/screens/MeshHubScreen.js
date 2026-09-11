@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   StyleSheet,
   Text,
@@ -10,8 +10,13 @@ import {
   Switch,
 } from 'react-native';
 import { useMeshNetwork } from '../../App';
+import { BannerAd, BannerAdSize, TestIds, RewardedAd, RewardedAdEventType } from 'react-native-google-mobile-ads';
 
-export default function MeshHubScreen({ isDarkMode }) {
+// Dynamic Google AdMob Unit IDs (Automatic Test IDs during development)
+const bannerAdUnitId = __DEV__ ? TestIds.BANNER : 'ca-app-pub-xxxxxxxxoxxxxxxx/xxxxxxxxxx';
+const rewardedAdUnitId = __DEV__ ? TestIds.REWARDED : 'ca-app-pub-xxxxxxxxoxxxxxxx/xxxxxxxxxx';
+
+export default function MeshHubScreen({ isDarkMode, coins, setCoins }) {
   const {
     meshNodeActive,
     setMeshNodeActive,
@@ -24,6 +29,10 @@ export default function MeshHubScreen({ isDarkMode }) {
   const [chatInput, setChatInput] = useState('');
   const [vaultKey, setVaultKey] = useState('');
   const [vaultData, setVaultData] = useState('');
+
+  // Monetization & Rewarded Ad States
+  const [rewardedAdLoaded, setRewardedAdLoaded] = useState(false);
+  const [rewardedAdInstance, setRewardedAdInstance] = useState(null);
 
   // NEW LAYER 1: BLUETOOTH LE & WI-FI DIRECT ADAPTER SELECTOR
   const [selectedRadioFrequency, setSelectedRadioFrequency] = useState('Dual-Band (BLE 5.2 + Wi-Fi Direct) ⚡');
@@ -40,6 +49,54 @@ export default function MeshHubScreen({ isDarkMode }) {
   // NEW LAYER 4: EMERGENCY SOS & DEAD-MAN'S SWITCH BROADCASTER
   const [sosBeaconActive, setSosBeaconActive] = useState(false);
   const [emergencyMessage, setEmergencyMessage] = useState('SOS: Wildlife Ranger Assistance Required at Bwindi Sector 🚨');
+
+  // Initialize AdMob Rewarded Ad
+  useEffect(() => {
+    initRewardedAd();
+  }, []);
+
+  const initRewardedAd = () => {
+    try {
+      const rewardedAd = RewardedAd.createForAdRequest(rewardedAdUnitId, {
+        requestNonPersonalizedAdsOnly: true,
+      });
+
+      const unsubscribeLoaded = rewardedAd.addAdEventListener(RewardedAdEventType.LOADED, () => {
+        setRewardedAdLoaded(true);
+      });
+
+      const unsubscribeEarned = rewardedAd.addAdEventListener(RewardedAdEventType.EARNED_REWARD, () => {
+        if (setCoins) {
+          setCoins(prev => prev + 150);
+        }
+        Alert.alert('💰 Ad Reward Credited!', 'Successfully earned +150 Coins mesh relay node bonus!');
+      });
+
+      rewardedAd.load();
+      setRewardedAdInstance(rewardedAd);
+
+      return () => {
+        unsubscribeLoaded();
+        unsubscribeEarned();
+      };
+    } catch (e) {
+      console.log('Rewarded Ad initialization notice:', e);
+    }
+  };
+
+  const handleShowRewardedAd = () => {
+    if (rewardedAdLoaded && rewardedAdInstance) {
+      rewardedAdInstance.show();
+      setRewardedAdLoaded(false);
+      rewardedAdInstance.load();
+    } else {
+      // Fallback simulation for web/preview
+      if (setCoins) {
+        setCoins(prev => prev + 150);
+      }
+      Alert.alert('💰 Ad Reward Credited (Simulated)', 'Watch ad completed! +150 coins added to your ChatUp wallet balance.');
+    }
+  };
 
   const handleSend = () => {
     if (!chatInput.trim()) return;
@@ -71,6 +128,37 @@ export default function MeshHubScreen({ isDarkMode }) {
   return (
     <ScrollView style={[styles.container, isDarkMode && styles.darkContainer]} contentContainerStyle={{ padding: 16, paddingBottom: 100 }}>
       
+      {/* ================= GOOGLE ADMOB DYNAMIC BANNER ================= */}
+      <View style={styles.monetizationAdCard}>
+        <Text style={styles.adTagLabel}>Sponsored Mesh Banner 📢 • AdMob Banner</Text>
+        <View style={{ alignItems: 'center', marginVertical: 4 }}>
+          <BannerAd
+            unitId={bannerAdUnitId}
+            size={BannerAdSize.ANCHORED_ADAPTIVE_BANNER}
+            requestOptions={{
+              requestNonPersonalizedAdsOnly: true,
+            }}
+            onAdLoaded={() => console.log('AdMob Mesh Banner loaded successfully')}
+            onAdFailedToLoad={(error) => console.log('AdMob Mesh Banner load error: ', error)}
+          />
+        </View>
+      </View>
+
+      {/* ================= REWARDED AD MESH NODE REWARD WIDGET ================= */}
+      <View style={styles.creatorMonetizationCard}>
+        <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
+          <View style={{ flex: 1, marginRight: 10 }}>
+            <Text style={{ fontSize: 12, fontWeight: 'bold', color: '#2b6cb0' }}>🪙 Node Relay Staking Booster</Text>
+            <Text style={{ fontSize: 14, fontWeight: 'bold', color: '#2d3748', marginTop: 2 }}>
+              Watch a sponsor clip to earn +150 coins!
+            </Text>
+          </View>
+          <TouchableOpacity style={styles.watchRewardAdBtn} onPress={handleShowRewardedAd}>
+            <Text style={{ color: '#fff', fontSize: 11, fontWeight: 'bold' }}>Watch Ad (+150 🪙) 🎁</Text>
+          </TouchableOpacity>
+        </View>
+      </View>
+
       {/* Header Banner */}
       <View style={[styles.card, isDarkMode && styles.darkCard]}>
         <Text style={[styles.title, isDarkMode && styles.darkText]}>🛰️ Zero-Internet P2P Mesh & Ghost Vaults</Text>
@@ -80,19 +168,19 @@ export default function MeshHubScreen({ isDarkMode }) {
       {/* NEW LAYER 1: RADIO FREQUENCY & RANGE SELECTOR */}
       <View style={[styles.card, isDarkMode && styles.darkCard, { borderColor: '#3182ce', borderWidth: 1.5 }]}>
         <Text style={[styles.cardTitle, isDarkMode && styles.darkText]}>📡 Radio Frequency & Adapter Settings</Text>
-        <Text style={{ fontSize: 11, color: '#718096', marginBottom: 8 }}>Configure hardware transceiver mode for Kampala urban or remote wildlife reserves:</Text>
+        <Text style={{ fontSize: 11, color: isDarkMode ? '#94a3b8' : '#718096', marginBottom: 8 }}>Configure hardware transceiver mode for Kampala urban or remote wildlife reserves:</Text>
         
         <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginBottom: 4 }}>
           {['Dual-Band (BLE 5.2 + Wi-Fi Direct) ⚡', 'Sub-GHz LoRa Long Range 🏔️', 'Acoustic / Ultrasonic Burst 🔊'].map((freq) => (
             <TouchableOpacity
               key={freq}
-              style={[styles.chip, selectedRadioFrequency === freq && styles.activeChip]}
+              style={[styles.chip, selectedRadioFrequency === freq && styles.activeChip, isDarkMode && styles.darkChip]}
               onPress={() => {
                 setSelectedRadioFrequency(freq);
                 Alert.alert('Radio Adapter', `Switched mesh frequency to: ${freq}`);
               }}
             >
-              <Text style={[styles.chipText, selectedRadioFrequency === freq && { color: '#fff' }]}>{freq}</Text>
+              <Text style={[styles.chipText, selectedRadioFrequency === freq && { color: '#fff' }, isDarkMode && styles.darkText]}>{freq}</Text>
             </TouchableOpacity>
           ))}
         </ScrollView>
@@ -110,7 +198,7 @@ export default function MeshHubScreen({ isDarkMode }) {
           </TouchableOpacity>
         </View>
         <Text style={{ fontSize: 12, color: '#38a169', fontWeight: 'bold' }}>Connected Mesh Peers: {meshPeerCount} nearby devices</Text>
-        <Text style={{ fontSize: 11, color: '#718096', marginTop: 4 }}>Relaying encrypted packets locally via Bluetooth and Wi-Fi Direct mesh.</Text>
+        <Text style={{ fontSize: 11, color: isDarkMode ? '#94a3b8' : '#718096', marginTop: 4 }}>Relaying encrypted packets locally via Bluetooth and Wi-Fi Direct mesh.</Text>
       </View>
 
       {/* NEW LAYER 2: QUANTUM-RESISTANT ENCRYPTION SHIELD */}
@@ -118,7 +206,7 @@ export default function MeshHubScreen({ isDarkMode }) {
         <View style={styles.settingRow}>
           <View style={{ flex: 1, marginRight: 10 }}>
             <Text style={[styles.cardTitle, isDarkMode && styles.darkText, { marginBottom: 2 }]}>🔐 Quantum-Resistant Lattice Cipher</Text>
-            <Text style={{ fontSize: 11, color: '#718096' }}>Protect offline peer packets against post-quantum cryptographic decryption attacks ({securityCipherMode}).</Text>
+            <Text style={{ fontSize: 11, color: isDarkMode ? '#94a3b8' : '#718096' }}>Protect offline peer packets against post-quantum cryptographic decryption attacks ({securityCipherMode}).</Text>
           </View>
           <Switch
             value={latticeEncryptionEnabled}
@@ -136,7 +224,7 @@ export default function MeshHubScreen({ isDarkMode }) {
         <View style={styles.settingRow}>
           <View style={{ flex: 1, marginRight: 10 }}>
             <Text style={[styles.cardTitle, isDarkMode && styles.darkText, { marginBottom: 2 }]}>🪙 Mesh Relay Staking Rewards</Text>
-            <Text style={{ fontSize: 11, color: '#718096' }}>Earn bonus ChatUp coins by acting as an active node relay for neighboring devices. Earned: <Text style={{ fontWeight: 'bold', color: '#d69e2e' }}>🪙 {accumulatedRelayRewards} Coins</Text></Text>
+            <Text style={{ fontSize: 11, color: isDarkMode ? '#94a3b8' : '#718096' }}>Earn bonus ChatUp coins by acting as an active node relay for neighboring devices. Earned: <Text style={{ fontWeight: 'bold', color: '#d69e2e' }}>🪙 {accumulatedRelayRewards} Coins</Text> (Wallet Balance: {coins})</Text>
           </View>
           <Switch
             value={relayStakingEnabled}
@@ -176,7 +264,7 @@ export default function MeshHubScreen({ isDarkMode }) {
       {/* NEW LAYER 4: EMERGENCY SOS & DEAD-MAN'S SWITCH BROADCASTER */}
       <View style={[styles.card, isDarkMode && styles.darkCard, { borderColor: '#e53e3e', borderWidth: sosBeaconActive ? 2 : 1, backgroundColor: sosBeaconActive ? (isDarkMode ? '#4a1515' : '#fff5f5') : (isDarkMode ? '#2d3748' : '#fff') }]}>
         <Text style={[styles.cardTitle, isDarkMode && !sosBeaconActive && styles.darkText, { color: '#e53e3e' }]}>🚨 Emergency SOS & Dead-Man's Switch</Text>
-        <Text style={{ fontSize: 11, color: '#718096', marginBottom: 8 }}>Instantly flood nearby mesh channels with distress signals and coordinates if cellular networks fail.</Text>
+        <Text style={{ fontSize: 11, color: isDarkMode ? '#94a3b8' : '#718096', marginBottom: 8 }}>Instantly flood nearby mesh channels with distress signals and coordinates if cellular networks fail.</Text>
 
         <TextInput
           style={[styles.chatInput, { marginBottom: 8, borderColor: '#e53e3e' }, isDarkMode && styles.darkInput]}
@@ -199,7 +287,7 @@ export default function MeshHubScreen({ isDarkMode }) {
       {/* Encrypted Local Ghost Vaults */}
       <View style={[styles.card, isDarkMode && styles.darkCard, { borderColor: '#e53e3e', borderWidth: 1 }]}>
         <Text style={[styles.cardTitle, isDarkMode && styles.darkText]}>🔒 Encrypted Local Ghost Vault</Text>
-        <Text style={{ fontSize: 11, color: '#718096', marginBottom: 8 }}>Lock sensitive text, notes, or media behind zero-knowledge local storage encryption.</Text>
+        <Text style={{ fontSize: 11, color: isDarkMode ? '#94a3b8' : '#718096', marginBottom: 8 }}>Lock sensitive text, notes, or media behind zero-knowledge local storage encryption.</Text>
         
         <TextInput
           style={[styles.chatInput, { marginBottom: 8 }, isDarkMode && styles.darkInput]}
@@ -237,6 +325,7 @@ const styles = StyleSheet.create({
   cardTitle: { fontSize: 13, fontWeight: 'bold', color: '#2d3748', marginBottom: 6 },
   settingRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
   chip: { backgroundColor: '#edf2f7', paddingHorizontal: 10, paddingVertical: 6, borderRadius: 8, marginRight: 6 },
+  darkChip: { backgroundColor: '#1a202c' },
   activeChip: { backgroundColor: '#3182ce' },
   chipText: { fontSize: 11, fontWeight: 'bold', color: '#4a5568' },
   chatInput: { borderWidth: 1, borderColor: '#cbd5e0', borderRadius: 8, paddingHorizontal: 10, height: 38, backgroundColor: '#f7fafc', color: '#2d3748', fontSize: 12 },
@@ -244,4 +333,10 @@ const styles = StyleSheet.create({
   sendBtn: { backgroundColor: '#3182ce', justifyContent: 'center', alignItems: 'center', paddingHorizontal: 14, borderRadius: 8, marginLeft: 6 },
   vaultBtn: { backgroundColor: '#e53e3e', padding: 10, borderRadius: 8, alignItems: 'center' },
   actionBtnText: { color: '#fff', fontSize: 12, fontWeight: 'bold' },
+
+  // Monetization Ad Styles
+  monetizationAdCard: { backgroundColor: '#fff', borderWidth: 1, borderColor: '#e2e8f0', borderRadius: 8, padding: 8, marginBottom: 12, alignItems: 'center' },
+  adTagLabel: { fontSize: 9, color: '#a0aec0', textTransform: 'uppercase', fontWeight: 'bold', marginBottom: 2 },
+  creatorMonetizationCard: { backgroundColor: '#ebf8ff', borderWidth: 1, borderColor: '#bee3f8', borderRadius: 8, padding: 12, marginBottom: 12 },
+  watchRewardAdBtn: { backgroundColor: '#3182ce', paddingHorizontal: 12, paddingVertical: 6, borderRadius: 6 },
 });

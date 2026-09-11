@@ -99,9 +99,22 @@ export default function ChurchLiveScreen({ isDarkMode, navigation }) {
   const [cameraPermission, requestCameraPermission] = useCameraPermissions();
   const cameraRef = useRef(null);
 
-  // Fetch Testimonies On Mount
+  // Fetch Testimonies On Mount & Setup Realtime Listener
   useEffect(() => {
     fetchTestimonies();
+
+    if (supabase) {
+      const channel = supabase
+        .channel('public:church_testimonies')
+        .on('postgres_changes', { event: '*', schema: 'public', table: 'church_testimonies' }, () => {
+          fetchTestimonies();
+        })
+        .subscribe();
+
+      return () => {
+        supabase.removeChannel(channel);
+      };
+    }
   }, []);
 
   // Broadcast Timer Effect
@@ -138,7 +151,8 @@ export default function ChurchLiveScreen({ isDarkMode, navigation }) {
 
     try {
       if (supabase) {
-        await supabase.from('church_requests').insert([churchRequestPayload]);
+        const { error } = await supabase.from('church_requests').insert([churchRequestPayload]);
+        if (error) throw error;
       }
     } catch (err) {
       console.log('Supabase sync warning:', err);
@@ -230,6 +244,7 @@ export default function ChurchLiveScreen({ isDarkMode, navigation }) {
     };
 
     try {
+      if (!supabase) throw new Error('Supabase client not initialized');
       const { error } = await supabase.from('church_testimonies').insert([newEntry]);
       if (error) throw error;
 
@@ -246,17 +261,22 @@ export default function ChurchLiveScreen({ isDarkMode, navigation }) {
       setTestimonyText('');
       setAuthorName('');
       setVideoUrlInput('');
-      Alert.alert('Testimony Shared 🙏', 'Your praise report has been published to the community feed.');
+      Alert.alert('Testimony Shared 🙏', 'Your praise report has been published locally to the community feed.');
     }
   };
 
   const handleLikeTestimony = async (id, currentLikes) => {
+    const updatedLikes = (currentLikes || 0) + 1;
     setTestimoniesList(prev =>
-      prev.map(item => item.id === id ? { ...item, likes: (item.likes || 0) + 1 } : item)
+      prev.map(item => item.id === id ? { ...item, likes: updatedLikes } : item)
     );
     try {
-      await supabase.from('church_testimonies').update({ likes: (currentLikes || 0) + 1 }).eq('id', id);
-    } catch (e) {}
+      if (supabase) {
+        await supabase.from('church_testimonies').update({ likes: updatedLikes }).eq('id', id);
+      }
+    } catch (e) {
+      console.log('Like sync error:', e);
+    }
   };
 
   const handleSendPrayer = () => {
@@ -649,7 +669,7 @@ export default function ChurchLiveScreen({ isDarkMode, navigation }) {
                   ) : null}
 
                   <View style={styles.itemFooterRow}>
-                    <Text style={{ fontSize: 10, color: '#94a3b8' }}>🕒 {item.created_at || 'Recent'}</Text>
+                    <Text style={{ fontSize: 10, color: '#94a3b8' }}>🕒 {item.created_at ? new Date(item.created_at).toLocaleDateString() : 'Recent'}</Text>
                     <TouchableOpacity 
                       style={styles.likeBtn} 
                       onPress={() => handleLikeTestimony(item.id, item.likes)}

@@ -269,7 +269,8 @@ export default function VirtualTVScreen({ isDarkMode, coins, setCoins }) {
           ...prev,
           { id: 'clip_' + Date.now(), name: file.name, duration: 'Local Import' }
         ]);
-        Alert.alert('Media Imported 🎞️', `Successfully attached "${file.name}" to your editing timeline.`);
+        if (setCoins) setCoins(c => c + 35); // Wallet reward for uploading video
+        Alert.alert('Media Imported 🎞️ (+35 🪙)', `Successfully attached "${file.name}" to your editing timeline.`);
       }, 800);
     } catch (err) {
       setIsUploadingFile(false);
@@ -283,12 +284,13 @@ export default function VirtualTVScreen({ isDarkMode, coins, setCoins }) {
     else setPollVotes(prev => ({ ...prev, no: prev.no + 1 }));
     setUserVoted(true);
     setSelectedVoteOption(option);
-    Alert.alert('Vote Recorded 📊', 'Thank you! Your vote has been tallied and reflected live on the broadcast overlay.');
+    if (setCoins) setCoins(c => c + 5); // Wallet reward for voting
+    Alert.alert('Vote Recorded 📊 (+5 🪙)', 'Thank you! Your vote has been tallied and reflected live on the broadcast overlay.');
   };
 
   const handleSendTip = (amount, giftName) => {
     if (coins < amount) return Alert.alert('Insufficient Coins', 'Top up your in-chat wallet to send super-gifts!');
-    setCoins(coins - amount);
+    if (setCoins) setCoins(coins - amount);
     setRaisedCoins(prev => prev + amount);
     setSuperGiftsTotal(prev => prev + (amount * 0.1));
     Alert.alert('Super-Gift Sent! 🎉', `You successfully sent a ${giftName} worth 🪙 ${amount} coins to the creator!`);
@@ -326,7 +328,7 @@ export default function VirtualTVScreen({ isDarkMode, coins, setCoins }) {
     if (coins < movie.price) {
       return Alert.alert('Insufficient Coins', `You need 🪙 ${movie.price} coins to book a showpass for "${movie.title}". Top up your wallet!`);
     }
-    setCoins(coins - movie.price);
+    if (setCoins) setCoins(coins - movie.price);
     setTicketSalesRevenue(prev => prev + movie.price);
     setSelectedMovieTicket(movie);
     Alert.alert('🎟️ Showpass Booked Successfully!', `Access granted to "${movie.title}" in seat ${selectedCinemaSeat}! Enjoy the screening.`);
@@ -334,7 +336,7 @@ export default function VirtualTVScreen({ isDarkMode, coins, setCoins }) {
 
   const handleOrderCinemaSnack = (snackName, price) => {
     if (coins < price) return Alert.alert('Insufficient Coins', 'Top up coins to order snacks!');
-    setCoins(coins - price);
+    if (setCoins) setCoins(coins - price);
     setCinemaSnacksCart(prev => [...prev, snackName]);
     Alert.alert('🍿 Snack Ordered!', `Your ${snackName} is being delivered to your virtual seat (${selectedCinemaSeat}) instantly!`);
   };
@@ -344,8 +346,9 @@ export default function VirtualTVScreen({ isDarkMode, coins, setCoins }) {
       return Alert.alert('Missing Fields', 'Please fill in all required station franchise application fields.');
     }
     setApplicationSubmitted(true);
+    if (setCoins) setCoins(c => c + 50); // Reward for submitting station franchise application
     Alert.alert(
-      '📡 Application Logged to Supabase', 
+      '📡 Application Logged to Supabase (+50 🪙)', 
       `Thank you ${stationApplicantName}! Your TV station "${stationNameInput}" has been submitted to the admin review queue with status pending_admin_review.`
     );
   };
@@ -366,7 +369,8 @@ export default function VirtualTVScreen({ isDarkMode, coins, setCoins }) {
     setTimeout(() => {
       setSmartTrimStatus('AI Smart Trim Complete! 3 highlights generated.');
       setHighlightReelsCount(prev => prev + 3);
-      Alert.alert('AI Smart Trim ✂️', 'Successfully generated 3 viral short-form highlight clips from your broadcast archive.');
+      if (setCoins) setCoins(c => c + 25); // Wallet reward for smart trim
+      Alert.alert('AI Smart Trim ✂️ (+25 🪙)', 'Successfully generated 3 viral short-form highlight clips from your broadcast archive.');
     }, 1200);
   };
 
@@ -382,7 +386,8 @@ export default function VirtualTVScreen({ isDarkMode, coins, setCoins }) {
     setIsPublishing(true);
     setTimeout(() => {
       setIsPublishing(false);
-      Alert.alert('⚡ Published Successfully!', `Project "${masterProjectTitle}" rendered with multi-clip timeline and broadcasted live to Virtual TV!`);
+      if (setCoins) setCoins(c => c + 75); // Wallet reward for publishing
+      Alert.alert('⚡ Published Successfully! (+75 🪙)', `Project "${masterProjectTitle}" rendered with multi-clip timeline and broadcasted live to Virtual TV!`);
       setMasterProjectTitle('');
     }, 1000);
   };
@@ -394,7 +399,8 @@ export default function VirtualTVScreen({ isDarkMode, coins, setCoins }) {
       setAdBreakRunning(false);
       setAdRevenueShare(prev => prev + 15.00);
       setCreatorEarningsUSD(prev => prev + 15.00);
-      Alert.alert('Ad Break Complete ✅', 'Commercial break successfully concluded. +$15.00 added to your ad revenue balance.');
+      if (setCoins) setCoins(c => c + 20); // Wallet reward for ad break
+      Alert.alert('Ad Break Complete ✅ (+20 🪙)', 'Commercial break successfully concluded. +$15.00 added to your ad revenue balance.');
     }, 3000);
   };
 
@@ -495,7 +501,7 @@ export default function VirtualTVScreen({ isDarkMode, coins, setCoins }) {
       {/* HEADER & EARNINGS BANNER */}
       <View style={[styles.headerCard, isDarkMode && styles.darkCard]}>
         <View style={{ flex: 1 }}>
-          <Text style={[styles.title, isDarkMode && styles.darkText]}>📺 ChatUp Virtual TV & Ultimate Broadcast Suite</Text>
+          <Text style={[styles.title, isDarkMode && styles.darkText]}>📺 ChatUp Virtual TV & Ultimate Broadcast Suite (Wallet: {coins} 🪙)</Text>
           <Text style={styles.subtitle}>Linear Channels, VR Theaters, Advanced Analytics, Security & Monetization</Text>
         </View>
         <View style={styles.earningsBox}>
@@ -652,9 +658,9 @@ export default function VirtualTVScreen({ isDarkMode, coins, setCoins }) {
             ))}
 
             <View style={styles.floatingTopBarOverlay}>
-              <View style={styles.liveBadgeOverlay}>
+              <div style={styles.liveBadgeOverlay}>
                 <Text style={styles.liveBadgeText}>🔴 LIVE • {currentChannel.viewers}</Text>
-              </View>
+              </div>
               
               <TouchableOpacity 
                 style={styles.expandToggleOverlayBtn}
@@ -867,15 +873,15 @@ export default function VirtualTVScreen({ isDarkMode, coins, setCoins }) {
               {!userVoted ? (
                 <View style={{ flexDirection: 'row', marginBottom: 8 }}>
                   <TouchableOpacity style={[styles.pollOptionBtn, { backgroundColor: '#3182ce', flex: 1, marginRight: 6 }]} onPress={() => handleVote('yes')}>
-                    <Text style={{ color: '#fff', fontWeight: 'bold' }}>👍 Yes</Text>
+                    <Text style={{ color: '#fff', fontWeight: 'bold' }}>👍 Yes (+5 🪙)</Text>
                   </TouchableOpacity>
                   <TouchableOpacity style={[styles.pollOptionBtn, { backgroundColor: '#e53e3e', flex: 1, marginLeft: 6 }]} onPress={() => handleVote('no')}>
-                    <Text style={{ color: '#fff', fontWeight: 'bold' }}>👎 No</Text>
+                    <Text style={{ color: '#fff', fontWeight: 'bold' }}>👎 No (+5 🪙)</Text>
                   </TouchableOpacity>
                 </View>
               ) : (
                 <View style={{ marginTop: 4 }}>
-                  <Text style={{ fontSize: 11, fontWeight: 'bold', color: '#38a169', marginBottom: 6 }}>✓ Your Vote ({selectedVoteOption?.toUpperCase()}) Recorded Successfully!</Text>
+                  <Text style={{ fontSize: 11, fontWeight: 'bold', color: '#38a169', marginBottom: 6 }}>✓ Your Vote ({selectedVoteOption?.toUpperCase()}) Recorded Successfully! (+5 🪙)</Text>
                   
                   <View style={{ marginBottom: 6 }}>
                     <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginBottom: 2 }}>
@@ -1137,7 +1143,7 @@ export default function VirtualTVScreen({ isDarkMode, coins, setCoins }) {
               disabled={isUploadingFile}
             >
               {isUploadingFile ? <ActivityIndicator color="#fff" style={{ marginRight: 6 }} /> : null}
-              <Text style={styles.actionBtnText}>{isUploadingFile ? 'Uploading to Studio Storage...' : '📁 Upload & Attach Local Video File'}</Text>
+              <Text style={styles.actionBtnText}>{isUploadingFile ? 'Uploading to Studio Storage...' : '📁 Upload & Attach Local Video File (+35 🪙)'}</Text>
             </TouchableOpacity>
 
             {timelineClips.map((clip, index) => (
@@ -1170,7 +1176,7 @@ export default function VirtualTVScreen({ isDarkMode, coins, setCoins }) {
             <Text style={{ fontSize: 11, color: '#718096', marginBottom: 8 }}>Automatically detects peak engagement and wildlife action moments for short clips:</Text>
             <Text style={{ fontSize: 11, fontWeight: 'bold', color: '#3182ce', marginBottom: 8 }}>Status: {smartTrimStatus}</Text>
             <TouchableOpacity style={styles.actionBtnBlue} onPress={handleRunSmartTrim}>
-              <Text style={styles.actionBtnText}>Run AI Smart Trim Analysis 🎬</Text>
+              <Text style={styles.actionBtnText}>Run AI Smart Trim Analysis 🎬 (+25 🪙)</Text>
             </TouchableOpacity>
           </View>
 
@@ -1206,7 +1212,7 @@ export default function VirtualTVScreen({ isDarkMode, coins, setCoins }) {
             >
               {isPublishing ? <ActivityIndicator color="#fff" style={{ marginRight: 6 }} /> : null}
               <Text style={[styles.actionBtnText, { fontSize: 14 }]}>
-                {isPublishing ? 'Rendering & Broadcasting...' : '⚡ Zero-Friction One-Tap Publish 🚀'}
+                {isPublishing ? 'Rendering & Broadcasting...' : '⚡ Zero-Friction One-Tap Publish (+75 🪙) 🚀'}
               </Text>
             </TouchableOpacity>
           </View>
@@ -1233,7 +1239,7 @@ export default function VirtualTVScreen({ isDarkMode, coins, setCoins }) {
               onPress={handleTriggerAdBreak}
               disabled={adBreakRunning}
             >
-              <Text style={styles.actionBtnText}>{adBreakRunning ? 'Broadcasting Commercial Break...' : '📢 Trigger Commercial Ad Break Now ($15)'}</Text>
+              <Text style={styles.actionBtnText}>{adBreakRunning ? 'Broadcasting Commercial Break...' : '📢 Trigger Commercial Ad Break Now ($15 & +20 🪙)'}</Text>
             </TouchableOpacity>
 
             <View style={styles.earnRow}>
@@ -1413,13 +1419,13 @@ export default function VirtualTVScreen({ isDarkMode, coins, setCoins }) {
               />
 
               <TouchableOpacity style={styles.actionBtnGreen} onPress={handleStationApplicationSubmitSecure}>
-                <Text style={styles.actionBtnText}>Submit Application for Admin Review 🚀</Text>
+                <Text style={styles.actionBtnText}>Submit Application for Admin Review (+50 🪙) 🚀</Text>
               </TouchableOpacity>
             </View>
           ) : (
             <View style={[styles.card, isDarkMode && styles.darkCard, { borderColor: '#d69e2e', borderWidth: 2, alignItems: 'center', padding: 20 }]}>
               <Text style={{ fontSize: 32, marginBottom: 8 }}>⏳📡</Text>
-              <Text style={[styles.cardTitle, isDarkMode && styles.darkText, { fontSize: 15, textAlign: 'center' }]}>Application Pending Admin Review</Text>
+              <Text style={[styles.cardTitle, isDarkMode && styles.darkText, { fontSize: 15, textAlign: 'center' }]}>Application Pending Admin Review (+50 🪙)</Text>
               <Text style={{ fontSize: 12, color: '#3182ce', textAlign: 'center', marginBottom: 6, fontWeight: 'bold' }}>Station: {stationNameInput} ({stationGenreInput})</Text>
               <Text style={{ fontSize: 11, color: '#718096', textAlign: 'center', marginBottom: 14 }}>Your station application has been securely logged to Supabase with status <Text style={{ fontWeight: 'bold', color: '#d69e2e' }}>pending_admin_review</Text>.</Text>
               

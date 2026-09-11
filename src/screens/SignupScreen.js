@@ -14,7 +14,7 @@ import {
 } from 'react-native';
 import { supabase } from '../../Services/supabaseClient';
 
-export default function SignupScreen({ navigation, isDarkMode }) {
+export default function SignupScreen({ navigation, isDarkMode, coins, setCoins }) {
   const [email, setEmail] = useState('');
   const [otpCodeInput, setOtpCodeInput] = useState('');
   const [showOtpField, setShowOtpField] = useState(false);
@@ -50,7 +50,7 @@ export default function SignupScreen({ navigation, isDarkMode }) {
 
     setIsLoading(true);
 
-    const { data, error } = await supabase.auth.signInWithOtp({
+    const { error } = await supabase.auth.signInWithOtp({
       email: email.trim(),
       options: {
         data: {
@@ -67,6 +67,7 @@ export default function SignupScreen({ navigation, isDarkMode }) {
       Alert.alert('Signup Failed', error.message);
     } else {
       setShowOtpField(true);
+      if (setCoins) setCoins(c => c + 10); // Reward for initiating registration
       Alert.alert(
         'Verification Code Sent 📩',
         `A 6-digit verification code has been dispatched to ${email}. Please check your inbox!`
@@ -105,9 +106,10 @@ export default function SignupScreen({ navigation, isDarkMode }) {
     }
 
     setIsLoading(false);
+    if (setCoins) setCoins(c => c + 100); // Generous reward for successful signup & verification
 
     Alert.alert(
-      'Account Verified & Provisioned 🎉',
+      'Account Verified & Provisioned 🎉 (+100 🪙)',
       `Welcome aboard! Provisioned with role: ${selectedCreatorRole}.`
     );
 
@@ -127,7 +129,7 @@ export default function SignupScreen({ navigation, isDarkMode }) {
         nestedScrollEnabled={true}
       >
         <View style={styles.headerContainer}>
-          <Text style={[styles.title, isDarkMode && styles.darkText]}>🚀 Create ChatUp & Virtual TV Account</Text>
+          <Text style={[styles.title, isDarkMode && styles.darkText]}>🚀 Create ChatUp Account (Wallet: {coins} 🪙)</Text>
           <Text style={[styles.subtitle, isDarkMode && { color: '#a0aec0' }]}>
             Register your creator passport using secure Email OTP authentication.
           </Text>

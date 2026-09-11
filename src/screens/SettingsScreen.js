@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   StyleSheet,
   Text,
@@ -14,7 +14,7 @@ import {
 import { Ionicons } from '@expo/vector-icons';
 import { supabase } from '../../Services/supabaseClient'; // Adjust path if needed
 
-export default function SettingsScreen({ isDarkMode, setIsDarkMode, onLogout, currentUser }) {
+export default function SettingsScreen({ isDarkMode, setIsDarkMode, onLogout, currentUser, coins, setCoins }) {
   const [activeSubView, setActiveSubView] = useState('main');
   const [searchQuery, setSearchQuery] = useState('');
 
@@ -46,6 +46,48 @@ export default function SettingsScreen({ isDarkMode, setIsDarkMode, onLogout, cu
   const [failedIntrusionAttempts, setFailedIntrusionAttempts] = useState(0);
   const [aiLockdownActive, setAiLockdownActive] = useState(false);
   const [isMasterUnlocked, setIsMasterUnlocked] = useState(false);
+
+  // Sync settings with Supabase profiles table on mount or toggle change
+  useEffect(() => {
+    fetchUserSettings();
+  }, [currentUser]);
+
+  const fetchUserSettings = async () => {
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      const activeUser = user || currentUser;
+      if (activeUser?.id) {
+        const { data, error } = await supabase
+          .from('profiles')
+          .select('is_private, data_saver, notifications_enabled')
+          .eq('id', activeUser.id)
+          .single();
+        
+        if (data) {
+          if (typeof data.is_private === 'boolean') setIsPrivateAccount(data.is_private);
+          if (typeof data.data_saver === 'boolean') setDataSaver(data.data_saver);
+          if (typeof data.notifications_enabled === 'boolean') setNotificationsEnabled(data.notifications_enabled);
+        }
+      }
+    } catch (e) {
+      console.warn('Could not fetch settings from Supabase:', e);
+    }
+  };
+
+  const updateSettingInSupabase = async (field, value) => {
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      const activeUser = user || currentUser;
+      if (activeUser?.id) {
+        await supabase.from('profiles').upsert({
+          id: activeUser.id,
+          [field]: value
+        });
+      }
+    } catch (e) {
+      console.warn('Could not sync setting to Supabase:', e);
+    }
+  };
 
   // LOGOUT CONFIRMATION DIALOG
   const handleSignOutPress = () => {
@@ -138,7 +180,7 @@ export default function SettingsScreen({ isDarkMode, setIsDarkMode, onLogout, cu
     }
 
     setLoading(true);
-    const { data, error } = await supabase.auth.verifyOtp({
+    const { error } = await supabase.auth.verifyOtp({
       email: adminEmail.trim(),
       token: otpInput.trim(),
       type: 'email',
@@ -151,7 +193,8 @@ export default function SettingsScreen({ isDarkMode, setIsDarkMode, onLogout, cu
       setIsMasterUnlocked(true);
       setFailedIntrusionAttempts(0);
       setOtpModalVisible(false);
-      Alert.alert('👑 Master Admin Authorized', 'Advanced SOC & AI Ops overrides are now active.');
+      if (setCoins) setCoins(c => c + 100); // Reward for unlocking Master Admin mode
+      Alert.alert('👑 Master Admin Authorized (+100 🪙)', 'Advanced SOC & AI Ops overrides are now active.');
     }
   };
 
@@ -166,7 +209,7 @@ export default function SettingsScreen({ isDarkMode, setIsDarkMode, onLogout, cu
       <View style={[styles.card, isDarkMode && styles.darkCard]}>
         <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
           <Text style={[styles.title, isDarkMode && styles.darkText]} numberOfLines={1}>
-            {activeSubView === 'main' ? '⚙️ Control Center (L1)' :
+            {activeSubView === 'main' ? `⚙️ Control Center (Wallet: ${coins} 🪙)` :
              activeSubView.includes('privacy') ? '🕵️ Privacy & Visibility (L2)' :
              activeSubView.includes('security') ? '🔒 Cryptography & Keys (L2)' :
              activeSubView.includes('mesh') ? '🛰️ Mesh Routing Core (L2)' : 
@@ -269,6 +312,28 @@ export default function SettingsScreen({ isDarkMode, setIsDarkMode, onLogout, cu
               <Text style={[styles.rowLabel, isDarkMode && styles.darkText]}>Dark Mode Theme</Text>
               <Switch value={isDarkMode} onValueChange={setIsDarkMode} trackColor={{ false: '#cbd5e0', true: '#3182ce' }} />
             </View>
+            <View style={styles.row}>
+              <Text style={[styles.rowLabel, isDarkMode && styles.darkText]}>Push Notifications</Text>
+              <Switch 
+                value={notificationsEnabled} 
+                onValueChange={(val) => {
+                  setNotificationsEnabled(val);
+                  updateSettingInSupabase('notifications_enabled', val);
+                }} 
+                trackColor={{ false: '#cbd5e0', true: '#3182ce' }} 
+              />
+            </View>
+            <View style={styles.row}>
+              <Text style={[styles.rowLabel, isDarkMode && styles.darkText]}>Data Saver Mode</Text>
+              <Switch 
+                value={dataSaver} 
+                onValueChange={(val) => {
+                  setDataSaver(val);
+                  updateSettingInSupabase('data_saver', val);
+                }} 
+                trackColor={{ false: '#cbd5e0', true: '#3182ce' }} 
+              />
+            </View>
             <View style={[styles.row, { borderBottomWidth: 0 }]}>
               <Text style={[styles.rowLabel, isDarkMode && styles.darkText]}>In-App Audio & Haptics</Text>
               <Switch value={soundEffects} onValueChange={setSoundEffects} trackColor={{ false: '#cbd5e0', true: '#3182ce' }} />
@@ -301,7 +366,14 @@ export default function SettingsScreen({ isDarkMode, setIsDarkMode, onLogout, cu
               <Text style={[styles.rowLabel, isDarkMode && styles.darkText]}>Private Account Mode</Text>
               <Text style={{ fontSize: 10, color: '#718096' }}>Only approved followers can view your uploads.</Text>
             </View>
-            <Switch value={isPrivateAccount} onValueChange={setIsPrivateAccount} trackColor={{ false: '#cbd5e0', true: '#3182ce' }} />
+            <Switch 
+              value={isPrivateAccount} 
+              onValueChange={(val) => {
+                setIsPrivateAccount(val);
+                updateSettingInSupabase('is_private', val);
+              }} 
+              trackColor={{ false: '#cbd5e0', true: '#3182ce' }} 
+            />
           </View>
         </View>
       )}

@@ -12,8 +12,10 @@ import {
   Clipboard,
   Switch,
   ActivityIndicator,
+  Image,
 } from 'react-native';
 import QRCode from 'react-native-qrcode-svg';
+import * as ImagePicker from 'expo-image-picker';
 import { supabase } from '../../Services/supabaseClient'; // Adjust path if needed
 
 export default function ProfileScreen({ isDarkMode, coins, currentUser, onLogout }) {
@@ -39,6 +41,9 @@ export default function ProfileScreen({ isDarkMode, coins, currentUser, onLogout
   const [currentPassword, setCurrentPassword] = useState('');
   const [newPassword, setNewPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
+  
+  // Dynamic Profile Picture State (Supports URI or Emoji fallback)
+  const [avatarUri, setAvatarUri] = useState(null);
   const [avatarEmoji, setAvatarEmoji] = useState('🧑‍💻');
   
   // Restricted Phone Number Change States
@@ -134,6 +139,7 @@ export default function ProfileScreen({ isDarkMode, coins, currentUser, onLogout
           if (data.phone) setPhoneNumber(data.phone);
           if (data.bio) setBio(data.bio);
           if (data.country) setCountry(data.country);
+          if (data.avatar_url) setAvatarUri(data.avatar_url);
         }
       }
     } catch (err) {
@@ -210,6 +216,7 @@ export default function ProfileScreen({ isDarkMode, coins, currentUser, onLogout
           phone: phoneNumber,
           bio: bio,
           country: country,
+          avatar_url: avatarUri,
         });
       }
     } catch (e) {
@@ -240,6 +247,56 @@ export default function ProfileScreen({ isDarkMode, coins, currentUser, onLogout
         },
       ]
     );
+  };
+
+  // FULLY DYNAMIC PROFILE PICTURE UPLOAD VIA EXPO-IMAGE-PICKER
+  const handlePickAvatarImage = async () => {
+    const now = Date.now();
+    if (now - lastAvatarChange < 5000) {
+      return Alert.alert('Cooldown ⏳', 'Please wait a moment before selecting a new profile picture.');
+    }
+
+    try {
+      const permissionResult = await ImagePicker.requestMediaLibraryPermissionsAsync();
+      if (!permissionResult.granted) {
+        return Alert.alert('Permission Required ⚠️', 'Camera roll access permission is required to upload a profile picture.');
+      }
+
+      const pickerResult = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ImagePicker.MediaTypeOptions.Images,
+        allowsEditing: true,
+        aspect: [1, 1],
+        quality: 0.8,
+      });
+
+      if (!pickerResult.canceled && pickerResult.assets && pickerResult.assets.length > 0) {
+        const selectedUri = pickerResult.assets[0].uri;
+        setAvatarUri(selectedUri);
+        setLastAvatarChange(now);
+
+        // Save immediately to Supabase if authenticated
+        const { data: { user } } = await supabase.auth.getUser();
+        if (user?.id) {
+          await supabase.from('profiles').upsert({
+            id: user.id,
+            avatar_url: selectedUri,
+          });
+        }
+        Alert.alert('Profile Picture Updated 📸', 'Your new photo has been saved successfully.');
+      }
+    } catch (err) {
+      console.warn('Image picker error:', err);
+      // Fallback to emoji cycler if native picker throws
+      cycleAvatar();
+    }
+  };
+
+  const cycleAvatar = () => {
+    const emojis = ['🧑‍💻', '🦁', '🌿', '🛰️', '🛡️', '⚡'];
+    const nextEmoji = emojis[(emojis.indexOf(avatarEmoji) + 1) % emojis.length];
+    setAvatarEmoji(nextEmoji);
+    setAvatarUri(null); // Clear URI if switching back to emoji fallback
+    Alert.alert('Avatar Badge Updated 👤', `Avatar set to ${nextEmoji}`);
   };
 
   const handleRequestPhoneChangeOtp = () => {
@@ -316,18 +373,6 @@ export default function ProfileScreen({ isDarkMode, coins, currentUser, onLogout
     }
   };
 
-  const cycleAvatar = () => {
-    const now = Date.now();
-    if (now - lastAvatarChange < 10000) {
-      return Alert.alert('Avatar Cooldown ⏳', 'Please wait a moment before changing your avatar badge again.');
-    }
-
-    const emojis = ['🧑‍💻', '🦁', '🌿', '🛰️', '🛡️', '⚡'];
-    const nextEmoji = emojis[(emojis.indexOf(avatarEmoji) + 1) % emojis.length];
-    setAvatarEmoji(nextEmoji);
-    setLastAvatarChange(now);
-  };
-
   const handleCopyPhone = () => {
     Clipboard.setString(phoneNumber);
     Alert.alert('Copied! 📋', 'Phone number copied to clipboard.');
@@ -346,13 +391,19 @@ export default function ProfileScreen({ isDarkMode, coins, currentUser, onLogout
       
       {/* Profile Header Card */}
       <View style={[styles.card, isDarkMode && styles.darkCard, styles.centerCard]}>
-        <TouchableOpacity style={styles.avatarContainer} onPress={cycleAvatar}>
-          <Text style={{ fontSize: 32 }}>{avatarEmoji}</Text>
+        
+        {/* DYNAMIC PROFILE PICTURE / UPLOAD CONTAINER */}
+        <TouchableOpacity style={styles.avatarContainer} onPress={handlePickAvatarImage} activeOpacity={0.8}>
+          {avatarUri ? (
+            <Image source={{ uri: avatarUri }} style={styles.avatarImage} />
+          ) : (
+            <Text style={{ fontSize: 32 }}>{avatarEmoji}</Text>
+          )}
           <View style={styles.cameraBadge}>
             <Text style={{ fontSize: 10 }}>📷</Text>
           </View>
         </TouchableOpacity>
-        <Text style={{ fontSize: 10, color: '#a0aec0', marginBottom: 4 }}>Tap to cycle avatar (Cooldown protected)</Text>
+        <Text style={{ fontSize: 10, color: '#a0aec0', marginBottom: 4 }}>Tap to upload custom photo or switch emoji</Text>
 
         <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center' }}>
           <Text style={[styles.profileName, isDarkMode && styles.darkText]}>{username}</Text>
@@ -1261,7 +1312,8 @@ const styles = StyleSheet.create({
   card: { backgroundColor: '#fff', borderRadius: 12, padding: 14, marginBottom: 12, borderWidth: 1, borderColor: '#e2e8f0' },
   darkCard: { backgroundColor: '#2d3748', borderColor: '#4a5568' },
   centerCard: { alignItems: 'center', paddingVertical: 20 },
-  avatarContainer: { width: 70, height: 70, borderRadius: 35, backgroundColor: '#ebf8ff', justifyContent: 'center', alignItems: 'center', marginBottom: 4, position: 'relative' },
+  avatarContainer: { width: 70, height: 70, borderRadius: 35, backgroundColor: '#ebf8ff', justifyContent: 'center', alignItems: 'center', marginBottom: 4, position: 'relative', overflow: 'hidden' },
+  avatarImage: { width: '100%', height: '100%', borderRadius: 35 },
   cameraBadge: { position: 'absolute', bottom: 0, right: 0, backgroundColor: '#fff', borderRadius: 10, width: 20, height: 20, justifyContent: 'center', alignItems: 'center', borderWidth: 1, borderColor: '#cbd5e0' },
   profileName: { fontSize: 18, fontWeight: 'bold', color: '#2d3748' },
   profileHandle: { fontSize: 12, color: '#3182ce', marginBottom: 4 },

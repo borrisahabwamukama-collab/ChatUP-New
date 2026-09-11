@@ -17,6 +17,11 @@ import {
 } from 'react-native';
 import * as ImagePicker from 'expo-image-picker';
 import { CameraView, useCameraPermissions } from 'expo-camera';
+import { BannerAd, BannerAdSize, TestIds, RewardedAd, RewardedAdEventType, AdEventType } from 'react-native-google-mobile-ads';
+
+// Dynamic ad unit IDs (automatically uses Google Test IDs during development)
+const bannerAdUnitId = __DEV__ ? TestIds.BANNER : 'ca-app-pub-xxxxxxxxoxxxxxxx/xxxxxxxxxx';
+const rewardedAdUnitId = __DEV__ ? TestIds.REWARDED : 'ca-app-pub-xxxxxxxxoxxxxxxx/xxxxxxxxxx';
 
 export default function DiscoveryWalletScreen({ isDarkMode }) {
   // Navigation & Sub-Tabs State
@@ -30,6 +35,11 @@ export default function DiscoveryWalletScreen({ isDarkMode }) {
 
   // Geofenced Radius State (e.g., 3km, 10km, 50km, Global)
   const [geofenceRadius, setGeofenceRadius] = useState(10); // in km
+
+  // Monetization & Rewarded Ad States
+  const [rewardedAdLoaded, setRewardedAdLoaded] = useState(false);
+  const [rewardedAdInstance, setRewardedAdInstance] = useState(null);
+  const [userAdEarningsBalance, setUserAdEarningsBalance] = useState(12500); // UGX Creator Ad Earnings
 
   // Overlays & Modal Controls
   const [matrixMenuVisible, setMatrixMenuVisible] = useState(false);
@@ -99,6 +109,47 @@ export default function DiscoveryWalletScreen({ isDarkMode }) {
 
   // Double-tap animation scale ref
   const heartScale = useRef(new Animated.Value(0)).current;
+
+  // Initialize Dynamic Rewarded Ad Loader
+  useEffect(() => {
+    try {
+      const rewardedAd = RewardedAd.createForAdRequest(rewardedAdUnitId, {
+        requestNonPersonalizedAdsOnly: true,
+      });
+
+      const unsubscribeLoaded = rewardedAd.addAdEventListener(RewardedAdEventType.LOADED, () => {
+        setRewardedAdLoaded(true);
+      });
+
+      const unsubscribeEarned = rewardedAd.addAdEventListener(RewardedAdEventType.EARNED_REWARD, (reward) => {
+        setUserAdEarningsBalance(prev => prev + 2500);
+        Alert.alert('💰 Ad Reward Credited!', `Successfully earned +2500 UGX creator ad bounty! Total balance: ${userAdEarningsBalance + 2500} UGX`);
+      });
+
+      rewardedAd.load();
+      setRewardedAdInstance(rewardedAd);
+
+      return () => {
+        unsubscribeLoaded();
+        unsubscribeEarned();
+      };
+    } catch (e) {
+      console.log('Rewarded Ad initialization notice:', e);
+    }
+  }, []);
+
+  const handleShowRewardedAd = () => {
+    if (rewardedAdLoaded && rewardedAdInstance) {
+      rewardedAdInstance.show();
+      setRewardedAdLoaded(false);
+      // Reload next ad
+      rewardedAdInstance.load();
+    } else {
+      // Fallback simulation if native ad network is loading or running in web preview
+      setUserAdEarningsBalance(prev => prev + 2500);
+      Alert.alert('💰 Ad Reward Credited (Simulated)', 'Watch ad completed! +2500 UGX added to your creator earnings balance.');
+    }
+  };
 
   // Recording Timer Effect
   useEffect(() => {
@@ -264,21 +315,34 @@ export default function DiscoveryWalletScreen({ isDarkMode }) {
     Alert.alert('Boost Active 🚀', 'Payment verified! Your video is now promoted across regional mesh nodes for 24 hours.');
   };
 
-  // Camera & Recording Handlers
+  // Fully dynamic camera & video recording handlers using Expo Camera
   const toggleCameraFacing = () => {
     setFacing(current => (current === 'back' ? 'front' : 'back'));
   };
 
-  const handleStartRecording = () => {
-    setIsRecording(true);
+  const handleStartRecording = async () => {
+    if (!cameraRef.current) return;
+    try {
+      setIsRecording(true);
+      const videoRecordPromise = cameraRef.current.recordAsync({ maxDuration: 180 });
+      const data = await videoRecordPromise;
+      if (data && data.uri) {
+        setCapturedMediaUri(data.uri);
+        setCreatorStudioModalVisible(true);
+      }
+    } catch (error) {
+      console.log('Recording error:', error);
+      Alert.alert('Recording Error', 'Could not complete video recording.');
+    } finally {
+      setIsRecording(false);
+    }
   };
 
   const handleStopRecording = () => {
-    setIsRecording(false);
-    const mockRecordedUri = 'https://images.unsplash.com/photo-1516426122078-c23e76319801?q=80&w=1000&auto=format&fit=crop';
-    setCapturedMediaUri(mockRecordedUri);
-    setCameraModalVisible(false);
-    setCreatorStudioModalVisible(true);
+    if (cameraRef.current && isRecording) {
+      cameraRef.current.stopRecording();
+      setIsRecording(false);
+    }
   };
 
   const handlePickFileFromDevice = async () => {
@@ -581,6 +645,35 @@ export default function DiscoveryWalletScreen({ isDarkMode }) {
       <ScrollView contentContainerStyle={styles.mainLayout} showsVerticalScrollIndicator={false}>
         <View style={styles.centerFeed}>
 
+          {/* Dynamic Google AdMob Banner Integration */}
+          <View style={styles.monetizationAdCard}>
+            <Text style={styles.adTagLabel}>Sponsored Ad 📢 • AdMob Dynamic Banner</Text>
+            <View style={{ alignItems: 'center', marginVertical: 4 }}>
+              <BannerAd
+                unitId={bannerAdUnitId}
+                size={BannerAdSize.ANCHORED_ADAPTIVE_BANNER}
+                requestOptions={{
+                  requestNonPersonalizedAdsOnly: true,
+                }}
+                onAdLoaded={() => console.log('AdMob Banner loaded successfully')}
+                onAdFailedToLoad={(error) => console.log('AdMob Banner load error: ', error)}
+              />
+            </View>
+          </View>
+
+          {/* Rewarded Ad Creator Earning Widget */}
+          <View style={styles.creatorMonetizationCard}>
+            <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
+              <View>
+                <Text style={{ fontSize: 12, fontWeight: 'bold', color: '#2b6cb0' }}>🪙 Creator Ad Earnings Balance</Text>
+                <Text style={{ fontSize: 16, fontWeight: 'bold', color: '#2d3748', marginTop: 2 }}>{userAdEarningsBalance.toLocaleString()} UGX (~${(userAdEarningsBalance / 3700).toFixed(2)})</Text>
+              </View>
+              <TouchableOpacity style={styles.watchRewardAdBtn} onPress={handleShowRewardedAd}>
+                <Text style={{ color: '#fff', fontSize: 11, fontWeight: 'bold' }}>Watch Ad (+2500 UGX) 🎁</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+
           {/* Geofencing Radius Selector Bar */}
           <View style={styles.geofenceControlBar}>
             <Text style={{ fontSize: 11, fontWeight: 'bold', color: '#2b6cb0' }}>📍 Geofence Radius Filter: {geofenceRadius} km</Text>
@@ -849,11 +942,11 @@ export default function DiscoveryWalletScreen({ isDarkMode }) {
         </View>
       </ScrollView>
 
-      {/* ================= MODAL 1: CAMERA RECORDING SCREEN ================= */}
+      {/* ================= MODAL 1: FULLY FUNCTIONAL CAMERA RECORDING SCREEN ================= */}
       <Modal visible={cameraModalVisible} animationType="slide">
         <View style={{ flex: 1, backgroundColor: '#000' }}>
           {cameraPermission?.granted ? (
-            <CameraView style={{ flex: 1 }} facing={facing} ref={cameraRef}>
+            <CameraView style={{ flex: 1 }} facing={facing} ref={cameraRef} mode="video">
               <View style={styles.cameraOverlayControls}>
                 <View style={styles.cameraTopRow}>
                   <TouchableOpacity style={styles.camIconBtn} onPress={() => setCameraModalVisible(false)}>
@@ -1343,6 +1436,12 @@ const styles = StyleSheet.create({
 
   mainLayout: { padding: 12, maxWidth: 650, width: '100%', alignSelf: 'center' },
   centerFeed: { width: '100%' },
+
+  // Monetization Ad Styles
+  monetizationAdCard: { backgroundColor: '#fff', borderWidth: 1, borderColor: '#e2e8f0', borderRadius: 8, padding: 8, marginBottom: 10, alignItems: 'center' },
+  adTagLabel: { fontSize: 9, color: '#a0aec0', textTransform: 'uppercase', fontWeight: 'bold', marginBottom: 2 },
+  creatorMonetizationCard: { backgroundColor: '#ebf8ff', borderWidth: 1, borderColor: '#bee3f8', borderRadius: 8, padding: 10, marginBottom: 10 },
+  watchRewardAdBtn: { backgroundColor: '#3182ce', paddingHorizontal: 10, paddingVertical: 6, borderRadius: 6 },
 
   geofenceControlBar: { backgroundColor: '#ebf8ff', borderWidth: 1, borderColor: '#bee3f8', borderRadius: 8, padding: 8, marginBottom: 10 },
   radiusPill: { backgroundColor: '#fff', paddingHorizontal: 8, paddingVertical: 3, borderRadius: 10, marginRight: 6, borderWidth: 1, borderColor: '#cbd5e0' },

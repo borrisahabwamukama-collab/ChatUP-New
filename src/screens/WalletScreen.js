@@ -8,11 +8,13 @@ import {
   ScrollView,
   Alert,
   Switch,
+  Modal,
+  ActivityIndicator,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 
 export default function WalletScreen({ isDarkMode, coins, setCoins }) {
-  // Architecture Tier State ('root', 'payout', 'staking', 'history', 'security', 'savedAccounts')
+  // Architecture Tier State ('root', 'payout', 'staking', 'history', 'security', 'savedAccounts', 'peerTransfer')
   const [activeSubView, setActiveSubView] = useState('root');
 
   // Wallet & Withdrawal States
@@ -37,6 +39,24 @@ export default function WalletScreen({ isDarkMode, coins, setCoins }) {
   const [stakeAmount, setStakeAmount] = useState('');
   const [stakedBalance, setStakedBalance] = useState(500);
   const [stakingDuration, setStakingDuration] = useState('30 Days (8% APY)');
+
+  // Peer-to-Peer (P2P) Instant Transfer States
+  const [transferRecipient, setTransferRecipient] = useState('');
+  const [transferAmount, setTransferAmount] = useState('');
+  const [transferNote, setTransferNote] = useState('');
+
+  // Transaction Ledger & Filter States
+  const [ledgerTransactions, setLedgerTransactions] = useState([
+    { id: 'tx_1', type: 'Mobile Money Payout', category: 'Withdrawal', date: '24 Aug 2026', identifier: '+256 770******', amount: -1000, status: 'Completed ✅' },
+    { id: 'tx_2', type: 'Yield Staking Reward', category: 'Staking', date: '18 Aug 2026', identifier: '30-Day APY Pool', amount: 40, status: 'Credited 🪙' },
+    { id: 'tx_3', type: 'Live Stream Super Gift', category: 'Incoming', date: '15 Aug 2026', identifier: 'Elephant Super Gift', amount: 250, status: 'Received 🎉' },
+  ]);
+  const [ledgerSearchQuery, setLedgerSearchQuery] = useState('');
+  const [ledgerFilterCategory, setLedgerFilterCategory] = useState('All');
+
+  // PIN Confirmation Modal State for Withdrawals
+  const [showPinModal, setShowPinModal] = useState(false);
+  const [securityPinInput, setSecurityPinInput] = useState('');
 
   // Granular Security & Ledger Settings (Level 3/4)
   const [requirePinForWithdrawal, setRequirePinForWithdrawal] = useState(true);
@@ -70,7 +90,7 @@ export default function WalletScreen({ isDarkMode, coins, setCoins }) {
   const coinToCashRate = 100; // UGX per coin
   const totalCashValue = coins * coinToCashRate;
 
-  const handleRequestWithdrawal = () => {
+  const handleTriggerWithdrawalValidation = () => {
     const amountToWithdraw = parseInt(withdrawalAmount);
     
     if (!amountToWithdraw || amountToWithdraw <= 0) {
@@ -83,15 +103,39 @@ export default function WalletScreen({ isDarkMode, coins, setCoins }) {
       return Alert.alert('Error', 'Please select or enter your mobile money number or bank account details.');
     }
 
+    if (requirePinForWithdrawal) {
+      setShowPinModal(true);
+    } else {
+      executeWithdrawal();
+    }
+  };
+
+  const executeWithdrawal = () => {
+    const amountToWithdraw = parseInt(withdrawalAmount);
+    setShowPinModal(false);
+    setSecurityPinInput('');
     setIsProcessing(true);
+
     setTimeout(() => {
       setIsProcessing(false);
       setCoins(c => c - amountToWithdraw);
+      
+      const newTx = {
+        id: 'tx_' + Date.now(),
+        type: `${payoutMethod} Payout`,
+        category: 'Withdrawal',
+        date: 'Just now',
+        identifier: accountNumber,
+        amount: -amountToWithdraw,
+        status: 'Completed ✅',
+      };
+      setLedgerTransactions(prev => [newTx, ...prev]);
+
       setWithdrawalAmount('');
       setAccountNumber('');
       Alert.alert(
         'Withdrawal Requested Successfully! 💸', 
-        `Your payout request for 🪙 ${amountToWithdraw} coins (Approx. ${totalCashValue.toLocaleString()} UGX) via ${payoutMethod} (${accountNumber}) has been submitted for instant mobile money dispatch.`
+        `Your payout request for 🪙 ${amountToWithdraw} coins (Approx. ${(amountToWithdraw * coinToCashRate).toLocaleString()} UGX) via ${payoutMethod} (${accountNumber}) has been submitted for instant mobile money dispatch.`
       );
     }, 1000);
   };
@@ -127,22 +171,69 @@ export default function WalletScreen({ isDarkMode, coins, setCoins }) {
 
     setCoins(c => c - amountToStake);
     setStakedBalance(prev => prev + amountToStake);
+    
+    const newTx = {
+      id: 'tx_' + Date.now(),
+      type: `Staked in ${stakingDuration}`,
+      category: 'Staking',
+      date: 'Just now',
+      identifier: 'Yield Pool Lock',
+      amount: -amountToStake,
+      status: 'Staked 🔒',
+    };
+    setLedgerTransactions(prev => [newTx, ...prev]);
+
     setStakeAmount('');
-    Alert.alert('Staking Successful 🔒', `Successfully locked 🪙 ${amountToStake} coins into the ${stakingDuration} yield pool.`);
+    Alert.alert('Staking Successful 🔒 (+25 🪙 Bonus)', `Successfully locked 🪙 ${amountToStake} coins into the ${stakingDuration} yield pool.`);
   };
 
+  const handlePeerTransfer = () => {
+    const amt = parseInt(transferAmount);
+    if (!transferRecipient.trim() || !amt || amt <= 0) {
+      return Alert.alert('Error', 'Please enter a valid recipient username/phone and transfer amount.');
+    }
+    if (amt > coins) {
+      return Alert.alert('Insufficient Balance', 'You cannot transfer more coins than your available balance.');
+    }
+
+    setCoins(c => c - amt);
+    const newTx = {
+      id: 'tx_' + Date.now(),
+      type: `P2P Transfer to ${transferRecipient}`,
+      category: 'Transfer',
+      date: 'Just now',
+      identifier: transferNote || 'Direct ChatUp Transfer',
+      amount: -amt,
+      status: 'Transferred 🚀',
+    };
+    setLedgerTransactions(prev => [newTx, ...prev]);
+    setTransferRecipient('');
+    setTransferAmount('');
+    setTransferNote('');
+    Alert.alert('Transfer Successful! 🚀', `Successfully sent 🪙 ${amt} coins to ${transferRecipient}!`);
+    setActiveSubView('root');
+  };
+
+  const filteredTransactions = ledgerTransactions.filter(tx => {
+    const matchesSearch = tx.type.toLowerCase().includes(ledgerSearchQuery.toLowerCase()) ||
+                          tx.identifier.toLowerCase().includes(ledgerSearchQuery.toLowerCase());
+    const matchesCategory = ledgerFilterCategory === 'All' || tx.category === ledgerFilterCategory;
+    return matchesSearch && matchesCategory;
+  });
+
   return (
-    <ScrollView style={[styles.container, isDarkMode && styles.darkContainer]} contentContainerStyle={{ padding: 15, paddingBottom: 50 }}>
+    <ScrollView style={[styles.container, isDarkMode && styles.darkContainer]} contentContainerStyle={{ padding: 15, paddingBottom: 160 }}>
       
       {/* Dynamic Multi-Tier Header & Breadcrumb Navigation Bar */}
       <View style={[styles.card, isDarkMode && styles.darkCard]}>
         <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
           <Text style={[styles.title, isDarkMode && styles.darkText]} numberOfLines={1}>
-            {activeSubView === 'root' ? '🪙 Financial Treasury (Level 1)' :
-             activeSubView === 'payout' ? '💸 Payout & Mobile Money (Level 2)' :
-             activeSubView === 'savedAccounts' ? '🏦 Saved Accounts & Mobile Money (Level 2)' :
-             activeSubView === 'staking' ? '📈 Creator Yield Staking (Level 2)' :
-             activeSubView === 'history' ? '📜 Ledger & Transactions (Level 2)' : '🛡️ Vault Security & Limits (Level 3)'}
+            {activeSubView === 'root' ? `🪙 Financial Treasury (Wallet: ${coins} 🪙)` :
+             activeSubView === 'payout' ? '💸 Payout & Mobile Money' :
+             activeSubView === 'savedAccounts' ? '🏦 Saved Accounts & Mobile Money' :
+             activeSubView === 'staking' ? '📈 Creator Yield Staking' :
+             activeSubView === 'history' ? '📜 Ledger & Transactions' :
+             activeSubView === 'peerTransfer' ? '🚀 P2P Instant Transfer' : '🛡️ Vault Security & Limits'}
           </Text>
           {activeSubView !== 'root' && (
             <TouchableOpacity onPress={() => setActiveSubView('root')} style={styles.backButton}>
@@ -214,12 +305,15 @@ export default function WalletScreen({ isDarkMode, coins, setCoins }) {
             <Text style={{ fontSize: 13, color: isDarkMode ? '#a0aec0' : '#4a5568', fontWeight: 'bold', marginBottom: 12 }}>
               Estimated Value: ≈ {totalCashValue.toLocaleString()} UGX
             </Text>
-            <View style={{ flexDirection: 'row', gap: 10, width: '100%' }}>
+            <View style={{ flexDirection: 'row', gap: 8, width: '100%' }}>
               <TouchableOpacity style={[styles.actionBtn, { backgroundColor: '#3182ce', flex: 1 }]} onPress={() => setActiveSubView('payout')}>
-                <Text style={{ color: '#fff', fontSize: 12, fontWeight: 'bold' }}>Withdraw Funds 💸</Text>
+                <Text style={{ color: '#fff', fontSize: 11, fontWeight: 'bold' }}>Withdraw 💸</Text>
               </TouchableOpacity>
               <TouchableOpacity style={[styles.actionBtn, { backgroundColor: '#d69e2e', flex: 1 }]} onPress={() => setActiveSubView('staking')}>
-                <Text style={{ color: '#fff', fontSize: 12, fontWeight: 'bold' }}>Stake & Earn 📈</Text>
+                <Text style={{ color: '#fff', fontSize: 11, fontWeight: 'bold' }}>Stake 📈</Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={[styles.actionBtn, { backgroundColor: '#38a169', flex: 1 }]} onPress={() => setActiveSubView('peerTransfer')}>
+                <Text style={{ color: '#fff', fontSize: 11, fontWeight: 'bold' }}>Transfer 🚀</Text>
               </TouchableOpacity>
             </View>
           </View>
@@ -258,12 +352,23 @@ export default function WalletScreen({ isDarkMode, coins, setCoins }) {
             <Ionicons name="chevron-forward" size={18} color="#a0aec0" />
           </TouchableOpacity>
 
+          <TouchableOpacity style={[styles.navCard, isDarkMode && styles.darkCard]} onPress={() => setActiveSubView('peerTransfer')}>
+            <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+              <Text style={{ fontSize: 20, marginRight: 12 }}>🚀</Text>
+              <View style={{ flex: 1 }}>
+                <Text style={[styles.navTitle, isDarkMode && styles.darkText]}>P2P Instant Coin Transfer</Text>
+                <Text style={styles.navSub}>Sub-Modules: Send coins instantly to creators and community members</Text>
+              </View>
+            </View>
+            <Ionicons name="chevron-forward" size={18} color="#a0aec0" />
+          </TouchableOpacity>
+
           <TouchableOpacity style={[styles.navCard, isDarkMode && styles.darkCard]} onPress={() => setActiveSubView('history')}>
             <View style={{ flexDirection: 'row', alignItems: 'center' }}>
               <Text style={{ fontSize: 20, marginRight: 12 }}>📜</Text>
               <View style={{ flex: 1 }}>
                 <Text style={[styles.navTitle, isDarkMode && styles.darkText]}>Ledger & Transaction History</Text>
-                <Text style={styles.navSub}>Sub-Modules: Completed payouts, escrow releases, tipping audits</Text>
+                <Text style={styles.navSub}>Sub-Modules: Completed payouts, escrow releases, search & filter</Text>
               </View>
             </View>
             <Ionicons name="chevron-forward" size={18} color="#a0aec0" />
@@ -329,7 +434,7 @@ export default function WalletScreen({ isDarkMode, coins, setCoins }) {
             <Text style={{ color: '#3182ce', fontSize: 11, fontWeight: 'bold' }}>+ Register New Mobile Money / Bank Account</Text>
           </TouchableOpacity>
 
-          <TouchableOpacity style={[styles.sendButton, { backgroundColor: '#48bb78', paddingVertical: 12, marginTop: 6 }]} onPress={handleRequestWithdrawal} disabled={isProcessing}>
+          <TouchableOpacity style={[styles.sendButton, { backgroundColor: '#48bb78', paddingVertical: 12, marginTop: 6 }]} onPress={handleTriggerWithdrawalValidation} disabled={isProcessing}>
             <Text style={styles.sendButtonText}>
               {isProcessing ? 'Processing Payout Request...' : 'Request Payout 🚀'}
             </Text>
@@ -398,7 +503,7 @@ export default function WalletScreen({ isDarkMode, coins, setCoins }) {
       {activeSubView === 'staking' && (
         <View style={[styles.card, isDarkMode && styles.darkCard]}>
           <Text style={[styles.cardTitle, isDarkMode && styles.darkText]}>📈 Level 2: Creator Yield Staking Pool</Text>
-          <Text style={{ fontSize: 11, color: '#718096', marginBottom: 10 }}>Lock platform coins to earn passive yield rewards and boost creator visibility.</Text>
+          <Text style={{ fontSize: 11, color: '#718096', marginBottom: 10 }}>Lock platform coins to earn passive yield rewards (+25 🪙 bonus) and boost creator visibility.</Text>
           
           <View style={{ backgroundColor: isDarkMode ? '#1a202c' : '#f7fafc', padding: 12, borderRadius: 8, marginBottom: 12 }}>
             <Text style={{ fontSize: 11, color: '#718096' }}>Currently Staked Balance:</Text>
@@ -429,7 +534,47 @@ export default function WalletScreen({ isDarkMode, coins, setCoins }) {
           </View>
 
           <TouchableOpacity style={[styles.sendButton, { backgroundColor: '#d69e2e', paddingVertical: 12 }]} onPress={handleStakeCoins}>
-            <Text style={styles.sendButtonText}>Lock & Stake Coins 🔒</Text>
+            <Text style={styles.sendButtonText}>Lock & Stake Coins 🔒 (+25 🪙)</Text>
+          </TouchableOpacity>
+        </View>
+      )}
+
+      {/* ================= LEVEL 2: P2P INSTANT COIN TRANSFER ================= */}
+      {activeSubView === 'peerTransfer' && (
+        <View style={[styles.card, isDarkMode && styles.darkCard]}>
+          <Text style={[styles.cardTitle, isDarkMode && styles.darkText]}>🚀 P2P Instant Coin Transfer</Text>
+          <Text style={{ fontSize: 11, color: '#718096', marginBottom: 12 }}>Transfer coins instantly to other ChatUp users or community members:</Text>
+
+          <Text style={styles.inputLabel}>Recipient Username or Phone:</Text>
+          <TextInput
+            style={[styles.chatInput, isDarkMode && styles.darkChatInput]}
+            placeholder="e.g. Nimusiima Asifa or +256..."
+            placeholderTextColor="#a0aec0"
+            value={transferRecipient}
+            onChangeText={setTransferRecipient}
+          />
+
+          <Text style={styles.inputLabel}>Amount of Coins:</Text>
+          <TextInput
+            style={[styles.chatInput, isDarkMode && styles.darkChatInput]}
+            placeholder="Enter coin amount..."
+            placeholderTextColor="#a0aec0"
+            keyboardType="numeric"
+            value={transferAmount}
+            onChangeText={setTransferAmount}
+          />
+
+          <Text style={styles.inputLabel}>Transfer Note (Optional):</Text>
+          <TextInput
+            style={[styles.chatInput, { marginBottom: 14 }, isDarkMode && styles.darkChatInput]}
+            placeholder="e.g. Coffee tip for live stream..."
+            placeholderTextColor="#a0aec0"
+            value={transferNote}
+            onChangeText={setTransferNote}
+          />
+
+          <TouchableOpacity style={[styles.sendButton, { backgroundColor: '#38a169', paddingVertical: 12 }]} onPress={handlePeerTransfer}>
+            <Text style={styles.sendButtonText}>Send Coins Instantly 🚀</Text>
           </TouchableOpacity>
         </View>
       )}
@@ -439,27 +584,44 @@ export default function WalletScreen({ isDarkMode, coins, setCoins }) {
         <View style={[styles.card, isDarkMode && styles.darkCard]}>
           <Text style={[styles.cardTitle, isDarkMode && styles.darkText]}>📜 Level 2: Audit & Payout Ledgers</Text>
           
-          <View style={[styles.ledgerRow, isDarkMode && { backgroundColor: '#1a202c', borderColor: '#4a5568' }]}>
-            <View>
-              <Text style={[{ fontSize: 12, fontWeight: 'bold' }, isDarkMode && styles.darkText]}>Mobile Money (MTN)</Text>
-              <Text style={{ fontSize: 10, color: '#718096' }}>24 Aug 2026 • +256 770******</Text>
-            </View>
-            <View style={{ alignItems: 'flex-end' }}>
-              <Text style={{ fontSize: 12, fontWeight: 'bold', color: '#48bb78' }}>-🪙 1,000 Coins</Text>
-              <Text style={{ fontSize: 10, color: '#38a169', fontWeight: 'bold' }}>Completed ✅</Text>
-            </View>
+          <TextInput
+            style={[styles.chatInput, { marginBottom: 8 }, isDarkMode && styles.darkChatInput]}
+            placeholder="Search transactions..."
+            placeholderTextColor="#a0aec0"
+            value={ledgerSearchQuery}
+            onChangeText={setLedgerSearchQuery}
+          />
+
+          <View style={{ flexDirection: 'row', flexWrap: 'wrap', marginBottom: 10 }}>
+            {['All', 'Withdrawal', 'Staking', 'Incoming', 'Transfer'].map(cat => (
+              <TouchableOpacity
+                key={cat}
+                style={[styles.methodBtn, ledgerFilterCategory === cat && { backgroundColor: '#3182ce' }, { marginRight: 4, marginBottom: 4, flex: 0, paddingHorizontal: 10 }]}
+                onPress={() => setLedgerFilterCategory(cat)}
+              >
+                <Text style={{ fontSize: 10, fontWeight: 'bold', color: ledgerFilterCategory === cat ? '#fff' : '#4a5568' }}>{cat}</Text>
+              </TouchableOpacity>
+            ))}
           </View>
 
-          <View style={[styles.ledgerRow, isDarkMode && { backgroundColor: '#1a202c', borderColor: '#4a5568' }]}>
-            <View>
-              <Text style={[{ fontSize: 12, fontWeight: 'bold' }, isDarkMode && styles.darkText]}>Yield Staking Reward</Text>
-              <Text style={{ fontSize: 10, color: '#718096' }}>18 Aug 2026 • 30-Day APY Payout</Text>
-            </View>
-            <View style={{ alignItems: 'flex-end' }}>
-              <Text style={{ fontSize: 12, fontWeight: 'bold', color: '#d69e2e' }}>+🪙 40 Coins</Text>
-              <Text style={{ fontSize: 10, color: '#38a169', fontWeight: 'bold' }}>Credited 🪙</Text>
-            </View>
-          </View>
+          {filteredTransactions.length === 0 ? (
+            <Text style={{ fontSize: 11, fontStyle: 'italic', color: '#718096', textAlign: 'center', padding: 15 }}>No transactions match your search.</Text>
+          ) : (
+            filteredTransactions.map(tx => (
+              <View key={tx.id} style={[styles.ledgerRow, isDarkMode && { backgroundColor: '#1a202c', borderColor: '#4a5568' }]}>
+                <View>
+                  <Text style={[{ fontSize: 12, fontWeight: 'bold' }, isDarkMode && styles.darkText]}>{tx.type}</Text>
+                  <Text style={{ fontSize: 10, color: '#718096' }}>{tx.date} • {tx.identifier}</Text>
+                </View>
+                <View style={{ alignItems: 'flex-end' }}>
+                  <Text style={{ fontSize: 12, fontWeight: 'bold', color: tx.amount < 0 ? '#e53e3e' : '#48bb78' }}>
+                    {tx.amount < 0 ? `${tx.amount} Coins` : `+${tx.amount} Coins`}
+                  </Text>
+                  <Text style={{ fontSize: 10, color: '#38a169', fontWeight: 'bold' }}>{tx.status}</Text>
+                </View>
+              </View>
+            ))
+          )}
         </View>
       )}
 
@@ -493,6 +655,39 @@ export default function WalletScreen({ isDarkMode, coins, setCoins }) {
           </View>
         </View>
       )}
+
+      {/* PIN CONFIRMATION MODAL FOR WITHDRAWALS */}
+      <Modal visible={showPinModal} transparent animationType="slide">
+        <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: 'rgba(0,0,0,0.6)', padding: 20 }}>
+          <View style={{ backgroundColor: isDarkMode ? '#2d3748' : '#fff', padding: 20, borderRadius: 12, width: '100%', maxWidth: 320, alignItems: 'center' }}>
+            <Text style={{ fontSize: 32, marginBottom: 8 }}>🔐</Text>
+            <Text style={[styles.cardTitle, isDarkMode && styles.darkText, { fontSize: 15, textAlign: 'center' }]}>Enter Security Vault PIN</Text>
+            <Text style={{ fontSize: 11, color: '#718096', textAlign: 'center', marginBottom: 12 }}>Please enter your 4-digit security PIN to authorize withdrawal of 🪙 {withdrawalAmount} coins.</Text>
+
+            <TextInput
+              style={[styles.chatInput, { width: '100%', textAlign: 'center', fontSize: 18, letterSpacing: 6 }, isDarkMode && styles.darkChatInput]}
+              placeholder="••••"
+              placeholderTextColor="#a0aec0"
+              keyboardType="numeric"
+              secureTextEntry
+              maxLength={4}
+              value={securityPinInput}
+              onChangeText={setSecurityPinInput}
+            />
+
+            <TouchableOpacity 
+              style={[styles.sendButton, { backgroundColor: '#38a169', width: '100%', marginBottom: 8, paddingVertical: 12 }]} 
+              onPress={executeWithdrawal}
+            >
+              <Text style={styles.sendButtonText}>Confirm & Dispatch Payout 💸</Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity style={[styles.sendButton, { backgroundColor: '#e53e3e', width: '100%', paddingVertical: 10 }]} onPress={() => setShowPinModal(false)}>
+              <Text style={styles.sendButtonText}>Cancel</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
 
     </ScrollView>
   );

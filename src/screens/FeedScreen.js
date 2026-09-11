@@ -14,15 +14,24 @@ import {
   Dimensions,
   Platform,
   TouchableWithoutFeedback,
-  Share
+  Share,
+  FlatList
 } from 'react-native';
 import { createClient } from '@supabase/supabase-js';
+import * as ImagePicker from 'expo-image-picker';
+import * as Clipboard from 'expo-clipboard';
+import * as Network from 'expo-network';
+import { BannerAd, BannerAdSize, TestIds, RewardedAd, RewardedAdEventType } from 'react-native-google-mobile-ads';
 
 const SUPABASE_URL = 'https://kwktegtjowrurgdsvafv.supabase.co';
 const SUPABASE_ANON_KEY = 'sb_publishable_eNIiOZ0ZrsigF0Mo6DJQyg_XgtpKx1L';
 const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
 const { height: SCREEN_HEIGHT, width: SCREEN_WIDTH } = Dimensions.get('window');
+
+// Dynamic Google AdMob Unit IDs (Automatic Test IDs during development)
+const bannerAdUnitId = __DEV__ ? TestIds.BANNER : 'ca-app-pub-xxxxxxxxoxxxxxxx/xxxxxxxxxx';
+const rewardedAdUnitId = __DEV__ ? TestIds.REWARDED : 'ca-app-pub-xxxxxxxxoxxxxxxx/xxxxxxxxxx';
 
 // ================= TIKTOK-STYLE REELS SUB-SCREEN =================
 function ReelsFeedView({ isDarkMode }) {
@@ -248,7 +257,7 @@ function ReelsFeedView({ isDarkMode }) {
                 placeholder="Add a comment..."
                 placeholderTextColor="#a0aec0"
                 value={newCommentText}
-                onChangeText={setNewCommentText}
+                onChangeText={newCommentText}
               />
               <TouchableOpacity style={reelsStyles.commentSendBtn} onPress={handleSendComment}>
                 <Text style={{ color: '#fff', fontWeight: 'bold', fontSize: 11 }}>Post</Text>
@@ -285,6 +294,11 @@ export default function FeedScreen({ isDarkMode }) {
   // Reels Modal State
   const [showReelsModal, setShowReelsModal] = useState(false);
 
+  // Monetization & Rewarded Ad States
+  const [rewardedAdLoaded, setRewardedAdLoaded] = useState(false);
+  const [rewardedAdInstance, setRewardedAdInstance] = useState(null);
+  const [userAdEarningsBalance, setUserAdEarningsBalance] = useState(12500); // UGX Creator Ad Earnings
+
   // Pro Feed Editor Suite States (Always Visible)
   const [selectedEffect, setSelectedEffect] = useState('TikTok Cinematic Glow ✨');
   const [selectedFilter, setSelectedFilter] = useState('Nature Vibrant 🌿');
@@ -292,7 +306,7 @@ export default function FeedScreen({ isDarkMode }) {
   const [trimSpeedSetting, setTrimSpeedSetting] = useState('1.0x (Normal)');
   const [voiceOverStudioActive, setVoiceOverStudioActive] = useState(false);
 
-  // ================= NEW SUPER-LAYERS (10 ADVANCED MODULES) =================
+  // ================= 10 ADVANCED SUPER-LAYERS (10 ADVANCED MODULES) =================
   const [quantumPostCryptoActive, setQuantumPostCryptoActive] = useState(true);
   const [kampalaEdgeMeshRelay, setKampalaEdgeMeshRelay] = useState(true);
   const [aiToxicityShieldActive, setAiToxicityShieldActive] = useState(true);
@@ -304,13 +318,66 @@ export default function FeedScreen({ isDarkMode }) {
   const [offlineP2pMeshSync, setOfflineP2pMeshSync] = useState(true);
   const [autonomousEscrowBounty, setAutonomousEscrowBounty] = useState(true);
 
+  // Network Connectivity Status
+  const [networkStatus, setNetworkStatus] = useState('Checking connectivity...');
+
   useEffect(() => {
     fetchPosts();
+    checkNetwork();
+    initRewardedAd();
   }, []);
+
+  const initRewardedAd = () => {
+    try {
+      const rewardedAd = RewardedAd.createForAdRequest(rewardedAdUnitId, {
+        requestNonPersonalizedAdsOnly: true,
+      });
+
+      const unsubscribeLoaded = rewardedAd.addAdEventListener(RewardedAdEventType.LOADED, () => {
+        setRewardedAdLoaded(true);
+      });
+
+      const unsubscribeEarned = rewardedAd.addAdEventListener(RewardedAdEventType.EARNED_REWARD, () => {
+        setUserAdEarningsBalance(prev => prev + 2500);
+        Alert.alert('💰 Ad Reward Credited!', 'Successfully earned +2500 UGX creator ad bounty!');
+      });
+
+      rewardedAd.load();
+      setRewardedAdInstance(rewardedAd);
+
+      return () => {
+        unsubscribeLoaded();
+        unsubscribeEarned();
+      };
+    } catch (e) {
+      console.log('Rewarded Ad initialization notice:', e);
+    }
+  };
+
+  const handleShowRewardedAd = () => {
+    if (rewardedAdLoaded && rewardedAdInstance) {
+      rewardedAdInstance.show();
+      setRewardedAdLoaded(false);
+      rewardedAdInstance.load();
+    } else {
+      // Fallback simulation for preview/web
+      setUserAdEarningsBalance(prev => prev + 2500);
+      Alert.alert('💰 Ad Reward Credited (Simulated)', 'Watch ad completed! +2500 UGX added to your creator earnings balance.');
+    }
+  };
+
+  const checkNetwork = async () => {
+    try {
+      const netState = await Network.getNetworkStateAsync();
+      setNetworkStatus(netState.isConnected ? 'Kampala Edge Node Online 🟢' : 'Offline Mesh Relay Active 🛰️');
+    } catch {
+      setNetworkStatus('Mesh Relay Standby 🟡');
+    }
+  };
 
   const fetchPosts = async () => {
     try {
-      const { data, error } = await supabase
+      const { data } = await supabase
         .from('posts')
         .select('*')
         .order('id', { ascending: false });
@@ -320,6 +387,23 @@ export default function FeedScreen({ isDarkMode }) {
       }
     } catch (err) {
       console.log('Error fetching posts:', err);
+    }
+  };
+
+  const handlePickMediaFile = async () => {
+    try {
+      const result = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ImagePicker.MediaTypeOptions.All,
+        allowsEditing: true,
+        quality: 1,
+      });
+
+      if (!result.canceled && result.assets && result.assets.length > 0) {
+        setNewPostMediaUrl(result.assets[0].uri);
+        Alert.alert('Media Attached 📁', 'File successfully loaded into post buffer.');
+      }
+    } catch {
+      Alert.alert('Error', 'Could not open device library.');
     }
   };
 
@@ -335,7 +419,7 @@ export default function FeedScreen({ isDarkMode }) {
     setIsLoading(true);
     const postData = {
       author: 'Borris',
-      content: newPostContent,
+      content: newPostContent.trim(),
       mediaUrl: newPostMediaUrl.trim() || 'https://www.youtube.com/watch?v=dQw4w9WgXcQ',
       likes: 0,
       shares: 0,
@@ -358,7 +442,7 @@ export default function FeedScreen({ isDarkMode }) {
       setNewPostContent('');
       setNewPostMediaUrl('');
       Alert.alert('Pro Post Published 🚀', `Post published with filter "${selectedFilter}" & TikTok effect!`);
-    } catch (err) {
+    } catch {
       Alert.alert('Error', 'Failed to publish post.');
     } finally {
       setIsLoading(false);
@@ -366,12 +450,17 @@ export default function FeedScreen({ isDarkMode }) {
   };
 
   const handleLikePost = (postId) => {
-    setPosts(prev => prev.map(p => p.id === postId ? { ...p, likes: p.likes + 1 } : p));
+    setPosts(prev => prev.map(p => p.id === postId ? { ...p, likes: (p.likes || 0) + 1 } : p));
   };
 
-  const handleForwardPost = (postId) => {
+  const handleForwardPost = async (postId, mediaUrl) => {
     setPosts(prev => prev.map(p => p.id === postId ? { ...p, shares: (p.shares || 0) + 1 } : p));
-    Alert.alert('Forwarded / Shared ↗️', 'Post link successfully forwarded to community channels!');
+    try {
+      await Clipboard.setStringAsync(mediaUrl || 'https://maichat.app');
+      Alert.alert('Forwarded & Link Copied ↗️', 'Post link successfully copied and forwarded to community channels!');
+    } catch {
+      Alert.alert('Forwarded ↗️', 'Post successfully shared to community feed.');
+    }
   };
 
   const handleDownloadMedia = (mediaUrl) => {
@@ -398,6 +487,42 @@ export default function FeedScreen({ isDarkMode }) {
     <View style={{ flex: 1, backgroundColor: isDarkMode ? '#1a202c' : '#f7fafc' }}>
       <ScrollView style={[styles.container, isDarkMode && styles.darkContainer]} contentContainerStyle={{ padding: 15, paddingBottom: 80 }}>
         
+        {/* Network & Status Header Banner */}
+        <View style={[styles.postCard, isDarkMode && styles.darkHeader, { padding: 10, marginBottom: 8 }]}>
+          <Text style={{ fontSize: 10, color: '#3182ce', fontWeight: 'bold' }}>📡 Network Mesh Status: {networkStatus}</Text>
+        </View>
+
+        {/* ================= GOOGLE ADMOB DYNAMIC BANNER ================= */}
+        <View style={styles.monetizationAdCard}>
+          <Text style={styles.adTagLabel}>Sponsored Ad 📢 • AdMob Dynamic Banner</Text>
+          <View style={{ alignItems: 'center', marginVertical: 4 }}>
+            <BannerAd
+              unitId={bannerAdUnitId}
+              size={BannerAdSize.ANCHORED_ADAPTIVE_BANNER}
+              requestOptions={{
+                requestNonPersonalizedAdsOnly: true,
+              }}
+              onAdLoaded={() => console.log('AdMob Banner loaded successfully')}
+              onAdFailedToLoad={(error) => console.log('AdMob Banner load error: ', error)}
+            />
+          </View>
+        </View>
+
+        {/* ================= REWARDED AD CREATOR EARNING WIDGET ================= */}
+        <View style={styles.creatorMonetizationCard}>
+          <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
+            <View>
+              <Text style={{ fontSize: 12, fontWeight: 'bold', color: '#2b6cb0' }}>🪙 Creator Ad Earnings Balance</Text>
+              <Text style={{ fontSize: 16, fontWeight: 'bold', color: '#2d3748', marginTop: 2 }}>
+                {userAdEarningsBalance.toLocaleString()} UGX (~${(userAdEarningsBalance / 3700).toFixed(2)})
+              </Text>
+            </View>
+            <TouchableOpacity style={styles.watchRewardAdBtn} onPress={handleShowRewardedAd}>
+              <Text style={{ color: '#fff', fontSize: 11, fontWeight: 'bold' }}>Watch Ad (+2500 UGX) 🎁</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+
         {/* ================= 10 ADVANCED SUPER-LAYERS CONTROL PANEL ================= */}
         <View style={[styles.postCard, isDarkMode && styles.darkHeader, { borderColor: '#9333ea', borderWidth: 2 }]}>
           <Text style={[styles.commentsHeader, isDarkMode && styles.darkText, { fontSize: 14, marginBottom: 8 }]}>🛡️ Feed AI & Security Control Matrix</Text>
@@ -466,13 +591,21 @@ export default function FeedScreen({ isDarkMode }) {
             onChangeText={setNewPostContent}
           />
 
-          <TextInput
-            style={[styles.chatInput, { height: 40, marginBottom: 12 }, isDarkMode && styles.darkChatInput]}
-            placeholder="Attach Video / Media URL (YouTube, MP4)..."
-            placeholderTextColor="#a0aec0"
-            value={newPostMediaUrl}
-            onChangeText={setNewPostMediaUrl}
-          />
+          <View style={{ flexDirection: 'row', marginBottom: 12 }}>
+            <TextInput
+              style={[styles.chatInput, { height: 40, flex: 1, marginRight: 8 }, isDarkMode && styles.darkChatInput]}
+              placeholder="Attach Video / Media URL (YouTube, MP4)..."
+              placeholderTextColor="#a0aec0"
+              value={newPostMediaUrl}
+              onChangeText={setNewPostMediaUrl}
+            />
+            <TouchableOpacity 
+              style={{ backgroundColor: '#805ad5', paddingHorizontal: 12, justifyContent: 'center', borderRadius: 8, height: 40 }}
+              onPress={handlePickMediaFile}
+            >
+              <Text style={{ color: '#fff', fontSize: 11, fontWeight: 'bold' }}>📁 Upload</Text>
+            </TouchableOpacity>
+          </View>
 
           <View style={{ backgroundColor: isDarkMode ? '#1a202c' : '#f7fafc', padding: 12, borderRadius: 8, marginBottom: 12, borderWidth: 1, borderColor: '#cbd5e0' }}>
             
@@ -584,7 +717,11 @@ export default function FeedScreen({ isDarkMode }) {
                         allowFullScreen
                       />
                     </View>
-                  ) : null}
+                  ) : (
+                    <View style={{ backgroundColor: '#2d3748', padding: 10, borderRadius: 6 }}>
+                      <Text style={{ color: '#fff', fontSize: 11 }}>Attached Media: {item.mediaUrl}</Text>
+                    </View>
+                  )}
                 </View>
               )}
 
@@ -599,7 +736,7 @@ export default function FeedScreen({ isDarkMode }) {
                   <Text style={{ fontSize: 12, color: '#e53e3e', fontWeight: 'bold' }}>❤️ Likes ({item.likes || 0})</Text>
                 </TouchableOpacity>
 
-                <TouchableOpacity style={{ backgroundColor: '#ebf8ff', paddingHorizontal: 10, paddingVertical: 5, borderRadius: 6 }} onPress={() => handleForwardPost(item.id)}>
+                <TouchableOpacity style={{ backgroundColor: '#ebf8ff', paddingHorizontal: 10, paddingVertical: 5, borderRadius: 6 }} onPress={() => handleForwardPost(item.id, item.mediaUrl)}>
                   <Text style={{ fontSize: 12, color: '#2b6cb0', fontWeight: 'bold' }}>Share / Forward ↗️ ({item.shares || 0})</Text>
                 </TouchableOpacity>
 
@@ -658,6 +795,13 @@ const styles = StyleSheet.create({
   commentsHeader: { fontSize: 13, fontWeight: 'bold', color: '#4a5568', marginBottom: 8 },
   settingRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 },
   settingLabel: { fontSize: 11, fontWeight: 'bold', color: '#2d3748' },
+
+  // Monetization Ad Styles
+  monetizationAdCard: { backgroundColor: '#fff', borderWidth: 1, borderColor: '#e2e8f0', borderRadius: 8, padding: 8, marginBottom: 12, alignItems: 'center' },
+  adTagLabel: { fontSize: 9, color: '#a0aec0', textTransform: 'uppercase', fontWeight: 'bold', marginBottom: 2 },
+  creatorMonetizationCard: { backgroundColor: '#ebf8ff', borderWidth: 1, borderColor: '#bee3f8', borderRadius: 8, padding: 12, marginBottom: 12 },
+  watchRewardAdBtn: { backgroundColor: '#3182ce', paddingHorizontal: 12, paddingVertical: 6, borderRadius: 6 },
+
   floatingReelsBtn: {
     position: 'absolute',
     bottom: 30,

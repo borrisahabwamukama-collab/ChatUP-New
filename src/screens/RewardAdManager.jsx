@@ -10,8 +10,7 @@ import {
   Switch,
 } from 'react-native';
 
-export default function RewardAdManager({ navigation }) {
-  const [userCoins, setUserCoins] = useState(100); // Starting wallet balance
+export default function RewardAdManager({ isDarkMode, coins = 100, setCoins }) {
   const [isAdLoading, setIsAdLoading] = useState(false);
 
   // NEW LAYER 1: MULTI-TIER REWARD MULTIPLIER & STREAK BONUS
@@ -32,22 +31,21 @@ export default function RewardAdManager({ navigation }) {
   const coinToUsdRate = 0.05; // 1 Coin = $0.05 USD
 
   // NEW LAYER 4: AUDIO MUTE & DATA SAVER REWARD MODE
-  const [dataSaverAdMode, setDataSaverAdMode] = useState(false);
   const [soundMutedDuringAd, setSoundMutedDuringAd] = useState(true);
 
   // Simulate triggering a Rewarded Ad (Value Exchange Strategy)
   const handleWatchRewardedAd = () => {
     setIsAdLoading(true);
     
-    // Simulate ad network load and playback delay (e.g., 3 seconds)
     setTimeout(() => {
       setIsAdLoading(false);
       
-      // Calculate reward with streak multiplier if active
       const baseCoins = 50;
       const earnedCoins = streakMultiplierActive ? baseCoins * 2 : baseCoins;
       
-      setUserCoins((prev) => prev + earnedCoins);
+      if (setCoins) {
+        setCoins(prev => prev + earnedCoins);
+      }
       setDailyStreakCount(prev => prev + 1);
       
       Alert.alert(
@@ -57,28 +55,28 @@ export default function RewardAdManager({ navigation }) {
     }, 3000);
   };
 
-  const calculatedUsdValue = (userCoins * coinToUsdRate).toFixed(2);
+  const calculatedUsdValue = (coins * coinToUsdRate).toFixed(2);
 
   return (
     <ScrollView 
-      style={styles.container} 
+      style={[styles.container, isDarkMode && styles.darkContainer]} 
       contentContainerStyle={{ flexGrow: 1, justifyContent: 'center', alignItems: 'center', padding: 20, paddingBottom: 60 }}
       nestedScrollEnabled={true}
     >
-      <View style={styles.card}>
-        <Text style={styles.title}>🎁 ChatUP Reward Hub & Ad Monetization</Text>
-        <Text style={styles.subtitle}>Watch sponsor videos to earn free coins, boost marketplace visibility, and fund creator projects!</Text>
+      <View style={[styles.card, isDarkMode && styles.darkCard]}>
+        <Text style={[styles.title, isDarkMode && styles.darkText]}>🎁 ChatUP Reward Hub & Monetization</Text>
+        <Text style={[styles.subtitle, isDarkMode && styles.darkSubText]}>Watch sponsor videos to earn free coins, boost marketplace visibility, and fund creator projects!</Text>
         
         {/* Wallet Balance & USD Conversion Badge */}
-        <View style={styles.coinBadge}>
-          <Text style={styles.coinText}>Wallet Balance: 🪙 {userCoins} Coins (${calculatedUsdValue} USD)</Text>
+        <View style={[styles.coinBadge, isDarkMode && { backgroundColor: '#1e3a8a', borderColor: '#3b82f6' }]}>
+          <Text style={[styles.coinText, isDarkMode && { color: '#93c5fd' }]}>Wallet Balance: 🪙 {coins} Coins (${calculatedUsdValue} USD)</Text>
         </View>
 
         {/* LAYER 1: DAILY STREAK MULTIPLIER */}
-        <View style={[styles.subCard, { borderColor: '#d69e2e', borderWidth: 1 }]}>
+        <View style={[styles.subCard, isDarkMode && styles.darkSubCard, { borderColor: '#d69e2e', borderWidth: 1 }]}>
           <View style={styles.settingRow}>
             <View style={{ flex: 1, marginRight: 10 }}>
-              <Text style={styles.subCardTitle}>🔥 Daily Streak Multiplier ({dailyStreakCount} Days)</Text>
+              <Text style={[styles.subCardTitle, isDarkMode && styles.darkText]}>🔥 Daily Streak Multiplier ({dailyStreakCount} Days)</Text>
               <Text style={{ fontSize: 11, color: '#718096' }}>Double your coin rewards (+100 coins) by maintaining your daily watch streak.</Text>
             </View>
             <Switch 
@@ -90,28 +88,28 @@ export default function RewardAdManager({ navigation }) {
         </View>
 
         {/* LAYER 2: SPONSOR CAMPAIGN SELECTOR */}
-        <View style={[styles.subCard, { borderColor: '#3182ce', borderWidth: 1 }]}>
-          <Text style={styles.subCardTitle}>🌿 Select Sponsor Campaign Channel</Text>
+        <View style={[styles.subCard, isDarkMode && styles.darkSubCard, { borderColor: '#3182ce', borderWidth: 1 }]}>
+          <Text style={[styles.subCardTitle, isDarkMode && styles.darkText]}>🌿 Select Sponsor Campaign Channel</Text>
           <Text style={{ fontSize: 11, color: '#718096', marginBottom: 8 }}>Choose your preferred ad partner category for targeted rewards:</Text>
           
           <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginBottom: 4 }}>
             {sponsorCampaigns.map((camp) => (
               <TouchableOpacity
                 key={camp}
-                style={[styles.chip, selectedSponsorCampaign === camp && styles.activeChip]}
+                style={[styles.chip, isDarkMode && styles.darkChip, selectedSponsorCampaign === camp && styles.activeChip]}
                 onPress={() => setSelectedSponsorCampaign(camp)}
               >
-                <Text style={[styles.chipText, selectedSponsorCampaign === camp && { color: '#fff' }]}>{camp}</Text>
+                <Text style={[styles.chipText, isDarkMode && styles.darkText, selectedSponsorCampaign === camp && { color: '#fff' }]}>{camp}</Text>
               </TouchableOpacity>
             ))}
           </ScrollView>
         </View>
 
         {/* LAYER 3: AUTO-CONVERT TO USD WALLET POUCH */}
-        <View style={[styles.subCard, { borderColor: '#48bb78', borderWidth: 1 }]}>
+        <View style={[styles.subCard, isDarkMode && styles.darkSubCard, { borderColor: '#48bb78', borderWidth: 1 }]}>
           <View style={styles.settingRow}>
             <View style={{ flex: 1, marginRight: 10 }}>
-              <Text style={styles.subCardTitle}>💵 Auto-Convert Coins to USD Payout</Text>
+              <Text style={[styles.subCardTitle, isDarkMode && styles.darkText]}>💵 Auto-Convert Coins to USD Payout</Text>
               <Text style={{ fontSize: 11, color: '#718096' }}>Automatically sync earned coins to withdrawable Mobile Money / USD balance.</Text>
             </View>
             <Switch 
@@ -123,10 +121,10 @@ export default function RewardAdManager({ navigation }) {
         </View>
 
         {/* LAYER 4: DATA SAVER & MUTE PREFERENCE */}
-        <View style={[styles.subCard, { paddingVertical: 10 }]}>
+        <View style={[styles.subCard, isDarkMode && styles.darkSubCard, { paddingVertical: 10 }]}>
           <View style={styles.settingRow}>
             <View style={{ flex: 1, marginRight: 10 }}>
-              <Text style={styles.subCardTitle}>📉 Data Saver & Mute Ad Mode</Text>
+              <Text style={[styles.subCardTitle, isDarkMode && styles.darkText]}>📉 Data Saver & Mute Ad Mode</Text>
               <Text style={{ fontSize: 11, color: '#718096' }}>Compress video quality and mute audio to save mobile data while earning.</Text>
             </View>
             <Switch 
@@ -158,6 +156,9 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: '#f7f9fa',
   },
+  darkContainer: {
+    backgroundColor: '#1a202c',
+  },
   card: {
     backgroundColor: '#ffffff',
     borderRadius: 12,
@@ -171,6 +172,9 @@ const styles = StyleSheet.create({
     shadowRadius: 4,
     elevation: 3,
   },
+  darkCard: {
+    backgroundColor: '#2d3748',
+  },
   subCard: {
     backgroundColor: '#f8fafc',
     borderRadius: 10,
@@ -178,6 +182,10 @@ const styles = StyleSheet.create({
     marginBottom: 12,
     borderWidth: 1,
     borderColor: '#e2e8f0',
+  },
+  darkSubCard: {
+    backgroundColor: '#1a202c',
+    borderColor: '#4a5568',
   },
   subCardTitle: {
     fontSize: 12,
@@ -204,6 +212,12 @@ const styles = StyleSheet.create({
     marginBottom: 16,
     lineHeight: 16,
   },
+  darkText: {
+    color: '#fff',
+  },
+  darkSubText: {
+    color: '#cbd5e0',
+  },
   coinBadge: {
     backgroundColor: '#ebf8ff',
     paddingVertical: 10,
@@ -225,6 +239,11 @@ const styles = StyleSheet.create({
     paddingVertical: 6,
     borderRadius: 8,
     marginRight: 6,
+  },
+  darkChip: {
+    backgroundColor: '#1a202c',
+    borderColor: '#4a5568',
+    borderWidth: 1,
   },
   activeChip: {
     backgroundColor: '#3182ce',

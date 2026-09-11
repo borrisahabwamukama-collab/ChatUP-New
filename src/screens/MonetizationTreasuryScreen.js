@@ -10,6 +10,11 @@ import {
   Modal,
   Switch,
 } from 'react-native';
+import { BannerAd, BannerAdSize, TestIds, RewardedAd, RewardedAdEventType } from 'react-native-google-mobile-ads';
+
+// Dynamic Google AdMob Unit IDs (Automatic Test IDs during development)
+const bannerAdUnitId = __DEV__ ? TestIds.BANNER : 'ca-app-pub-xxxxxxxxoxxxxxxx/xxxxxxxxxx';
+const rewardedAdUnitId = __DEV__ ? TestIds.REWARDED : 'ca-app-pub-xxxxxxxxoxxxxxxx/xxxxxxxxxx';
 
 export default function MonetizationTreasuryScreen({ isDarkMode, coins, setCoins }) {
   const [activeTab, setActiveTab] = useState('Accounts'); // 'Accounts', 'Treasury', 'RiskShield', 'Marketplace', 'Splits', 'Tiers', 'Vaults', 'Audit'
@@ -30,6 +35,10 @@ export default function MonetizationTreasuryScreen({ isDarkMode, coins, setCoins
   const [atmCardError, setAtmCardError] = useState('');
   const [atmExpiryError, setAtmExpiryError] = useState('');
   const [atmCvvError, setAtmCvvError] = useState('');
+
+  // Monetization & Rewarded Ad States
+  const [rewardedAdLoaded, setRewardedAdLoaded] = useState(false);
+  const [rewardedAdInstance, setRewardedAdInstance] = useState(null);
 
   const [linkedAccounts, setLinkedAccounts] = useState([
     { id: 'acc1', type: 'Mobile Money', provider: 'MTN MoMo (Uganda)', number: '077*****123', holder: 'Borris Ahabwamukama', verified: true, token: 'TOK_MOMO_8829' },
@@ -87,6 +96,54 @@ export default function MonetizationTreasuryScreen({ isDarkMode, coins, setCoins
   const [escrowOrders, setEscrowOrders] = useState([
     { id: 'e1', buyer: '@brian_ug', item: 'Wildlife Photography Lens', amount: '250,000 UGX', status: 'Locked in Escrow (Awaiting Code)' },
   ]);
+
+  // Initialize AdMob Rewarded Ad
+  useEffect(() => {
+    initRewardedAd();
+  }, []);
+
+  const initRewardedAd = () => {
+    try {
+      const rewardedAd = RewardedAd.createForAdRequest(rewardedAdUnitId, {
+        requestNonPersonalizedAdsOnly: true,
+      });
+
+      const unsubscribeLoaded = rewardedAd.addAdEventListener(RewardedAdEventType.LOADED, () => {
+        setRewardedAdLoaded(true);
+      });
+
+      const unsubscribeEarned = rewardedAd.addAdEventListener(RewardedAdEventType.EARNED_REWARD, () => {
+        if (setCoins) {
+          setCoins(prev => prev + 250);
+        }
+        Alert.alert('💰 Ad Reward Credited!', 'Successfully earned +250 Coins treasury sponsor bonus!');
+      });
+
+      rewardedAd.load();
+      setRewardedAdInstance(rewardedAd);
+
+      return () => {
+        unsubscribeLoaded();
+        unsubscribeEarned();
+      };
+    } catch (e) {
+      console.log('Rewarded Ad initialization notice:', e);
+    }
+  };
+
+  const handleShowRewardedAd = () => {
+    if (rewardedAdLoaded && rewardedAdInstance) {
+      rewardedAdInstance.show();
+      setRewardedAdLoaded(false);
+      rewardedAdInstance.load();
+    } else {
+      // Fallback simulation for web/preview
+      if (setCoins) {
+        setCoins(prev => prev + 250);
+      }
+      Alert.alert('💰 Ad Reward Credited (Simulated)', 'Watch ad completed! +250 coins added to your ChatUp wallet balance.');
+    }
+  };
 
   // Lockout Countdown Timer Effect
   useEffect(() => {
@@ -334,10 +391,41 @@ export default function MonetizationTreasuryScreen({ isDarkMode, coins, setCoins
   return (
     <View style={[styles.container, isDarkMode && styles.darkContainer]}>
       
+      {/* ================= GOOGLE ADMOB DYNAMIC BANNER ================= */}
+      <View style={styles.monetizationAdCard}>
+        <Text style={styles.adTagLabel}>Sponsored Treasury Banner 📢 • AdMob Banner</Text>
+        <View style={{ alignItems: 'center', marginVertical: 4 }}>
+          <BannerAd
+            unitId={bannerAdUnitId}
+            size={BannerAdSize.ANCHORED_ADAPTIVE_BANNER}
+            requestOptions={{
+              requestNonPersonalizedAdsOnly: true,
+            }}
+            onAdLoaded={() => console.log('AdMob Treasury Banner loaded successfully')}
+            onAdFailedToLoad={(error) => console.log('AdMob Treasury Banner load error: ', error)}
+          />
+        </View>
+      </View>
+
+      {/* ================= REWARDED AD TREASURY BONUS WIDGET ================= */}
+      <View style={styles.creatorMonetizationCard}>
+        <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
+          <View style={{ flex: 1, marginRight: 10 }}>
+            <Text style={{ fontSize: 12, fontWeight: 'bold', color: '#2b6cb0' }}>🪙 Treasury Dividend Reward</Text>
+            <Text style={{ fontSize: 14, fontWeight: 'bold', color: '#2d3748', marginTop: 2 }}>
+              Watch a sponsor clip to earn +250 coins!
+            </Text>
+          </View>
+          <TouchableOpacity style={styles.watchRewardAdBtn} onPress={handleShowRewardedAd}>
+            <Text style={{ color: '#fff', fontSize: 11, fontWeight: 'bold' }}>Watch Ad (+250 🪙) 🎁</Text>
+          </TouchableOpacity>
+        </View>
+      </View>
+
       {/* Header */}
       <View style={[styles.header, isDarkMode && styles.darkHeader]}>
         <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
-          <Text style={[styles.headerTitle, isDarkMode && styles.darkText]}>🪙 Treasury & Anti-Fraud Vault</Text>
+          <Text style={[styles.headerTitle, isDarkMode && styles.darkText]}>🪙 Treasury & Anti-Fraud Vault (Balance: {coins} 🪙)</Text>
           <TouchableOpacity 
             style={{ backgroundColor: '#b45309', paddingHorizontal: 10, paddingVertical: 4, borderRadius: 6 }}
             onPress={() => setShowPinSettingsModal(true)}
@@ -866,4 +954,10 @@ const styles = StyleSheet.create({
   modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.6)', justifyContent: 'center' },
   modalScrollContainer: { flexGrow: 1, justifyContent: 'center', padding: 20 },
   modalContent: { backgroundColor: '#ffffff', borderRadius: 12, padding: 20, borderWidth: 1, borderColor: '#e2e8f0' },
+
+  // Monetization Ad Styles
+  monetizationAdCard: { backgroundColor: '#fff', borderWidth: 1, borderColor: '#e2e8f0', borderRadius: 8, padding: 8, marginBottom: 12, alignItems: 'center' },
+  adTagLabel: { fontSize: 9, color: '#a0aec0', textTransform: 'uppercase', fontWeight: 'bold', marginBottom: 2 },
+  creatorMonetizationCard: { backgroundColor: '#ebf8ff', borderWidth: 1, borderColor: '#bee3f8', borderRadius: 8, padding: 12, marginBottom: 12 },
+  watchRewardAdBtn: { backgroundColor: '#3182ce', paddingHorizontal: 12, paddingVertical: 6, borderRadius: 6 },
 });
