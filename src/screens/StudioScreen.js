@@ -10,6 +10,7 @@ import {
   Alert,
   Switch,
 } from 'react-native';
+import { supabase } from '../../Services/supabaseClient';
 
 export default function StudioScreen({ isDarkMode, coins = 100, setCoins }) {
   const [editorTitle, setEditorTitle] = useState('');

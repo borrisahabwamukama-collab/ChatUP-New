@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { StyleSheet, Text, View, TouchableOpacity, Alert, ScrollView } from 'react-native';
 import { CameraView, useCameraPermissions } from 'expo-camera';
-import { supabase } from '../supabaseClient'; // Adjust path if your client is located elsewhere
+import { supabase } from '../../Services/supabaseClient';
 
 export default function CameraHubScreen({ navigation }) {
   const [facing, setFacing] = useState('back');

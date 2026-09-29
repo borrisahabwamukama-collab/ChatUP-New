@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   StyleSheet,
   Text,
@@ -10,27 +10,25 @@ import {
   TextInput,
   Modal,
   ActivityIndicator,
-  Platform,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import * as DocumentPicker from 'expo-document-picker';
+import { supabase } from '../../Services/supabaseClient';
 
-export default function VoiceAndTranslationScreen({ isDarkMode, coins, setCoins }) {
+export default function VoiceAndTranslationScreen({ isDarkMode, currentUser = { id: 'borris_01', name: 'Borris' }, coins, setCoins }) {
   // Architecture Tier State ('root', 'recorder', 'library', 'languages', 'settings', 'ttsStudio', 'analytics')
   const [activeSubView, setActiveSubView] = useState('root');
 
   const [isRecording, setIsRecording] = useState(false);
-  const [recordingDuration, setRecordingDuration] = useState('0:00');
   const [selectedLanguage, setSelectedLanguage] = useState('English');
-  const [targetTranslationLang, setTargetTranslationLang] = useState('Luganda 🇺🇬');
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedFilterCategory, setSelectedFilterCategory] = useState('All');
+  const [loading, setLoading] = useState(true);
 
   // Granular Engine & Noise Cancellation Settings (Level 3)
   const [autoDenoise, setAutoDenoise] = useState(true);
   const [realtimeCloudSync, setRealtimeCloudSync] = useState(true);
   const [offlineLocalCache, setOfflineLocalCache] = useState(true);
-  const [aiSummaryDepth, setAiSummaryDepth] = useState('Detailed Action Items');
   const [voiceBiometricsActive, setVoiceBiometricsActive] = useState(true);
 
   // Text-to-Speech (TTS) Studio States
@@ -39,60 +37,96 @@ export default function VoiceAndTranslationScreen({ isDarkMode, coins, setCoins 
   const [ttsSpeed, setTtsSpeed] = useState('1.0x (Normal)');
   const [isGeneratingTts, setIsGeneratingTts] = useState(false);
 
-  // Analytics & Insights States
+  // Analytics States
   const [totalVoiceNotesCount, setTotalVoiceNotesCount] = useState(14);
   const [totalTranscriptionMinutes, setTotalTranscriptionMinutes] = useState(48);
-  const [translationAccuracyRate, setTranslationAccuracyRate] = useState('98.4%');
+  const [translationAccuracyRate] = useState('98.4%');
 
   // Interactive Upload Modal State
   const [showUploadModal, setShowUploadModal] = useState(false);
   const [isUploadingAudio, setIsUploadingAudio] = useState(false);
 
-  const [audioNotes, setAudioNotes] = useState([
-    {
-      id: '1',
-      author: 'Borris',
-      duration: '0:42',
-      category: 'Security',
-      timestamp: 'Today, 02:30 PM',
-      transcript: 'We need to deploy the new security node updates across Kampala before evening patrol.',
-      translations: {
-        English: 'We need to deploy the new security node updates across Kampala before evening patrol.',
-        Luganda: 'Twetaaga okuteekawo obubaka bw’eby’okwerinda obupya mu Kampala nga akawungeezi tekennatuuka.',
-        Swahili: 'Tunahitaji kuweka taarifa mpya za usalama kote Kampala kabla ya doria ya jioni.',
-      },
-      summary: 'Action item: Deploy security node updates in Kampala prior to evening patrol.',
-      sentiment: 'Urgent 🔴',
-    },
-    {
-      id: '2',
-      author: 'Nimusiima Asifa',
-      duration: '1:15',
-      category: 'Wildlife',
-      timestamp: 'Yesterday, 10:15 AM',
-      transcript: 'The wildlife camera feeds near Bwindi impenetrable forest boundary show active elephant herds.',
-      translations: {
-        English: 'The wildlife camera feeds near Bwindi impenetrable forest boundary show active elephant herds.',
-        Luganda: 'Ebifaananyi by’ebisolo ebiri okumpi n’okumpi n’ekibira Bwindi biraga ebibinja by’enjovu.',
-        Swahili: 'Kamera za wanyamapori karibu na mpaka wa msitu wa Bwindi zinaonyesha makundi ya tembo.',
-      },
-      summary: 'Wildlife alert: Elephant herds sighted near Bwindi park perimeter.',
-      sentiment: 'Positive 🟢',
-    },
-  ]);
+  const [audioNotes, setAudioNotes] = useState([]);
 
-  const handleToggleRecord = () => {
+  useEffect(() => {
+    fetchVoiceData();
+    loadVoiceSettings();
+  }, [currentUser]);
+
+  const loadVoiceSettings = async () => {
+    try {
+      const { data, error } = await supabase
+        .from('voice_settings')
+        .select('*')
+        .eq('user_id', currentUser.id)
+        .single();
+
+      if (!error && data) {
+        setAutoDenoise(data.auto_denoise ?? true);
+        setRealtimeCloudSync(data.realtime_cloud_sync ?? true);
+        setOfflineLocalCache(data.offline_local_cache ?? true);
+        setVoiceBiometricsActive(data.voice_biometrics_active ?? true);
+      } else {
+        await supabase.from('voice_settings').upsert([{
+          user_id: currentUser.id,
+          auto_denoise: true,
+          realtime_cloud_sync: true,
+          offline_local_cache: true,
+          voice_biometrics_active: true
+        }]);
+      }
+    } catch (err) {
+      console.log('Voice settings sync notice:', err.message);
+    }
+  };
+
+  const syncVoiceSetting = async (fields) => {
+    try {
+      await supabase
+        .from('voice_settings')
+        .update(fields)
+        .eq('user_id', currentUser.id);
+    } catch (err) {
+      console.log('Voice settings update error:', err.message);
+    }
+  };
+
+  const fetchVoiceData = async () => {
+    try {
+      setLoading(true);
+      const { data, error } = await supabase
+        .from('audio_notes')
+        .select('*')
+        .eq('user_id', currentUser.id)
+        .order('created_at', { ascending: false });
+
+      if (error) throw error;
+
+      if (data && data.length > 0) {
+        setAudioNotes(data);
+        setTotalVoiceNotesCount(data.length);
+        setTotalTranscriptionMinutes(data.length * 3);
+      } else {
+        setAudioNotes([]);
+      }
+    } catch (err) {
+      console.log('Audio notes fetch notice:', err.message);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleToggleRecord = async () => {
     if (!isRecording) {
       setIsRecording(true);
       Alert.alert('Recording Voice Note 🎙️', 'Speak clearly. Neural AI transcription is listening...');
     } else {
       setIsRecording(false);
       const newNote = {
-        id: Date.now().toString(),
-        author: 'Borris (Host)',
+        user_id: currentUser.id,
+        author: currentUser.name || 'Borris (Host)',
         duration: '0:18',
         category: 'Field Note',
-        timestamp: 'Just now',
         transcript: 'Checking the wildlife camera feeds and local mesh network signal strength near park boundary.',
         translations: {
           English: 'Checking the wildlife camera feeds and local mesh network signal strength near park boundary.',
@@ -102,12 +136,23 @@ export default function VoiceAndTranslationScreen({ isDarkMode, coins, setCoins 
         summary: 'Action item: Check wildlife cameras and mesh network signal at park boundary.',
         sentiment: 'Neutral 🟡',
       };
-      setAudioNotes(prev => [newNote, ...prev]);
-      setTotalVoiceNotesCount(c => c + 1);
-      setTotalTranscriptionMinutes(m => m + 1);
-      if (setCoins) setCoins(c => c + 20); // Wallet reward for recording and translating voice note
-      Alert.alert('Saved & Transcribed ✨ (+20 🪙)', 'Voice note recorded, denoised, summarized, and auto-translated successfully.');
-      setActiveSubView('library');
+
+      try {
+        const { data, error } = await supabase.from('audio_notes').insert([newNote]).select();
+        if (error) throw error;
+
+        if (data && data[0]) {
+          setAudioNotes(prev => [data[0], ...prev]);
+        }
+        setTotalVoiceNotesCount(c => c + 1);
+        setTotalTranscriptionMinutes(m => m + 1);
+        if (setCoins) setCoins(c => c + 20);
+
+        Alert.alert('Saved & Transcribed ✨ (+20 🪙)', 'Voice note recorded, denoised, summarized, and auto-translated successfully.');
+        setActiveSubView('library');
+      } catch (err) {
+        Alert.alert('Error', 'Failed to save recording to database.');
+      }
     }
   };
 
@@ -122,15 +167,16 @@ export default function VoiceAndTranslationScreen({ isDarkMode, coins, setCoins 
 
       const file = result.assets[0];
       setIsUploadingAudio(true);
-      setTimeout(() => {
+
+      setTimeout(async () => {
         setIsUploadingAudio(false);
         setShowUploadModal(false);
+
         const importedNote = {
-          id: 'imported_' + Date.now(),
+          user_id: currentUser.id,
           author: 'External File Upload',
           duration: '2:10',
           category: 'Imported',
-          timestamp: 'Just now',
           transcript: `Successfully imported and transcribed audio file: ${file.name}. Audio clarity optimized via Denoise Engine.`,
           translations: {
             English: `Successfully imported and transcribed audio file: ${file.name}.`,
@@ -140,9 +186,13 @@ export default function VoiceAndTranslationScreen({ isDarkMode, coins, setCoins 
           summary: `Imported audio archive processed from ${file.name}.`,
           sentiment: 'Neutral 🟡',
         };
-        setAudioNotes(prev => [importedNote, ...prev]);
+
+        const { data, error } = await supabase.from('audio_notes').insert([importedNote]).select();
+        if (!error && data && data[0]) {
+          setAudioNotes(prev => [data[0], ...prev]);
+        }
         setTotalVoiceNotesCount(c => c + 1);
-        if (setCoins) setCoins(c => c + 35); // Wallet reward for file upload
+        if (setCoins) setCoins(c => c + 35);
         Alert.alert('Audio File Imported 📂 (+35 🪙)', `File "${file.name}" transcribed and added to library.`);
       }, 900);
     } catch (err) {
@@ -152,12 +202,24 @@ export default function VoiceAndTranslationScreen({ isDarkMode, coins, setCoins 
     }
   };
 
+  const handleDeleteNote = async (id) => {
+    try {
+      const { error } = await supabase.from('audio_notes').delete().eq('id', id);
+      if (error) throw error;
+
+      setAudioNotes(prev => prev.filter(n => n.id !== id));
+      Alert.alert('Deleted', 'Audio note removed from database archive.');
+    } catch (err) {
+      Alert.alert('Error', 'Failed to delete audio note.');
+    }
+  };
+
   const handleGenerateTts = () => {
     if (!ttsInputText.trim()) return Alert.alert('Error', 'Enter text to synthesize.');
     setIsGeneratingTts(true);
     setTimeout(() => {
       setIsGeneratingTts(false);
-      if (setCoins) setCoins(c => c + 15); // Wallet reward for TTS generation
+      if (setCoins) setCoins(c => c + 15);
       Alert.alert('🔊 Voice Synthesized! (+15 🪙)', `Successfully generated neural speech using voice "${selectedTtsVoice}" at speed ${ttsSpeed}!`);
     }, 1000);
   };
@@ -314,10 +376,15 @@ export default function VoiceAndTranslationScreen({ isDarkMode, coins, setCoins 
         </View>
       )}
 
-      {/* ================= LEVEL 2: TRANSCRIPTS & ARCHIVES SUB-MODULE (WITH SEARCH & FILTER) ================= */}
+      {/* ================= LEVEL 2: TRANSCRIPTS & ARCHIVES SUB-MODULE ================= */}
       {activeSubView === 'library' && (
         <View style={[styles.card, isDarkMode && styles.darkCard]}>
-          <Text style={[styles.cardTitle, isDarkMode && styles.darkText]}>📚 Level 2: Audio Note Library ({filteredNotes.length}/{audioNotes.length})</Text>
+          <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
+            <Text style={[styles.cardTitle, isDarkMode && styles.darkText, { marginBottom: 0 }]}>📚 Level 2: Audio Note Library ({filteredNotes.length}/{audioNotes.length})</Text>
+            <TouchableOpacity onPress={fetchVoiceData}>
+              <Text style={{ fontSize: 11, color: '#3182ce', fontWeight: 'bold' }}>🔄 Refresh</Text>
+            </TouchableOpacity>
+          </View>
           
           <TextInput
             style={[styles.chatInput, { marginBottom: 8 }, isDarkMode && styles.darkInput]}
@@ -339,37 +406,39 @@ export default function VoiceAndTranslationScreen({ isDarkMode, coins, setCoins 
             ))}
           </View>
 
-          {filteredNotes.length === 0 ? (
+          {loading ? (
+            <ActivityIndicator size="small" color="#3182ce" style={{ padding: 20 }} />
+          ) : filteredNotes.length === 0 ? (
             <Text style={{ fontSize: 11, fontStyle: 'italic', color: '#718096', textAlign: 'center', padding: 15 }}>No audio notes match your search criteria.</Text>
           ) : (
-            filteredNotes.map(note => (
-              <View key={note.id} style={[styles.noteCard, isDarkMode && styles.darkSubCard]}>
-                <View style={styles.noteHeaderRow}>
-                  <Text style={styles.authorText}>👤 {note.author} ({note.duration}) • <Text style={{ color: '#d69e2e' }}>{note.category}</Text></Text>
-                  <Text style={styles.aiBadge}>{note.sentiment}</Text>
-                </View>
+            filteredNotes.map(note => {
+              const noteTranslations = note.translations || {};
+              return (
+                <View key={note.id} style={[styles.noteCard, isDarkMode && styles.darkSubCard]}>
+                  <View style={styles.noteHeaderRow}>
+                    <Text style={styles.authorText}>👤 {note.author} ({note.duration}) • <Text style={{ color: '#d69e2e' }}>{note.category}</Text></Text>
+                    <Text style={styles.aiBadge}>{note.sentiment}</Text>
+                  </View>
 
-                <View style={[styles.transcriptBox, isDarkMode && { backgroundColor: '#1a202c' }]}>
-                  <Text style={[styles.transcriptLabel, isDarkMode && styles.darkText]}>Transcript [{selectedLanguage}]:</Text>
-                  <Text style={[styles.transcriptText, isDarkMode && styles.darkText]}>
-                    {note.translations[selectedLanguage] || note.transcript}
-                  </Text>
-                </View>
+                  <View style={[styles.transcriptBox, isDarkMode && { backgroundColor: '#1a202c' }]}>
+                    <Text style={[styles.transcriptLabel, isDarkMode && styles.darkText]}>Transcript [{selectedLanguage}]:</Text>
+                    <Text style={[styles.transcriptText, isDarkMode && styles.darkText]}>
+                      {noteTranslations[selectedLanguage] || note.transcript}
+                    </Text>
+                  </View>
 
-                <View style={styles.summaryBox}>
-                  <Text style={styles.summaryText}>⚡ Key Insight: {note.summary}</Text>
-                </View>
+                  <View style={styles.summaryBox}>
+                    <Text style={styles.summaryText}>⚡ Key Insight: {note.summary}</Text>
+                  </View>
 
-                <View style={{ flexDirection: 'row', justifyContent: 'flex-end', marginTop: 6 }}>
-                  <TouchableOpacity onPress={() => {
-                    setAudioNotes(prev => prev.filter(n => n.id !== note.id));
-                    Alert.alert('Deleted', 'Audio note removed from local archive.');
-                  }}>
-                    <Text style={{ color: '#e53e3e', fontSize: 10, fontWeight: 'bold' }}>Delete Note 🗑️</Text>
-                  </TouchableOpacity>
+                  <View style={{ flexDirection: 'row', justifyContent: 'flex-end', marginTop: 6 }}>
+                    <TouchableOpacity onPress={() => handleDeleteNote(note.id)}>
+                      <Text style={{ color: '#e53e3e', fontSize: 10, fontWeight: 'bold' }}>Delete Note 🗑️</Text>
+                    </TouchableOpacity>
+                  </View>
                 </View>
-              </View>
-            ))
+              );
+            })
           )}
         </View>
       )}
@@ -455,11 +524,11 @@ export default function VoiceAndTranslationScreen({ isDarkMode, coins, setCoins 
           <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginBottom: 10 }}>
             <View style={[styles.analyticsBox, isDarkMode && { backgroundColor: '#1a202c' }]}>
               <Text style={{ fontSize: 9, color: '#718096', fontWeight: 'bold' }}>TOTAL NOTES</Text>
-              <Text style={{ fontSize: 15, fontWeight: 'bold', color: '#3182ce', marginTop: 2 }}>{totalVoiceNotesCount}</Text>
+              <Text style={{ fontSize: 15, fontWeight: 'bold', color: '#3182ce', marginTop: 2 }}>{audioNotes.length}</Text>
             </View>
             <View style={[styles.analyticsBox, isDarkMode && { backgroundColor: '#1a202c' }]}>
               <Text style={{ fontSize: 9, color: '#718096', fontWeight: 'bold' }}>AUDIO MINUTES</Text>
-              <Text style={{ fontSize: 15, fontWeight: 'bold', color: '#38a169', marginTop: 2 }}>{totalTranscriptionMinutes}m</Text>
+              <Text style={{ fontSize: 15, fontWeight: 'bold', color: '#38a169', marginTop: 2 }}>{audioNotes.length * 3}m</Text>
             </View>
             <View style={[styles.analyticsBox, isDarkMode && { backgroundColor: '#1a202c' }]}>
               <Text style={{ fontSize: 9, color: '#718096', fontWeight: 'bold' }}>TRANSLATE ACCURACY</Text>
@@ -496,7 +565,14 @@ export default function VoiceAndTranslationScreen({ isDarkMode, coins, setCoins 
               <Text style={[styles.toggleLabel, isDarkMode && styles.darkText]}>Ambient Denoising Filter</Text>
               <Text style={{ fontSize: 10, color: '#718096' }}>Automatically remove wind and background noise during recording.</Text>
             </View>
-            <Switch value={autoDenoise} onValueChange={setAutoDenoise} trackColor={{ false: '#cbd5e0', true: '#3182ce' }} />
+            <Switch 
+              value={autoDenoise} 
+              onValueChange={(val) => {
+                setAutoDenoise(val);
+                syncVoiceSetting({ auto_denoise: val });
+              }} 
+              trackColor={{ false: '#cbd5e0', true: '#3182ce' }} 
+            />
           </View>
 
           <View style={styles.toggleRow}>
@@ -504,7 +580,14 @@ export default function VoiceAndTranslationScreen({ isDarkMode, coins, setCoins 
               <Text style={[styles.toggleLabel, isDarkMode && styles.darkText]}>Realtime Cloud Sync</Text>
               <Text style={{ fontSize: 10, color: '#718096' }}>Upload and back up voice notes instantly over network.</Text>
             </View>
-            <Switch value={realtimeCloudSync} onValueChange={setRealtimeCloudSync} trackColor={{ false: '#cbd5e0', true: '#3182ce' }} />
+            <Switch 
+              value={realtimeCloudSync} 
+              onValueChange={(val) => {
+                setRealtimeCloudSync(val);
+                syncVoiceSetting({ realtime_cloud_sync: val });
+              }} 
+              trackColor={{ false: '#cbd5e0', true: '#3182ce' }} 
+            />
           </View>
 
           <View style={styles.toggleRow}>
@@ -512,7 +595,14 @@ export default function VoiceAndTranslationScreen({ isDarkMode, coins, setCoins 
               <Text style={[styles.toggleLabel, isDarkMode && styles.darkText]}>Offline Local Cache Storage</Text>
               <Text style={{ fontSize: 10, color: '#718096' }}>Store raw WAV files locally when operating zero-net mesh.</Text>
             </View>
-            <Switch value={offlineLocalCache} onValueChange={setOfflineLocalCache} trackColor={{ false: '#cbd5e0', true: '#3182ce' }} />
+            <Switch 
+              value={offlineLocalCache} 
+              onValueChange={(val) => {
+                setOfflineLocalCache(val);
+                syncVoiceSetting({ offline_local_cache: val });
+              }} 
+              trackColor={{ false: '#cbd5e0', true: '#3182ce' }} 
+            />
           </View>
 
           <View style={[styles.toggleRow, { borderBottomWidth: 0 }]}>
@@ -520,7 +610,14 @@ export default function VoiceAndTranslationScreen({ isDarkMode, coins, setCoins 
               <Text style={[styles.toggleLabel, isDarkMode && styles.darkText]}>Voice Biometrics Speaker ID</Text>
               <Text style={{ fontSize: 10, color: '#718096' }}>Automatically identify speakers in multi-person audio transcripts.</Text>
             </View>
-            <Switch value={voiceBiometricsActive} onValueChange={setVoiceBiometricsActive} trackColor={{ false: '#cbd5e0', true: '#3182ce' }} />
+            <Switch 
+              value={voiceBiometricsActive} 
+              onValueChange={(val) => {
+                setVoiceBiometricsActive(val);
+                syncVoiceSetting({ voice_biometrics_active: val });
+              }} 
+              trackColor={{ false: '#cbd5e0', true: '#3182ce' }} 
+            />
           </View>
         </View>
       )}

@@ -9,6 +9,7 @@ import {
   Switch,
   TextInput,
 } from 'react-native';
+import { supabase } from '../../Services/supabaseClient';
 
 export default function ReactionsAndBubbles({ isDarkMode, coins, setCoins }) {
   const [messages, setMessages] = useState([

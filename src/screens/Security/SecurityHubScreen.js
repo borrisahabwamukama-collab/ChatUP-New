@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { View, Text, TouchableOpacity, StyleSheet, ScrollView, Switch } from 'react-native';
-import { supabase } from '../../supabaseClient';
+import { supabase } from '../../../Services/supabaseClient';
 import IntruderShield from './IntruderShield';
 import NeighborhoodSOSScreen from './NeighborhoodSOSScreen';
 import InstitutionalNodeScreen from './InstitutionalNodeScreen';
@@ -44,7 +44,7 @@ export default function SecurityHubScreen({ isDarkMode }) {
       .on(
         'postgres_changes',
         {
-          event: 'UPDATE',
+          event: '*',
           schema: 'public',
           table: 'security_settings',
           filter: 'id=eq.1',

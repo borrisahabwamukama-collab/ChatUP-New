@@ -9,6 +9,7 @@ import {
   ScrollView,
   Switch,
 } from 'react-native';
+import { supabase } from '../../Services/supabaseClient';
 
 export default function RewardAdManager({ isDarkMode, coins = 100, setCoins }) {
   const [isAdLoading, setIsAdLoading] = useState(false);

@@ -1,20 +1,18 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, FlatList, TouchableOpacity, StyleSheet, TextInput, Alert, ScrollView } from 'react-native';
-import { BannerAd, BannerAdSize, TestIds, RewardedAd, RewardedAdEventType } from 'react-native-google-mobile-ads';
+import { View, Text, FlatList, TouchableOpacity, StyleSheet, TextInput, Alert, ScrollView, Modal, ActivityIndicator } from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
+import { supabase } from '../../Services/supabaseClient';
 
-// Dynamic Google AdMob Unit IDs (Automatic Test IDs during development)
-const bannerAdUnitId = __DEV__ ? TestIds.BANNER : 'ca-app-pub-xxxxxxxxoxxxxxxx/xxxxxxxxxx';
-const rewardedAdUnitId = __DEV__ ? TestIds.REWARDED : 'ca-app-pub-xxxxxxxxoxxxxxxx/xxxxxxxxxx';
-
-const MOCK_GROUPS = [
-  { id: '1', name: 'Kampala Sunday Prayer Cell', avatar: '🙏', lastMessage: 'Let us remember to pray for the upcoming outreach.', time: '10:45 AM', unread: 3, isPining: true },
-  { id: '2', name: 'ChatUp Dev Team', avatar: '💻', lastMessage: 'Supabase table policies updated successfully.', time: '9:12 AM', unread: 0, isPining: false },
-  { id: '3', name: 'Worship & Media Hub', avatar: '🎥', lastMessage: 'Camera angles for Sunday service are set.', time: 'Yesterday', unread: 1, isPining: false },
-];
-
-export default function GroupListScreen({ navigation, coins, setCoins, isDarkMode }) {
-  const [chats, setChats] = useState(MOCK_GROUPS);
+export default function GroupListScreen({ navigation, currentUser, isDarkMode }) {
+  const [chats, setChats] = useState([]);
   const [searchQuery, setSearchQuery] = useState('');
+
+  // Modal & Membership State
+  const [selectedGroup, setSelectedGroup] = useState(null);
+  const [groupModalVisible, setGroupModalVisible] = useState(false);
+  const [isMember, setIsMember] = useState(false);
+  const [isAdmin, setIsAdmin] = useState(false);
+  const [loadingMembership, setLoadingMembership] = useState(false);
 
   // TOGGLE CONTROLS
   const [pinFilterActive, setPinFilterActive] = useState(false);
@@ -24,55 +22,37 @@ export default function GroupListScreen({ navigation, coins, setCoins, isDarkMod
   const [unreadOnlyFilter, setUnreadOnlyFilter] = useState(false);
   const [biometricEnclaveLocked, setBiometricEnclaveLocked] = useState(false);
 
-  // Monetization & Rewarded Ad States
-  const [rewardedAdLoaded, setRewardedAdLoaded] = useState(false);
-  const [rewardedAdInstance, setRewardedAdInstance] = useState(null);
-
-  // Initialize AdMob Rewarded Ad
+  // FETCH REAL LIVE GROUPS FROM SUPABASE ON LOAD
   useEffect(() => {
-    initRewardedAd();
+    fetchLiveGroups();
   }, []);
 
-  const initRewardedAd = () => {
+  const fetchLiveGroups = async () => {
     try {
-      const rewardedAd = RewardedAd.createForAdRequest(rewardedAdUnitId, {
-        requestNonPersonalizedAdsOnly: true,
-      });
+      const { data, error } = await supabase
+        .from('community_groups')
+        .select('*')
+        .order('created_at', { ascending: false });
 
-      const unsubscribeLoaded = rewardedAd.addAdEventListener(RewardedAdEventType.LOADED, () => {
-        setRewardedAdLoaded(true);
-      });
+      if (error) throw error;
 
-      const unsubscribeEarned = rewardedAd.addAdEventListener(RewardedAdEventType.EARNED_REWARD, () => {
-        if (setCoins) {
-          setCoins(prev => prev + 50);
-        }
-        Alert.alert('💰 Ad Reward Credited!', 'Successfully earned +50 Coins chat sponsor bonus!');
-      });
+      if (data) {
+        const formattedGroups = data.map((grp, index) => ({
+          id: grp.id,
+          name: grp.name,
+          category: grp.category || 'General Fellowship',
+          avatar: grp.category === 'Tech & Code' ? '💻' : grp.category === 'Church & Prayer' ? '🙏' : '👥',
+          lastMessage: grp.description || 'Welcome to the official community hub!',
+          time: 'Just now',
+          unread: 0,
+          isPining: index === 0,
+          created_by: grp.created_by, // Track creator ID securely
+        }));
 
-      rewardedAd.load();
-      setRewardedAdInstance(rewardedAd);
-
-      return () => {
-        unsubscribeLoaded();
-        unsubscribeEarned();
-      };
-    } catch (e) {
-      console.log('Rewarded Ad initialization notice:', e);
-    }
-  };
-
-  const handleShowRewardedAd = () => {
-    if (rewardedAdLoaded && rewardedAdInstance) {
-      rewardedAdInstance.show();
-      setRewardedAdLoaded(false);
-      rewardedAdInstance.load();
-    } else {
-      // Fallback simulation for web/preview
-      if (setCoins) {
-        setCoins(prev => prev + 50);
+        setChats(formattedGroups);
       }
-      Alert.alert('💰 Ad Reward Credited (Simulated)', 'Watch ad completed! +50 coins added to your ChatUp wallet balance.');
+    } catch (err) {
+      console.warn('Could not fetch live community groups:', err.message);
     }
   };
 
@@ -85,24 +65,86 @@ export default function GroupListScreen({ navigation, coins, setCoins, isDarkMod
     return matchesSearch;
   });
 
-  const handleOpenChat = (item) => {
+  // Tapping a group opens its official Modal Hub and checks membership securely
+  const handleOpenGroup = async (item) => {
     if (biometricEnclaveLocked) {
-      return Alert.alert('Enclave Locked 🔒', 'Please authenticate with biometrics to open this secure chat room.');
+      return Alert.alert('Enclave Locked 🔒', 'Please authenticate with biometrics to open this secure group hub.');
     }
     
-    // ✅ FIXED: Safely navigate to ChatRoomScreen and pass group details
+    setSelectedGroup(item);
+    setGroupModalVisible(true);
+    setLoadingMembership(true);
+
+    if (currentUser?.id) {
+      try {
+        // 1. Check if the current user created this group
+        const isCreator = item.created_by && item.created_by === currentUser.id;
+
+        // 2. Check membership table in Supabase
+        const { data, error } = await supabase
+          .from('chat_group_members')
+          .select('group_id, role')
+          .eq('group_id', item.id)
+          .eq('user_id', currentUser.id)
+          .maybeSingle();
+
+        if (isCreator || (!error && data)) {
+          setIsMember(true);
+          setIsAdmin(isCreator || data?.role === 'admin');
+        } else {
+          setIsMember(false);
+          setIsAdmin(false);
+        }
+      } catch (err) {
+        console.warn('Error checking membership:', err);
+      }
+    }
+    setLoadingMembership(false);
+  };
+
+  // Join the Community Group using clean UUID strings
+  const handleJoinGroup = async () => {
+    if (!currentUser?.id) {
+      return Alert.alert('Authentication Required 🛑', 'Please log in to join community groups.');
+    }
+
+    setLoadingMembership(true);
+    try {
+      const { error } = await supabase
+        .from('chat_group_members')
+        .insert([{ 
+          group_id: selectedGroup.id, 
+          user_id: currentUser.id,
+          role: 'member'
+        }]);
+
+      if (error) throw error;
+
+      setIsMember(true);
+      Alert.alert('Joined Successfully! 🚀', `You are now a member of "${selectedGroup.name}".`);
+    } catch (err) {
+      Alert.alert('Error Joining Group ❌', err.message);
+    } finally {
+      setLoadingMembership(false);
+    }
+  };
+
+  // Jump into the live Chat Room
+  const handleEnterChatRoom = () => {
+    setGroupModalVisible(false);
+    if (!selectedGroup) return;
+
     try {
       navigation.navigate('ChatRoomScreen', {
-        groupId: item.id,
-        groupName: item.name,
-        groupAvatar: item.avatar,
+        groupId: selectedGroup.id,
+        groupName: selectedGroup.name,
+        groupAvatar: selectedGroup.avatar,
       });
     } catch (error) {
-      // Fallback if named differently in App.js Stack Navigator
       try {
         navigation.navigate('ChatRoom', {
-          groupId: item.id,
-          groupName: item.name,
+          groupId: selectedGroup.id,
+          groupName: selectedGroup.name,
         });
       } catch (e) {
         Alert.alert('Navigation Error 🚫', 'ChatRoomScreen is not registered in your Stack Navigator.');
@@ -113,7 +155,7 @@ export default function GroupListScreen({ navigation, coins, setCoins, isDarkMod
   const renderItem = ({ item }) => (
     <TouchableOpacity 
       style={[styles.chatItem, isDarkMode && styles.darkChatItem]}
-      onPress={() => handleOpenChat(item)}
+      onPress={() => handleOpenGroup(item)}
       activeOpacity={0.7}
     >
       <View style={styles.avatar}>
@@ -149,37 +191,6 @@ export default function GroupListScreen({ navigation, coins, setCoins, isDarkMod
   return (
     <View style={[styles.container, isDarkMode && styles.darkContainer]}>
       
-      {/* ================= GOOGLE ADMOB DYNAMIC BANNER ================= */}
-      <View style={styles.monetizationAdCard}>
-        <Text style={styles.adTagLabel}>Sponsored Chat Banner 📢 • AdMob Banner</Text>
-        <View style={{ alignItems: 'center', marginVertical: 4 }}>
-          <BannerAd
-            unitId={bannerAdUnitId}
-            size={BannerAdSize.ANCHORED_ADAPTIVE_BANNER}
-            requestOptions={{
-              requestNonPersonalizedAdsOnly: true,
-            }}
-            onAdLoaded={() => console.log('AdMob GroupList Banner loaded successfully')}
-            onAdFailedToLoad={(error) => console.log('AdMob GroupList Banner load error: ', error)}
-          />
-        </View>
-      </View>
-
-      {/* ================= REWARDED AD CHAT REWARD WIDGET ================= */}
-      <View style={styles.creatorMonetizationCard}>
-        <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
-          <View style={{ flex: 1, marginRight: 10 }}>
-            <Text style={{ fontSize: 12, fontWeight: 'bold', color: '#2b6cb0' }}>🪙 Chat Reward Boost</Text>
-            <Text style={{ fontSize: 14, fontWeight: 'bold', color: '#2d3748', marginTop: 2 }}>
-              Watch a sponsor clip to earn +50 coins!
-            </Text>
-          </View>
-          <TouchableOpacity style={styles.watchRewardAdBtn} onPress={handleShowRewardedAd}>
-            <Text style={{ color: '#fff', fontSize: 11, fontWeight: 'bold' }}>Watch Ad (+50 🪙) 🎁</Text>
-          </TouchableOpacity>
-        </View>
-      </View>
-
       {/* Search Bar & Tools Header */}
       <View style={[styles.headerContainer, isDarkMode && styles.darkHeader]}>
         <TextInput
@@ -237,8 +248,13 @@ export default function GroupListScreen({ navigation, coins, setCoins, isDarkMod
       <FlatList
         data={filteredChats}
         renderItem={renderItem}
-        keyExtractor={item => item.id}
+        keyExtractor={item => String(item.id)}
         ItemSeparatorComponent={() => <View style={[styles.separator, isDarkMode && styles.darkSeparator]} />}
+        ListEmptyComponent={
+          <View style={{ alignItems: 'center', marginTop: 40 }}>
+            <Text style={{ fontSize: 13, color: '#718096' }}>No community groups found. Tap '+' to create one!</Text>
+          </View>
+        }
       />
 
       <TouchableOpacity 
@@ -253,6 +269,63 @@ export default function GroupListScreen({ navigation, coins, setCoins, isDarkMod
       >
         <Text style={styles.fabText}>+</Text>
       </TouchableOpacity>
+
+      {/* 🚀 OFFICIAL GROUP HUB MODAL WITH MEMBERSHIP & ADMIN CONTROLS */}
+      <Modal visible={groupModalVisible} animationType="slide" transparent={true}>
+        <View style={styles.modalOverlay}>
+          <View style={[styles.modalContent, isDarkMode && styles.darkContainer]}>
+            {selectedGroup && (
+              <ScrollView showsVerticalScrollIndicator={false}>
+                <View style={{ alignItems: 'center', marginBottom: 20 }}>
+                  <View style={styles.modalAvatarCircle}>
+                    <Text style={{ fontSize: 36 }}>{selectedGroup.avatar}</Text>
+                  </View>
+                  <Text style={[styles.modalGroupName, isDarkMode && styles.darkText]}>{selectedGroup.name}</Text>
+                  <Text style={styles.modalCategoryBadge}>{selectedGroup.category}</Text>
+                  {isAdmin && (
+                    <Text style={styles.adminBadge}>👑 Admin Privileges Active</Text>
+                  )}
+                </View>
+
+                <View style={[styles.infoBox, isDarkMode && styles.darkHeader]}>
+                  <Text style={[styles.infoTitle, isDarkMode && styles.darkText]}>📖 Group Purpose & Guidelines</Text>
+                  <Text style={{ fontSize: 13, color: isDarkMode ? '#cbd5e0' : '#4a5568', lineHeight: 18, marginTop: 4 }}>
+                    {selectedGroup.lastMessage}
+                  </Text>
+                </View>
+
+                {loadingMembership ? (
+                  <ActivityIndicator size="small" color="#2563eb" style={{ marginVertical: 20 }} />
+                ) : isMember ? (
+                  <TouchableOpacity 
+                    style={styles.enterChatBtn}
+                    onPress={handleEnterChatRoom}
+                  >
+                    <Ionicons name="chatbubbles" size={18} color="#fff" />
+                    <Text style={styles.enterChatBtnText}>Enter Group Discussion 💬</Text>
+                  </TouchableOpacity>
+                ) : (
+                  <TouchableOpacity 
+                    style={styles.joinBtn}
+                    onPress={handleJoinGroup}
+                  >
+                    <Ionicons name="person-add" size={18} color="#fff" />
+                    <Text style={styles.joinBtnText}>Join Community 🤝</Text>
+                  </TouchableOpacity>
+                )}
+
+                <TouchableOpacity 
+                  style={styles.closeModalBtn}
+                  onPress={() => setGroupModalVisible(false)}
+                >
+                  <Text style={{ color: '#718096', fontWeight: 'bold', fontSize: 12 }}>Close Hub</Text>
+                </TouchableOpacity>
+              </ScrollView>
+            )}
+          </View>
+        </View>
+      </Modal>
+
     </View>
   );
 }
@@ -289,10 +362,18 @@ const styles = StyleSheet.create({
   darkSeparator: { backgroundColor: '#2d3748' },
   fab: { position: 'absolute', bottom: 24, right: 24, width: 56, height: 56, borderRadius: 28, backgroundColor: '#2563eb', justifyContent: 'center', alignItems: 'center', elevation: 4, shadowColor: '#000', shadowOpacity: 0.3, shadowRadius: 4, shadowOffset: { width: 0, height: 2 } },
   fabText: { color: 'white', fontSize: 28, fontWeight: 'bold', marginTop: -2 },
-
-  // Monetization Ad Styles
-  monetizationAdCard: { backgroundColor: '#fff', borderWidth: 1, borderColor: '#e2e8f0', borderRadius: 8, padding: 8, marginBottom: 12, alignItems: 'center' },
-  adTagLabel: { fontSize: 9, color: '#a0aec0', textTransform: 'uppercase', fontWeight: 'bold', marginBottom: 2 },
-  creatorMonetizationCard: { backgroundColor: '#ebf8ff', borderWidth: 1, borderColor: '#bee3f8', borderRadius: 8, padding: 12, marginBottom: 12 },
-  watchRewardAdBtn: { backgroundColor: '#3182ce', paddingHorizontal: 12, paddingVertical: 6, borderRadius: 6 },
+  // Modal Styles
+  modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.6)', justifyContent: 'flex-end' },
+  modalContent: { backgroundColor: '#fff', borderTopLeftRadius: 20, borderTopRightRadius: 20, padding: 20, maxHeight: '80%' },
+  modalAvatarCircle: { width: 72, height: 72, borderRadius: 36, backgroundColor: '#ebf8ff', justifyContent: 'center', alignItems: 'center', marginBottom: 12 },
+  modalGroupName: { fontSize: 18, fontWeight: 'bold', color: '#0f172a', textAlign: 'center', marginBottom: 4 },
+  modalCategoryBadge: { fontSize: 10, fontWeight: 'bold', color: '#2563eb', backgroundColor: '#eff6ff', paddingHorizontal: 10, paddingVertical: 4, borderRadius: 12, overflow: 'hidden', marginBottom: 6 },
+  adminBadge: { fontSize: 10, fontWeight: 'bold', color: '#d97706', backgroundColor: '#fef3c7', paddingHorizontal: 10, paddingVertical: 4, borderRadius: 12, overflow: 'hidden' },
+  infoBox: { backgroundColor: '#f8fafc', borderRadius: 10, padding: 12, borderWidth: 1, borderColor: '#e2e8f0', marginBottom: 20 },
+  infoTitle: { fontSize: 12, fontWeight: 'bold', color: '#475569' },
+  enterChatBtn: { flexDirection: 'row', backgroundColor: '#2563eb', padding: 14, borderRadius: 12, justifyContent: 'center', alignItems: 'center', gap: 8, marginBottom: 10 },
+  enterChatBtnText: { color: '#fff', fontSize: 13, fontWeight: 'bold' },
+  joinBtn: { flexDirection: 'row', backgroundColor: '#16a34a', padding: 14, borderRadius: 12, justifyContent: 'center', alignItems: 'center', gap: 8, marginBottom: 10 },
+  joinBtnText: { color: '#fff', fontSize: 13, fontWeight: 'bold' },
+  closeModalBtn: { alignItems: 'center', padding: 10 },
 });

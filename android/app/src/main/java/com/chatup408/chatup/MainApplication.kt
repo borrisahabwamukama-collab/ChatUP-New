@@ -1,4 +1,4 @@
-package com.borrisahabwamukama.chatup
+package com.chatup408.chatup
 
 import android.app.Application
 import android.content.res.Configuration

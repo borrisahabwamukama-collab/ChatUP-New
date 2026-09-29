@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import {
   StyleSheet,
   Text,
@@ -7,34 +7,123 @@ import {
   ScrollView,
   Switch,
   Alert,
+  ActivityIndicator,
 } from 'react-native';
+import { supabase } from '../../Services/supabaseClient';
 
-export default function UniversalInterpreterModal({ isDarkMode, onClose }) {
-  // Global Universal Interpretation Engine States
+export default function UniversalInterpreterModal({ isDarkMode, currentUser = { id: 'borris_01', name: 'Borris', role: 'admin' }, onClose, coins, setCoins }) {
   const [globalEngineActive, setGlobalEngineActive] = useState(true);
-  const [selectedSourceLang, setSelectedSourceLang] = useState('English / Swahili');
+  const [selectedSourceLang] = useState('English / Swahili');
   const [selectedTargetLang, setSelectedTargetLang] = useState('Luganda 🇺🇬');
   const [voiceCloningSync, setVoiceCloningSync] = useState(true);
   const [autoDuckingActive, setAutoDuckingActive] = useState(true);
   const [handOffProtocol, setHandOffProtocol] = useState('Smart Queue & Auto-Approve');
+  const [loading, setLoading] = useState(true);
+  const [isSaving, setIsSaving] = useState(false);
 
   const languages = ['Luganda 🇺🇬', 'Swahili 🇹🇿', 'English 🇬🇧', 'Runyankole 🇺🇬', 'French 🇫🇷'];
 
-  const handleSaveUniversalConfig = () => {
-    Alert.alert(
-      'Global Interpreter Protocol Updated 🌍',
-      'Universal AI translation & audio routing now active across ChatRoom, Virtual TV, LiveStream, and Studio tabs.'
-    );
-    if (onClose) onClose();
+  const isAdminOrHost = currentUser?.role === 'admin' || currentUser?.id === 'borris_01';
+
+  useEffect(() => {
+    let isMounted = true;
+    if (isAdminOrHost) {
+      const loadConfig = async () => {
+        try {
+          const { data, error } = await supabase
+            .from('universal_interpreter_settings')
+            .select('*')
+            .eq('user_id', currentUser.id)
+            .maybeSingle();
+
+          if (isMounted) {
+            if (!error && data) {
+              setGlobalEngineActive(data.global_engine_active ?? true);
+              setSelectedTargetLang(data.selected_target_lang ?? 'Luganda 🇺🇬');
+              setVoiceCloningSync(data.voice_cloning_sync ?? true);
+              setAutoDuckingActive(data.auto_ducking_active ?? true);
+              setHandOffProtocol(data.hand_off_protocol ?? 'Smart Queue & Auto-Approve');
+            }
+          }
+        } catch (err) {
+          console.log('Notice:', err.message);
+        } finally {
+          if (isMounted) setLoading(false);
+        }
+      };
+      loadConfig();
+    } else {
+      setLoading(false);
+    }
+    return () => { isMounted = false; };
+  }, [currentUser?.id]);
+
+  // Stable handlers to prevent re-render thrashing & shaking
+  const handleSelectLuganda = useCallback(() => setSelectedTargetLang('Luganda 🇺🇬'), []);
+  const handleSelectSwahili = useCallback(() => setSelectedTargetLang('Swahili 🇹🇿'), []);
+  const handleSelectEnglish = useCallback(() => setSelectedTargetLang('English 🇬🇧'), []);
+  const handleSelectRunyankole = useCallback(() => setSelectedTargetLang('Runyankole 🇺🇬'), []);
+  const handleSelectFrench = useCallback(() => setSelectedTargetLang('French 🇫🇷'), []);
+
+  const handleToggleProtocol = useCallback(() => {
+    setHandOffProtocol(prev => prev.includes('Smart') ? 'Moderated Director Queue 🎛️' : 'Smart Queue & Auto-Approve 🤖');
+  }, []);
+
+  const handleSaveUniversalConfig = async () => {
+    setIsSaving(true);
+    try {
+      const payload = {
+        user_id: currentUser.id,
+        global_engine_active: globalEngineActive,
+        selected_source_lang: selectedSourceLang,
+        selected_target_lang: selectedTargetLang,
+        voice_cloning_sync: voiceCloningSync,
+        auto_ducking_active: autoDuckingActive,
+        hand_off_protocol: handOffProtocol,
+        updated_at: new Date(),
+      };
+
+      const { error } = await supabase
+        .from('universal_interpreter_settings')
+        .upsert(payload);
+
+      if (error) throw error;
+
+      if (setCoins) setCoins(c => c + 15);
+      Alert.alert(
+        'Global Interpreter Protocol Updated 🌍 (+15 🪙)',
+        'Universal AI translation & audio routing active across all app streams.'
+      );
+      if (onClose) onClose();
+    } catch (err) {
+      Alert.alert('Sync Error', 'Failed to save configuration to Supabase.');
+    } finally {
+      setIsSaving(false);
+    }
   };
 
+  if (!isAdminOrHost) return null;
+
+  if (loading) {
+    return (
+      <View style={[styles.container, isDarkMode && styles.darkContainer, { justifyContent: 'center', alignItems: 'center', height: 200 }]}>
+        <ActivityIndicator size="large" color="#3182ce" />
+      </View>
+    );
+  }
+
   return (
-    <ScrollView style={[styles.container, isDarkMode && styles.darkContainer]} contentContainerStyle={{ padding: 14, paddingBottom: 40 }}>
+    <ScrollView 
+      style={[styles.container, isDarkMode && styles.darkContainer]} 
+      contentContainerStyle={{ padding: 14, paddingBottom: 40 }}
+      showsVerticalScrollIndicator={false}
+      bounces={false}
+    >
       
       {/* Header Banner */}
       <View style={[styles.headerCard, isDarkMode && styles.darkCard]}>
-        <Text style={[styles.title, isDarkMode && styles.darkText]}>🌐 Global AI Audio & Interpretation Protocol</Text>
-        <Text style={styles.subtitle}>Universal background engine managing real-time translation, voice cloning, and speaker-audience hand-offs across all app tabs.</Text>
+        <Text style={[styles.title, isDarkMode && styles.darkText]}>🌐 Global AI Audio & Interpretation Protocol (Wallet: {coins} 🪙)</Text>
+        <Text style={styles.subtitle}>Admin Control Panel: Universal background engine managing real-time translation, voice cloning, and audio routing.</Text>
       </View>
 
       {/* Master Toggle */}
@@ -52,21 +141,51 @@ export default function UniversalInterpreterModal({ isDarkMode, onClose }) {
         </View>
       </View>
 
-      {/* Language Podiums Selector */}
+      {/* Language Podiums Selector (Static Stable Buttons) */}
       <View style={[styles.card, isDarkMode && styles.darkCard]}>
         <Text style={[styles.cardTitle, isDarkMode && styles.darkText]}>🗣️ In-Room AI Interpreter Channels & Podiums</Text>
         <Text style={{ fontSize: 11, color: '#718096', marginBottom: 10 }}>Select default target regional language for real-time neural speech dubbing:</Text>
         
         <View style={{ flexDirection: 'row', flexWrap: 'wrap', marginBottom: 10 }}>
-          {languages.map(lang => (
-            <TouchableOpacity
-              key={lang}
-              style={[styles.langChip, selectedTargetLang === lang && styles.activeLangChip]}
-              onPress={() => setSelectedTargetLang(lang)}
-            >
-              <Text style={[styles.langChipText, selectedTargetLang === lang && { color: '#fff' }]}>{lang}</Text>
-            </TouchableOpacity>
-          ))}
+          <TouchableOpacity
+            style={[styles.langChip, selectedTargetLang === 'Luganda 🇺🇬' && styles.activeLangChip]}
+            onPress={handleSelectLuganda}
+            activeOpacity={0.8}
+          >
+            <Text style={[styles.langChipText, selectedTargetLang === 'Luganda 🇺🇬' && { color: '#fff' }]}>Luganda 🇺🇬</Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={[styles.langChip, selectedTargetLang === 'Swahili 🇹🇿' && styles.activeLangChip]}
+            onPress={handleSelectSwahili}
+            activeOpacity={0.8}
+          >
+            <Text style={[styles.langChipText, selectedTargetLang === 'Swahili 🇹🇿' && { color: '#fff' }]}>Swahili 🇹🇿</Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={[styles.langChip, selectedTargetLang === 'English 🇬🇧' && styles.activeLangChip]}
+            onPress={handleSelectEnglish}
+            activeOpacity={0.8}
+          >
+            <Text style={[styles.langChipText, selectedTargetLang === 'English 🇬🇧' && { color: '#fff' }]}>English 🇬🇧</Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={[styles.langChip, selectedTargetLang === 'Runyankole 🇺🇬' && styles.activeLangChip]}
+            onPress={handleSelectRunyankole}
+            activeOpacity={0.8}
+          >
+            <Text style={[styles.langChipText, selectedTargetLang === 'Runyankole 🇺🇬' && { color: '#fff' }]}>Runyankole 🇺🇬</Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={[styles.langChip, selectedTargetLang === 'French 🇫🇷' && styles.activeLangChip]}
+            onPress={handleSelectFrench}
+            activeOpacity={0.8}
+          >
+            <Text style={[styles.langChipText, selectedTargetLang === 'French 🇫🇷' && { color: '#fff' }]}>French 🇫🇷</Text>
+          </TouchableOpacity>
         </View>
       </View>
 
@@ -88,7 +207,8 @@ export default function UniversalInterpreterModal({ isDarkMode, onClose }) {
           <Text style={[styles.settingText, isDarkMode && styles.darkText, { fontWeight: 'bold', marginBottom: 4 }]}>Speaker-Audience Hand-Off Protocol:</Text>
           <TouchableOpacity 
             style={styles.protocolSelectBtn} 
-            onPress={() => setHandOffProtocol(prev => prev.includes('Smart') ? 'Moderated Director Queue 🎛️' : 'Smart Queue & Auto-Approve 🤖')}
+            onPress={handleToggleProtocol}
+            activeOpacity={0.8}
           >
             <Text style={{ fontSize: 11, color: '#2b6cb0', fontWeight: 'bold' }}>Active: {handOffProtocol} (Tap to Switch)</Text>
           </TouchableOpacity>
@@ -96,8 +216,8 @@ export default function UniversalInterpreterModal({ isDarkMode, onClose }) {
       </View>
 
       {/* Save Button */}
-      <TouchableOpacity style={styles.saveBtn} onPress={handleSaveUniversalConfig}>
-        <Text style={styles.saveBtnText}>Apply Global Protocol Across All Tabs 🚀</Text>
+      <TouchableOpacity style={styles.saveBtn} onPress={handleSaveUniversalConfig} disabled={isSaving} activeOpacity={0.8}>
+        {isSaving ? <ActivityIndicator color="#fff" /> : <Text style={styles.saveBtnText}>Apply Global Protocol Across All Tabs (+15 🪙) 🚀</Text>}
       </TouchableOpacity>
 
     </ScrollView>
@@ -105,7 +225,7 @@ export default function UniversalInterpreterModal({ isDarkMode, onClose }) {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#f7fafc' },
+  container: { flex: 1, backgroundColor: '#f7fafc', overflow: 'hidden' },
   darkContainer: { backgroundColor: '#1a202c' },
   headerCard: { backgroundColor: '#fff', padding: 14, borderRadius: 12, marginBottom: 10, shadowColor: '#000', shadowOpacity: 0.05, shadowRadius: 4, elevation: 2 },
   darkCard: { backgroundColor: '#2d3748' },

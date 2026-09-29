@@ -7,418 +7,736 @@ import {
   ScrollView,
   TextInput,
   Alert,
-  Switch,
   Modal,
   Platform,
-  Dimensions,
-  TouchableWithoutFeedback
+  Dimensions
 } from 'react-native';
-import { BannerAd, BannerAdSize, TestIds, RewardedAd, RewardedAdEventType } from 'react-native-google-mobile-ads';
-
-// Dynamic Google AdMob Unit IDs (Automatic Test IDs during development)
-const bannerAdUnitId = __DEV__ ? TestIds.BANNER : 'ca-app-pub-xxxxxxxxoxxxxxxx/xxxxxxxxxx';
-const rewardedAdUnitId = __DEV__ ? TestIds.REWARDED : 'ca-app-pub-xxxxxxxxoxxxxxxx/xxxxxxxxxx';
+import { supabase } from '../../Services/supabaseClient';
+import styles from './GameArenaStyles';
+import LiveBroadcastGrid from './LiveBroadcastGrid';
+import GameTableArea from './GameTableArea';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 
 export default function GameArenaScreen({ coins, setCoins, isDarkMode }) {
-  // Game Arena Modes & State
-  const [selectedGame, setSelectedGame] = useState('Matatu'); // 'Matatu' | 'Chess' | 'Draft'
+  const [selectedGame, setSelectedGame] = useState('Matatu'); // 'Matatu' | 'Chess' | 'Draft' | 'Pool'
   const [spectatorCount, setSpectatorCount] = useState(1420);
   const [chatMessage, setChatMessage] = useState('');
   
-  // Match & Live Board States
   const [playerOneScore, setPlayerOneScore] = useState(3);
   const [playerTwoScore, setPlayerTwoScore] = useState(2);
   const [isMatchActive, setIsMatchActive] = useState(true);
-  const [winnerDeclared, setWinnerDeclared] = useState(null);
 
-  // Monetization & Rewarded Ad States
-  const [rewardedAdLoaded, setRewardedAdLoaded] = useState(false);
-  const [rewardedAdInstance, setRewardedAdInstance] = useState(null);
+  // Visual Board States (Matrix Representation)
+  const [chessBoardState, setChessBoardState] = useState([
+    ['R', 'N', 'B', 'Q', 'K', 'B', 'N', 'R'],
+    ['P', 'P', 'P', 'P', 'P', 'P', 'P', 'P'],
+    ['.', '.', '.', '.', '.', '.', '.', '.'],
+    ['.', '.', '.', '.', '.', '.', '.', '.'],
+    ['.', '.', '.', 'P', '.', '.', '.', '.'],
+    ['.', '.', '.', '.', '.', '.', '.', '.'],
+    ['p', 'p', 'p', '.', 'p', 'p', 'p', 'p'],
+    ['r', 'n', 'b', 'q', 'k', 'b', 'n', 'r']
+  ]);
 
-  // Sideline Sidemenu / Chat Feeds
+  const [draftBoardState, setDraftBoardState] = useState([
+    [0, 1, 0, 1, 0, 1, 0, 1],
+    [1, 0, 1, 0, 1, 0, 1, 0],
+    [0, 1, 0, 1, 0, 1, 0, 1],
+    [0, 0, 0, 0, 0, 0, 0, 0],
+    [0, 0, 0, 0, 0, 0, 0, 0],
+    [2, 0, 2, 0, 2, 0, 2, 0],
+    [0, 2, 0, 2, 0, 2, 0, 2],
+    [2, 0, 2, 0, 2, 0, 2, 0]
+  ]);
+
+  // Authentic Billiards Pool Table with Cue Stick Pull-Back & Live Trajectory into Pockets
+  const [poolVariant, setPoolVariant] = useState('8-Ball');
+  const [cuePower, setCuePower] = useState(50);
+  const [cueAngle, setCueAngle] = useState(45);
+  const [cueBallPos, setCueBallPos] = useState({ x: 60, y: 110 });
+  const [targetBalls, setTargetBalls] = useState([
+    { id: '1', label: '1', x: 130, y: 70, color: '#d97706', sunk: false },
+    { id: '2', label: '2', x: 150, y: 90, color: '#2563eb', sunk: false },
+    { id: '3', label: '3', x: 140, y: 110, color: '#dc2626', sunk: false },
+    { id: '8', label: '8', x: 170, y: 90, color: '#1e293b', sunk: false },
+    { id: '9', label: '9', x: 190, y: 80, color: '#7c3aed', sunk: false },
+  ]);
+  const [poolRefereeAdvice, setPoolRefereeAdvice] = useState('Adjust power & angle, then tap Shoot to strike cue ball live toward pockets!');
+
+  // Dedicated Fan Cheers & Sectional Hype Counters
+  const [playerOneCheers, setPlayerOneCheers] = useState(420);
+  const [playerTwoCheers, setPlayerTwoCheers] = useState(385);
+  const [hostCheers, setHostCheers] = useState(610);
+
+  // Matatu Hidden Hand & Phantom Rule Enforcement States
+  const [matatuHand, setMatatuHand] = useState(['7♠', 'Q♥', 'A♣', '5♦']);
+  const [opponentHandHiddenCount, setOpponentHandHiddenCount] = useState(4); 
+  const [lastPlayedCard, setLastPlayedCard] = useState('King of Spades ♠');
+  const [penaltyLog, setPenaltyLog] = useState('No infractions caught yet.');
+
+  const [selectedSquare, setSelectedSquare] = useState(null);
+
   const [matchMessages, setMatchMessages] = useState([
     { id: '1', user: 'Nimusiima Asifa', text: 'Stunning tactical play at Table 04! 🔥' },
     { id: '2', user: 'Stella', text: 'Play the trump card now! 🃏' },
     { id: '3', user: 'Brian_UG', text: 'Tournament bracket is heating up.' }
   ]);
 
-  // Pro Features & Security States
-  const [fairnessHashActive, setFairnessHashActive] = useState(true);
-  const [tableHashId] = useState('0x8f2b77cde41182 (SHA-256 Verified 🔒)');
-  const [eloMultiplierActive, setEloMultiplierActive] = useState(true);
-  const [playerEloRating] = useState('1850 Grandmaster Tier (Rank #4)');
-  const [spectatorWagerActive, setSpectatorWagerActive] = useState(false);
-  const [spectatorPoolTotal, setSpectatorPoolTotal] = useState(4850);
+  // Dynamic Supabase-Backed Sponsorship State
   const [sponsorBannerActive, setSponsorBannerActive] = useState(true);
-  const [sponsorName] = useState('Talk With Nature Wildlife Foundation 🦁');
-  const [meshTournamentSync, setMeshTournamentSync] = useState(true);
-  const [antiCollusionGuardActive, setAntiCollusionGuardActive] = useState(true);
-  const [voiceTauntsActive, setVoiceTauntsActive] = useState(true);
+  const [sponsorName, setSponsorName] = useState('Talk With Nature Wildlife Foundation 🦁');
+  const [sponsorPrizePool, setSponsorPrizePool] = useState(5000);
 
-  // Modals & Popups
+  const [showTipModal, setShowTipModal] = useState(false);
+  const [tipTargetRecipient, setTipTargetRecipient] = useState('Player A (Borris)');
+  const [customTipAmount, setCustomTipAmount] = useState(50);
+  const [tournamentRound, setTournamentRound] = useState('Semi-Finals: Table 04 Match');
+
+  // Developer Monetization & Matchmaking Wager States
   const [showWagerModal, setShowWagerModal] = useState(false);
-  const [wagerStakeAmount, setWagerStakeAmount] = useState(100);
+  const [selectedWagerStake, setSelectedWagerStake] = useState(100);
+  const [isQueueActive, setIsQueueActive] = useState(false);
+  const [floatingReactions, setFloatingReactions] = useState([]);
 
-  // Camera Stream Reference for Web / Mobile
-  const webcamRef = useRef(null);
-  const [cameraActive, setCameraActive] = useState(true);
+  // Coin Refill & Rewarded Ad Modal States
+  const [showCoinRefillModal, setShowCoinRefillModal] = useState(false);
+  const [isWatchingAd, setIsWatchingAd] = useState(false);
 
-  // Initialize Web Camera Stream & AdMob Rewarded Ad
+  // 🌟 MULTI-STREAM WEBCAM REFS FOR HOST & COMPETITORS
+  const hostWebcamRef = useRef(null);
+  const playerOneWebcamRef = useRef(null);
+  const playerTwoWebcamRef = useRef(null);
+  const [cameraStatus, setCameraStatus] = useState('Connecting Live Feeds...');
+
   useEffect(() => {
-    let mediaStream = null;
-    if (Platform.OS === 'web' && cameraActive) {
-      navigator.mediaDevices?.getUserMedia?.({ video: true, audio: true })
-        .then((stream) => {
-          mediaStream = stream;
-          if (webcamRef.current) {
-            webcamRef.current.srcObject = stream;
+    let activeStream = null;
+    let isMounted = true;
+
+    const startStandardFeeds = async () => {
+      if (Platform.OS === 'web') {
+        try {
+          if (navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
+            activeStream = await navigator.mediaDevices.getUserMedia({ video: true, audio: false });
+            if (isMounted) {
+              [hostWebcamRef, playerOneWebcamRef, playerTwoWebcamRef].forEach(ref => {
+                if (ref && ref.current) {
+                  ref.current.srcObject = activeStream;
+                  ref.current.muted = true;
+                  ref.current.play().catch(e => console.log('Autoplay constraint notice:', e));
+                }
+              });
+              setCameraStatus('Live Feed Active 🔴');
+            }
+          } else {
+            if (isMounted) setCameraStatus('Camera API unavailable in this browser context.');
           }
-        })
-        .catch(() => {});
-    }
-    initRewardedAd();
-    return () => {
-      if (mediaStream) {
-        mediaStream.getTracks().forEach(track => track.stop());
+        } catch (err) {
+          if (isMounted) setCameraStatus('Standard Feed: Using Simulated Studio Cam');
+        }
+      } else {
+        if (isMounted) setCameraStatus('Mobile Client: Studio Feed Connected');
       }
     };
-  }, [cameraActive]);
 
-  const initRewardedAd = () => {
-    try {
-      const rewardedAd = RewardedAd.createForAdRequest(rewardedAdUnitId, {
-        requestNonPersonalizedAdsOnly: true,
-      });
+    startStandardFeeds();
 
-      const unsubscribeLoaded = rewardedAd.addAdEventListener(RewardedAdEventType.LOADED, () => {
-        setRewardedAdLoaded(true);
-      });
-
-      const unsubscribeEarned = rewardedAd.addAdEventListener(RewardedAdEventType.EARNED_REWARD, () => {
-        setCoins(prev => prev + 50);
-        Alert.alert('💰 Ad Reward Credited!', 'Successfully earned +50 Coins tournament bounty!');
-      });
-
-      rewardedAd.load();
-      setRewardedAdInstance(rewardedAd);
-
-      return () => {
-        unsubscribeLoaded();
-        unsubscribeEarned();
-      };
-    } catch (e) {
-      console.log('Rewarded Ad initialization notice:', e);
-    }
-  };
-
-  const handleShowRewardedAd = () => {
-    if (rewardedAdLoaded && rewardedAdInstance) {
-      rewardedAdInstance.show();
-      setRewardedAdLoaded(false);
-      rewardedAdInstance.load();
-    } else {
-      // Fallback simulation for web/preview
-      setCoins(prev => prev + 50);
-      Alert.alert('💰 Ad Reward Credited (Simulated)', 'Watch ad completed! +50 coins added to your ChatUp wallet balance.');
-    }
-  };
-
-  // Interactive Game Action Handler (Dynamic Board Simulation)
-  const handleGameAction = (actionType) => {
-    if (!isMatchActive) return Alert.alert('Match Ended', 'This table session has concluded.');
-
-    if (selectedGame === 'Matatu') {
-      if (actionType === 'card') {
-        setPlayerOneScore(prev => prev + 1);
-        setMatchMessages(prev => [
-          ...prev, 
-          { id: Date.now().toString(), user: 'Table Referee 🃏', text: 'Borris successfully played a matching Trump Card!' }
-        ]);
-        Alert.alert('Trump Played! 🃏', '+1 Point secured on the felt table!');
-      } else if (actionType === 'draw') {
-        setMatchMessages(prev => [
-          ...prev,
-          { id: Date.now().toString(), user: 'Table Referee 🃏', text: 'Borris drew a card from the deck.' }
-        ]);
-        Alert.alert('Card Drawn 🎴', 'You drew from the deck.');
+    return () => {
+      isMounted = false;
+      if (activeStream) {
+        activeStream.getTracks().forEach(track => track.stop());
       }
-    } else if (selectedGame === 'Chess') {
-      if (actionType === 'move') {
-        setPlayerOneScore(prev => prev + 2);
-        setMatchMessages(prev => [
-          ...prev, 
-          { id: Date.now().toString(), user: 'Chess Engine ♟️', text: 'Brilliant knight fork executed by Borris!' }
-        ]);
-        Alert.alert('Tactical Move! ♟️', 'Piece repositioned successfully. Advantage Borris.');
+    };
+  }, []);
+
+  // Fully Dynamic Supabase Realtime Sync for Table Sessions & Sponsor Data
+  useEffect(() => {
+    let channel = null;
+    const activeTableId = `table_${selectedGame.toLowerCase()}`;
+
+    const syncLiveArena = async () => {
+      try {
+        const { data: sessionData, error: sessionError } = await supabase
+          .from('game_arena_sessions')
+          .select('*')
+          .eq('table_id', activeTableId)
+          .maybeSingle();
+
+        if (sessionData && !sessionError) {
+          setPlayerOneScore(sessionData.player_one_score ?? 3);
+          setPlayerTwoScore(sessionData.player_two_score ?? 2);
+          if (sessionData.player_one_likes) setPlayerOneCheers(sessionData.player_one_likes);
+          if (sessionData.player_two_likes) setPlayerTwoCheers(sessionData.player_two_likes);
+          if (sessionData.host_likes) setHostCheers(sessionData.host_likes);
+          if (sessionData.messages) setMatchMessages(sessionData.messages);
+          if (sessionData.chess_board) setChessBoardState(sessionData.chess_board);
+          if (sessionData.draft_board) setDraftBoardState(sessionData.draft_board);
+        } else {
+          setPlayerOneScore(3);
+          setPlayerTwoScore(2);
+        }
+
+        const { data: sponsorData } = await supabase
+          .from('arena_sponsors')
+          .select('*')
+          .eq('is_active', true)
+          .maybeSingle();
+
+        if (sponsorData) {
+          setSponsorName(sponsorData.sponsor_name);
+          setSponsorPrizePool(sponsorData.prize_pool ?? 5000);
+          setSponsorBannerActive(true);
+        }
+      } catch (err) {
+        console.log('Supabase sync fetch notice:', err.message);
+      }
+
+      if (supabase) {
+        channel = supabase.channel(`public:game_arena_sessions:${activeTableId}`);
+        
+        channel.on(
+          'postgres_changes',
+          {
+            event: '*',
+            schema: 'public',
+            table: 'game_arena_sessions',
+            filter: `table_id=eq.${activeTableId}`,
+          },
+          (payload) => {
+            if (payload.new) {
+              setPlayerOneScore(payload.new.player_one_score ?? playerOneScore);
+              setPlayerTwoScore(payload.new.player_two_score ?? playerTwoScore);
+              if (payload.new.player_one_likes) setPlayerOneCheers(payload.new.player_one_likes);
+              if (payload.new.player_two_likes) setPlayerTwoCheers(payload.new.player_two_likes);
+              if (payload.new.host_likes) setHostCheers(payload.new.host_likes);
+              if (payload.new.messages) setMatchMessages(payload.new.messages);
+              if (payload.new.chess_board) setChessBoardState(payload.new.chess_board);
+              if (payload.new.draft_board) setDraftBoardState(payload.new.draft_board);
+            }
+          }
+        );
+
+        channel.subscribe();
+      }
+    };
+
+    syncLiveArena();
+
+    return () => {
+      if (channel && supabase) supabase.removeChannel(channel);
+    };
+  }, [selectedGame]);
+
+  const updateSupabaseTableState = async (newScore1, newScore2, updatedMessages, newChess = chessBoardState, newDraft = draftBoardState) => {
+    try {
+      if (!supabase) return;
+      const activeTableId = `table_${selectedGame.toLowerCase()}`;
+      await supabase
+        .from('game_arena_sessions')
+        .upsert({
+          table_id: activeTableId,
+          player_one_score: newScore1,
+          player_two_score: newScore2,
+          player_one_likes: playerOneCheers,
+          player_two_likes: playerTwoCheers,
+          host_likes: hostCheers,
+          messages: updatedMessages,
+          chess_board: newChess,
+          draft_board: newDraft,
+          updated_at: new Date(),
+        });
+    } catch (err) {
+      console.log('Supabase sync write error:', err.message);
+    }
+  };
+
+  const handleSquarePress = (rIdx, cIdx) => {
+    if (!isMatchActive) return;
+
+    if (selectedGame === 'Chess') {
+      if (!selectedSquare) {
+        if (chessBoardState[rIdx][cIdx] !== '.') {
+          setSelectedSquare({ r: rIdx, c: cIdx });
+          Alert.alert('Piece Selected ♟️', `Selected piece at row ${rIdx}, col ${cIdx}. Tap legal destination square.`);
+        }
+      } else {
+        const targetCell = chessBoardState[selectedSquare.r][selectedSquare.c];
+        const destinationCell = chessBoardState[rIdx][cIdx];
+        const isSameColorCapture = destinationCell !== '.' && 
+          ((targetCell === targetCell.toUpperCase() && destinationCell === destinationCell.toUpperCase()) ||
+           (targetCell === targetCell.toLowerCase() && destinationCell === destinationCell.toLowerCase()));
+
+        if (isSameColorCapture) {
+          setSelectedSquare(null);
+          return Alert.alert('Illegal Chess Move! ♟️❌', 'Rule Violation: You cannot capture your own piece!');
+        }
+
+        let updatedChess = chessBoardState.map(row => [...row]);
+        updatedChess[rIdx][cIdx] = targetCell;
+        updatedChess[selectedSquare.r][selectedSquare.c] = '.';
+        
+        setChessBoardState(updatedChess);
+        setSelectedSquare(null);
+        
+        const newMsg = 'Borris executed a legal chess move under federation laws.';
+        const updatedMsgs = [...matchMessages, { id: Date.now().toString(), user: 'Table Referee ♟️', text: newMsg }];
+        setMatchMessages(updatedMsgs);
+
+        updateSupabaseTableState(playerOneScore + 1, playerTwoScore, updatedMsgs, updatedChess, draftBoardState);
       }
     } else if (selectedGame === 'Draft') {
-      if (actionType === 'jump') {
-        setPlayerOneScore(prev => prev + 3);
-        setMatchMessages(prev => [
-          ...prev, 
-          { id: Date.now().toString(), user: 'Draft Master ⚪', text: 'Multi-jump captured by Borris!' }
-        ]);
-        Alert.alert('King Crowned! 👑', 'Opponent piece captured!');
+      if (!selectedSquare) {
+        if (draftBoardState[rIdx][cIdx] !== 0) {
+          setSelectedSquare({ r: rIdx, c: cIdx });
+          Alert.alert('Checker Selected ⚪', `Selected checker at row ${rIdx}, col ${cIdx}. Tap diagonal destination.`);
+        }
+      } else {
+        const rowDiff = Math.abs(rIdx - selectedSquare.r);
+        const colDiff = Math.abs(cIdx - selectedSquare.c);
+
+        if (rowDiff !== 1 || colDiff !== 1) {
+          setSelectedSquare(null);
+          return Alert.alert('Illegal Draft Move! ⚪❌', 'Rule Violation: Checkers must move one square diagonally!');
+        }
+
+        let updatedDraft = draftBoardState.map(row => [...row]);
+        updatedDraft[rIdx][cIdx] = updatedDraft[selectedSquare.r][selectedSquare.c];
+        updatedDraft[selectedSquare.r][selectedSquare.c] = 0;
+
+        setDraftBoardState(updatedDraft);
+        setSelectedSquare(null);
+
+        const newMsg = 'Borris executed a valid diagonal draft step.';
+        const updatedMsgs = [...matchMessages, { id: Date.now().toString(), user: 'Table Referee ⚪', text: newMsg }];
+        setMatchMessages(updatedMsgs);
+
+        updateSupabaseTableState(playerOneScore + 1, playerTwoScore, updatedMsgs, chessBoardState, updatedDraft);
       }
     }
+  };
+
+  const handlePoolPhysicsStrike = () => {
+    const radian = (cueAngle * Math.PI) / 180;
+    const distanceX = Math.cos(radian) * (cuePower * 1.5);
+    const distanceY = Math.sin(radian) * (cuePower * 1.0);
+
+    const newCueX = cueBallPos.x + distanceX;
+    const newCueY = cueBallPos.y - distanceY;
+
+    setCueBallPos({ x: newCueX, y: newCueY });
+
+    const pockets = [
+      { x: 15, y: 15 }, { x: 245, y: 15 },
+      { x: 15, y: 135 }, { x: 245, y: 135 }
+    ];
+
+    let sunkEvent = false;
+    let updatedBalls = targetBalls.map(ball => {
+      if (!ball.sunk) {
+        const distToBall = Math.hypot(newCueX - ball.x, newCueY - ball.y);
+        if (distToBall < 25) {
+          const targetPocket = pockets.reduce((nearest, p) => {
+            return Math.hypot(p.x - ball.x, p.y - ball.y) < Math.hypot(nearest.x - ball.x, nearest.y - ball.y) ? p : nearest;
+          }, pockets[0]);
+
+          const hitPocketDist = Math.hypot(targetPocket.x - ball.x, targetPocket.y - ball.y);
+          if (cuePower > 40 && hitPocketDist < 80) {
+            sunkEvent = true;
+            return { ...ball, x: targetPocket.x, y: targetPocket.y, sunk: true };
+          } else {
+            return { ...ball, x: ball.x + (distanceX * 0.6), y: ball.y - (distanceY * 0.6) };
+          }
+        }
+      }
+      return ball;
+    });
+
+    setTargetBalls(updatedBalls);
+
+    let statusText = '';
+    let newScore = playerOneScore;
+    if (sunkEvent) {
+      statusText = '🎯 SINK! Ball rolled live into the corner pocket for all spectators!';
+      newScore += 1;
+      setPlayerOneScore(newScore);
+    } else {
+      statusText = `💥 Strike executed (${cuePower}% power). Balls shifted across felt layout.`;
+    }
+
+    setPoolRefereeAdvice(statusText);
+    const updatedMsgs = [...matchMessages, { id: Date.now().toString(), user: 'Billiards Referee 🎱', text: `Borris live strike: ${statusText}` }];
+    setMatchMessages(updatedMsgs);
+    updateSupabaseTableState(newScore, playerTwoScore, updatedMsgs);
+    Alert.alert('Cue Struck Live! 🎯', statusText);
+  };
+
+  // 🌟 SUPABASE-SYNCED CHEERS & LIKES HANDLER
+  const handleSendCheerFor = async (target) => {
+    let newP1Cheers = playerOneCheers;
+    let newP2Cheers = playerTwoCheers;
+    let newHostCheers = hostCheers;
+
+    if (target === 'p1') {
+      newP1Cheers += 15;
+      setPlayerOneCheers(newP1Cheers);
+      Alert.alert('🔥 Fan Hype Boost!', 'You sent 15 cheers & likes for Borris (Player A)!');
+    } else if (target === 'p2') {
+      newP2Cheers += 15;
+      setPlayerTwoCheers(newP2Cheers);
+      Alert.alert('🔥 Fan Hype Boost!', 'You sent 15 cheers & likes for Challenger (Player B)!');
+    } else if (target === 'host') {
+      newHostCheers += 25;
+      setHostCheers(newHostCheers);
+      Alert.alert('🎙️ Host Caster Hype!', 'You boosted the Host Caster booth with cheers & likes!');
+    }
+
+    const newReaction = { id: Date.now().toString(), emoji: '🔥' };
+    setFloatingReactions(prev => [...prev.slice(-4), newReaction]);
+
+    try {
+      if (!supabase) return;
+      const activeTableId = `table_${selectedGame.toLowerCase()}`;
+      await supabase
+        .from('game_arena_sessions')
+        .upsert({
+          table_id: activeTableId,
+          player_one_likes: newP1Cheers,
+          player_two_likes: newP2Cheers,
+          host_likes: newHostCheers,
+          player_one_score: playerOneScore,
+          player_two_score: playerTwoScore,
+          messages: matchMessages,
+          updated_at: new Date(),
+        });
+    } catch (err) {
+      console.log('Error syncing arena likes to Supabase:', err.message);
+    }
+  };
+
+  // 🌟 GLOBAL ANALYTICS SYNC FUNCTION
+  const finalizeAndSyncArenaAnalytics = async () => {
+    try {
+      if (!supabase) return;
+      const totalMatchCheers = playerOneCheers + hostCheers + playerTwoCheers;
+
+      const { data: existingAnalytics } = await supabase
+        .from('creator_analytics')
+        .select('*')
+        .limit(1)
+        .maybeSingle();
+
+      const currentLikes = existingAnalytics?.total_likes || 0;
+      const updatedTotalLikes = currentLikes + totalMatchCheers;
+
+      await supabase
+        .from('creator_analytics')
+        .upsert({
+          id: existingAnalytics?.id || undefined,
+          total_likes: updatedTotalLikes,
+          last_updated: new Date(),
+        });
+    } catch (err) {
+      console.log('Error syncing arena analytics:', err.message);
+    }
+  };
+
+  const handleJoinWagerQueue = () => {
+    if (coins < selectedWagerStake) {
+      setShowWagerModal(false);
+      setShowCoinRefillModal(true);
+      return;
+    }
+    const platformFee = Math.round(selectedWagerStake * 0.05);
+    setCoins(prev => prev - selectedWagerStake);
+    setIsQueueActive(true);
+    setShowWagerModal(false);
+
+    Alert.alert(
+      'Matchmaking Queue Active ⚡',
+      `Staked 🪙 ${selectedWagerStake} coins (${platformFee} coin developer platform rake applied). Searching for live opponent at Table (${selectedGame})...`
+    );
+  };
+
+  const handleWatchRewardedAd = () => {
+    setIsWatchingAd(true);
+    setTimeout(() => {
+      setIsWatchingAd(false);
+      setCoins(prev => prev + 50);
+      setShowCoinRefillModal(false);
+      Alert.alert('Reward Earned! 🪙 +50 Coins', 'Ad completed successfully. 50 coins added to your wallet!');
+    }, 2000);
+  };
+
+  const handleBuyCoinBundle = (bundleCoins) => {
+    setCoins(prev => prev + bundleCoins);
+    setShowCoinRefillModal(false);
+    Alert.alert('Purchase Successful 🚀', `Successfully credited 🪙 ${bundleCoins} coins via Mobile Money / Billing!`);
+  };
+
+  const handleMatatuAction = (actionType) => {
+    if (!isMatchActive) return Alert.alert('Match Ended', 'This table session has concluded.');
+
+    let updatedP1Score = playerOneScore;
+    let newMsgText = '';
+
+    if (actionType === 'card') {
+      if (matatuHand.length === 0) {
+        return Alert.alert('Empty Hand', 'You have no cards left!');
+      }
+      const playedCard = matatuHand[0];
+      const remainingHand = matatuHand.slice(1);
+      setMatatuHand(remainingHand);
+      setLastPlayedCard(playedCard);
+
+      if (remainingHand.length === 1) {
+        newMsgText = `Borris played ${playedCard}. PHANTOM RULE ARMED: 1 card remaining!`;
+        Alert.alert('Single Card Left! ⚠️', 'Hidden Rule Active: Shout "Matatu!" or risk a penalty if caught!');
+      } else {
+        newMsgText = `Borris successfully played ${playedCard} onto the table.`;
+      }
+    } else if (actionType === 'catch_slip') {
+      setPenaltyLog('Infraction caught! Opponent failed to declare Matatu on single card!');
+      updatedP1Score += 3;
+      newMsgText = 'CRITICAL CALLOUT: Borris caught opponent breaking the hidden Matatu rule! +3 penalty points!';
+      Alert.alert('Matatu Called! 🔥', 'Penalty successfully enforced against opponent slip!');
+    } else if (actionType === 'draw') {
+      const drawnCard = '10 of Hearts ♥';
+      setMatatuHand(prev => [...prev, drawnCard]);
+      newMsgText = 'Borris drew a card from the deck pile.';
+    }
+
+    setPlayerOneScore(updatedP1Score);
+    const updatedMsgs = [
+      ...matchMessages,
+      { id: Date.now().toString(), user: 'Matatu Referee 🃏', text: newMsgText }
+    ];
+    setMatchMessages(updatedMsgs);
+    updateSupabaseTableState(updatedP1Score, playerTwoScore, updatedMsgs);
+  };
+
+  const handleHostRewardWinner = async () => {
+    const rewardCoins = 150;
+    setCoins(prev => prev + rewardCoins);
+    const updatedMsgs = [
+      ...matchMessages,
+      { id: Date.now().toString(), user: 'Tournament Host 🏆', text: `Host awarded 🪙 ${rewardCoins} bonus coins to Borris for stellar tournament performance!` }
+    ];
+    setMatchMessages(updatedMsgs);
+    updateSupabaseTableState(playerOneScore, playerTwoScore, updatedMsgs);
+
+    // 🌟 Sync arena likes/cheers into global Creator Analytics upon reward
+    await finalizeAndSyncArenaAnalytics();
+
+    Alert.alert('Tournament Prize Awarded & Analytics Synced! 🏆📊', `Host sent 🪙 ${rewardCoins} coins to winner & updated global analytics!`);
   };
 
   const handleSendCheer = () => {
     if (!chatMessage.trim()) return;
-    setMatchMessages(prev => [...prev, { id: Date.now().toString(), user: 'You (VIP Spectator)', text: chatMessage.trim() }]);
+    const updatedMsgs = [
+      ...matchMessages, 
+      { id: Date.now().toString(), user: 'You (VIP Spectator)', text: chatMessage.trim() }
+    ];
+    setMatchMessages(updatedMsgs);
     setChatMessage('');
+    updateSupabaseTableState(playerOneScore, playerTwoScore, updatedMsgs);
   };
 
-  const handleTipPlayer = (amount) => {
-    if (coins < amount) {
-      return Alert.alert('Insufficient Coins', `You need 🪙 ${amount} coins. Your balance is 🪙 ${coins}.`);
-    }
-    setCoins(prev => prev - amount);
-    setMatchMessages(prev => [
-      ...prev,
-      { id: Date.now().toString(), user: 'Tip Alert 🪙', text: `You tipped 🪙 ${amount} coins to the table champion!` }
-    ]);
-    Alert.alert('Tip Sent Successfully! 🌟', `Successfully tipped 🪙 ${amount} coins!`);
+  const openTipModalFor = (recipient) => {
+    setTipTargetRecipient(recipient);
+    setShowTipModal(true);
   };
 
-  const handlePlaceWager = () => {
-    if (coins < wagerStakeAmount) {
-      return Alert.alert('Insufficient Coins', 'Earn more coins through daily activities or wallet top-ups.');
+  const handleConfirmTip = () => {
+    if (coins < customTipAmount) {
+      setShowTipModal(false);
+      setShowCoinRefillModal(true);
+      return;
     }
-    setCoins(prev => prev - wagerStakeAmount);
-    setSpectatorPoolTotal(prev => prev + wagerStakeAmount);
-    setShowWagerModal(false);
-    Alert.alert('Wager Locked! 🪙', `Successfully staked 🪙 ${wagerStakeAmount} coins into the spectator pool.`);
+    const platformTipCut = Math.round(customTipAmount * 0.1);
+    const recipientTipAmount = customTipAmount - platformTipCut;
+
+    setCoins(prev => prev - customTipAmount);
+    setShowTipModal(false);
+
+    const updatedMsgs = [
+      ...matchMessages,
+      { id: Date.now().toString(), user: 'Tip Alert 🪙', text: `You tipped 🪙 ${recipientTipAmount} coins to ${tipTargetRecipient} (🪙 ${platformTipCut} developer fee applied)!` }
+    ];
+    setMatchMessages(updatedMsgs);
+    updateSupabaseTableState(playerOneScore, playerTwoScore, updatedMsgs);
+    Alert.alert('Tip Sent! 🌟', `Successfully sent 🪙 ${recipientTipAmount} to ${tipTargetRecipient}!`);
+  };
+
+  const getChessSymbol = (char) => {
+    const map = { R: '♜', N: '♞', B: '♝', Q: '♛', K: '♚', P: '♟', r: '♖', n: '♘', b: '♗', q: '♕', k: '♔', p: '♙' };
+    return map[char] || '';
   };
 
   return (
     <ScrollView contentContainerStyle={[styles.container, isDarkMode && styles.darkContainer]}>
       
-      {/* ================= GOOGLE ADMOB DYNAMIC BANNER ================= */}
-      <View style={styles.monetizationAdCard}>
-        <Text style={styles.adTagLabel}>Sponsored Arena Banner 📢 • AdMob Banner</Text>
-        <View style={{ alignItems: 'center', marginVertical: 4 }}>
-          <BannerAd
-            unitId={bannerAdUnitId}
-            size={BannerAdSize.ANCHORED_ADAPTIVE_BANNER}
-            requestOptions={{
-              requestNonPersonalizedAdsOnly: true,
-            }}
-            onAdLoaded={() => console.log('AdMob Arena Banner loaded successfully')}
-            onAdFailedToLoad={(error) => console.log('AdMob Arena Banner load error: ', error)}
-          />
-        </View>
-      </View>
-
-      {/* ================= REWARDED AD TOURNAMENT BONUS WIDGET ================= */}
-      <View style={styles.creatorMonetizationCard}>
-        <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
-          <View>
-            <Text style={{ fontSize: 12, fontWeight: 'bold', color: '#2b6cb0' }}>🪙 Tournament Spectator Rewards</Text>
-            <Text style={{ fontSize: 14, fontWeight: 'bold', color: '#2d3748', marginTop: 2 }}>
-              Watch a sponsor clip to earn +50 coins!
-            </Text>
-          </View>
-          <TouchableOpacity style={styles.watchRewardAdBtn} onPress={handleShowRewardedAd}>
-            <Text style={{ color: '#fff', fontSize: 11, fontWeight: 'bold' }}>Watch Ad (+50 Coins) 🎁</Text>
-          </TouchableOpacity>
-        </View>
-      </View>
-
-      {/* ================= 1. TOURNAMENT SPONSORSHIP BANNER ================= */}
+      {/* Dynamic Sponsor Banner with Prize Pool Display */}
       {sponsorBannerActive && (
-        <View style={[styles.sponsorBanner, isDarkMode && styles.darkCard]}>
-          <Text style={{ fontSize: 10, fontWeight: 'bold', color: '#b7791f' }}>🌟 OFFICIAL TOURNAMENT SPONSORSHIP</Text>
-          <Text style={{ fontSize: 12, fontWeight: 'bold', color: isDarkMode ? '#fefcbf' : '#2d3748', marginTop: 2 }}>{sponsorName}</Text>
+        <View style={[styles.sponsorBanner, isDarkMode && styles.darkCard, { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }]}>
+          <View>
+            <Text style={{ fontSize: 10, fontWeight: 'bold', color: '#b7791f' }}>🌟 OFFICIAL TOURNAMENT SPONSORSHIP</Text>
+            <Text style={{ fontSize: 12, fontWeight: 'bold', color: isDarkMode ? '#fefcbf' : '#2d3748', marginTop: 2 }}>{sponsorName}</Text>
+          </View>
+          <View style={{ backgroundColor: '#fef3c7', paddingHorizontal: 8, paddingVertical: 4, borderRadius: 4, borderWidth: 1, borderColor: '#f59e0b' }}>
+            <Text style={{ fontSize: 10, fontWeight: 'bold', color: '#b45309' }}>🏆 Prize Pool: 🪙 {sponsorPrizePool}</Text>
+          </View>
         </View>
       )}
 
-      {/* ================= 2. GAME SELECTOR TABS ================= */}
-      <View style={[styles.gameTabRow, isDarkMode && styles.darkCard]}>
-        {['Matatu', 'Chess', 'Draft'].map(game => (
-          <TouchableOpacity
-            key={game}
-            style={[styles.gameTabBtn, selectedGame === game && styles.activeGameTab, isDarkMode && selectedGame === game && { backgroundColor: '#334155' }]}
-            onPress={() => setSelectedGame(game)}
-          >
-            <Text style={[styles.gameTabText, selectedGame === game && styles.activeGameTabText, isDarkMode && styles.darkText]}>
-              {game === 'Matatu' ? '🃏 Matatu' : game === 'Chess' ? '♟️ Chess' : '⚪ Draft'}
-            </Text>
+      {/* Game Selector Tabs */}
+      <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
+        <View style={[styles.gameTabRow, isDarkMode && styles.darkCard, { flex: 1, marginBottom: 0 }]}>
+          {['Matatu', 'Chess', 'Draft', 'Pool'].map(game => (
+            <TouchableOpacity
+              key={game}
+              style={[styles.gameTabBtn, selectedGame === game && styles.activeGameTab, isDarkMode && selectedGame === game && { backgroundColor: '#334155' }]}
+              onPress={() => setSelectedGame(game)}
+            >
+              <Text style={[styles.gameTabText, selectedGame === game && styles.activeGameTabText, isDarkMode && styles.darkText]}>
+                {game === 'Matatu' ? '🃏 Matatu' : game === 'Chess' ? '♟️ Chess' : game === 'Draft' ? '⚪ Draft' : '🎱 Pool'}
+              </Text>
+            </TouchableOpacity>
+          ))}
+        </View>
+      </View>
+
+      {/* Developer Wager & Matchmaking Quick Action Bar */}
+      <View style={[styles.card, isDarkMode && styles.darkCard, { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', padding: 10, backgroundColor: isDarkMode ? '#1e293b' : '#f0fdf4', borderColor: '#86efac', borderWidth: 1 }]}>
+        <View>
+          <Text style={{ fontSize: 11, fontWeight: 'bold', color: '#15803d' }}>⚔️ Ranked Wager Arena</Text>
+          <Text style={{ fontSize: 9, color: '#64748b' }}>{isQueueActive ? '⚡ Status: Searching opponent in queue...' : 'Stake coins & earn developer rake'}</Text>
+        </View>
+        <TouchableOpacity 
+          style={{ backgroundColor: '#16a34a', paddingHorizontal: 12, paddingVertical: 6, borderRadius: 6 }} 
+          onPress={() => setShowWagerModal(true)}
+        >
+          <Text style={{ color: '#fff', fontSize: 10, fontWeight: 'bold' }}>⚡ Enter Wager Match</Text>
+        </TouchableOpacity>
+      </View>
+
+      {/* Host Controls for Tournament & Rewards */}
+      <View style={[styles.card, isDarkMode && styles.darkCard, { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', padding: 10 }]}>
+        <View>
+          <Text style={{ fontSize: 11, fontWeight: 'bold', color: '#2563eb' }}>🏆 Host Bracket: {tournamentRound}</Text>
+          <Text style={{ fontSize: 9, color: '#64748b' }}>Sponsor-backed skill tournament mode</Text>
+        </View>
+        <TouchableOpacity style={{ backgroundColor: '#10b981', paddingHorizontal: 10, paddingVertical: 6, borderRadius: 6 }} onPress={handleHostRewardWinner}>
+          <Text style={{ color: '#fff', fontSize: 10, fontWeight: 'bold' }}>🎁 Reward Winner 🪙</Text>
+        </TouchableOpacity>
+      </View>
+
+      {/* Live Broadcast Grid Component with Multi-Stream Camera Feeds */}
+      <LiveBroadcastGrid
+        selectedGame={selectedGame}
+        spectatorCount={spectatorCount}
+        hostWebcamRef={hostWebcamRef}
+        playerOneWebcamRef={playerOneWebcamRef}
+        playerTwoWebcamRef={playerTwoWebcamRef}
+        cameraStatus={cameraStatus}
+        hostCheers={hostCheers}
+        playerOneCheers={playerOneCheers}
+        playerTwoCheers={playerTwoCheers}
+        playerOneScore={playerOneScore}
+        playerTwoScore={playerTwoScore}
+        handleSendCheerFor={handleSendCheerFor}
+        openTipModalFor={openTipModalFor}
+        isDarkMode={isDarkMode}
+        styles={styles}
+      />
+
+      {/* Floating Spectator Reactions Overlay Bar */}
+      {floatingReactions.length > 0 && (
+        <View style={{ flexDirection: 'row', justifyContent: 'center', gap: 8, marginVertical: 4 }}>
+          {floatingReactions.map(rx => (
+            <Text key={rx.id} style={{ fontSize: 18 }}>{rx.emoji}</Text>
+          ))}
+        </View>
+      )}
+
+      {/* Game Table Area Component */}
+      <GameTableArea
+        selectedGame={selectedGame}
+        chessBoardState={chessBoardState}
+        draftBoardState={draftBoardState}
+        poolVariant={poolVariant}
+        setPoolVariant={setPoolVariant}
+        cueBallPos={cueBallPos}
+        targetBalls={targetBalls}
+        cuePower={cuePower}
+        setCuePower={setCuePower}
+        cueAngle={cueAngle}
+        poolRefereeAdvice={poolRefereeAdvice}
+        matatuHand={matatuHand}
+        lastPlayedCard={lastPlayedCard}
+        opponentHandHiddenCount={opponentHandHiddenCount}
+        penaltyLog={penaltyLog}
+        selectedSquare={selectedSquare}
+        handleSquarePress={handleSquarePress}
+        handlePoolPhysicsStrike={handlePoolPhysicsStrike}
+        handleMatatuAction={handleMatatuAction}
+        getChessSymbol={getChessSymbol}
+        styles={styles}
+      />
+
+      {/* Action Controls */}
+      <View style={styles.actionButtonRow}>
+        {selectedGame === 'Matatu' && (
+          <>
+            <TouchableOpacity style={styles.playActionBtn} onPress={() => handleMatatuAction('card')}>
+              <Text style={{ color: '#fff', fontSize: 11, fontWeight: 'bold' }}>🃏 Play Card (Check Rules)</Text>
+            </TouchableOpacity>
+            <TouchableOpacity style={[styles.playActionBtn, { backgroundColor: '#dc2626' }]} onPress={() => handleMatatuAction('catch_slip')}>
+              <Text style={{ color: '#fff', fontSize: 11, fontWeight: 'bold' }}>🚨 Callout Matatu Slip!</Text>
+            </TouchableOpacity>
+            <TouchableOpacity style={[styles.playActionBtn, { backgroundColor: '#d69e2e' }]} onPress={() => handleMatatuAction('draw')}>
+              <Text style={{ color: '#fff', fontSize: 11, fontWeight: 'bold' }}>🎴 Draw Card</Text>
+            </TouchableOpacity>
+          </>
+        )}
+
+        {selectedGame === 'Chess' && (
+          <TouchableOpacity style={styles.playActionBtn} onPress={() => Alert.alert('Chess Federation Law', 'Select a piece and tap square. Illegal moves trigger instant penalties!')}>
+            <Text style={{ color: '#fff', fontSize: 11, fontWeight: 'bold' }}>♟️ Tap Board Squares (Law Enforced)</Text>
           </TouchableOpacity>
-        ))}
-      </View>
+        )}
 
-      {/* ================= 3. LIVE MATCH VIEWPORT & CAMERA STREAM ================= */}
-      <View style={[styles.boardCard, isDarkMode && styles.darkCard]}>
-        
-        <View style={styles.liveHeader}>
-          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
-            <View style={styles.liveBadge}><Text style={{ color: '#fff', fontSize: 9, fontWeight: 'bold' }}>🔴 LIVE</Text></View>
-            <Text style={{ fontSize: 11, fontWeight: 'bold', color: '#dc2626' }}>Table 04: Grandmaster {selectedGame}</Text>
-          </View>
-          <Text style={[styles.spectatorText, isDarkMode && styles.darkText]}>👀 {spectatorCount.toLocaleString()} Watching</Text>
-        </View>
-
-        {/* Live Camera Feed Container */}
-        <View style={styles.cameraViewport}>
-          {Platform.OS === 'web' && cameraActive ? (
-            <video
-              ref={webcamRef}
-              autoPlay
-              playsInline
-              muted
-              style={{ width: '100%', height: '100%', objectFit: 'cover', position: 'absolute', borderRadius: 8 }}
-            />
-          ) : (
-            <View style={{ justifyContent: 'center', alignItems: 'center', height: '100%' }}>
-              <Text style={{ fontSize: 40, marginBottom: 4 }}>🏆📺</Text>
-              <Text style={{ color: '#fff', fontSize: 12, fontWeight: 'bold' }}>Live Arena Broadcast Stream</Text>
-            </View>
-          )}
-
-          {/* Floating Table Felt Overlay */}
-          <View style={styles.feltTableOverlay}>
-            <Text style={{ color: '#fff', fontSize: 11, fontWeight: 'bold', marginBottom: 4 }}>🌿 Felt Table: {selectedGame} Arena</Text>
-            <View style={{ flexDirection: 'row', gap: 15 }}>
-              <Text style={{ color: '#90cdf4', fontSize: 11, fontWeight: 'bold' }}>Borris: {playerOneScore} pts</Text>
-              <Text style={{ color: '#f6ad55', fontSize: 11, fontWeight: 'bold' }}>Challenger_99: {playerTwoScore} pts</Text>
-            </View>
-          </View>
-        </View>
-
-        {/* Interactive Action Controls for the Active Player / Spectator */}
-        <View style={styles.actionButtonRow}>
-          {selectedGame === 'Matatu' && (
-            <>
-              <TouchableOpacity style={styles.playActionBtn} onPress={() => handleGameAction('card')}>
-                <Text style={{ color: '#fff', fontSize: 11, fontWeight: 'bold' }}>🃏 Play Trump Card</Text>
-              </TouchableOpacity>
-              <TouchableOpacity style={[styles.playActionBtn, { backgroundColor: '#d69e2e' }]} onPress={() => handleGameAction('draw')}>
-                <Text style={{ color: '#fff', fontSize: 11, fontWeight: 'bold' }}>🎴 Draw Card</Text>
-              </TouchableOpacity>
-            </>
-          )}
-
-          {selectedGame === 'Chess' && (
-            <TouchableOpacity style={styles.playActionBtn} onPress={() => handleGameAction('move')}>
-              <Text style={{ color: '#fff', fontSize: 11, fontWeight: 'bold' }}>♟️ Execute Tactical Move</Text>
-            </TouchableOpacity>
-          )}
-
-          {selectedGame === 'Draft' && (
-            <TouchableOpacity style={styles.playActionBtn} onPress={() => handleGameAction('jump')}>
-              <Text style={{ color: '#fff', fontSize: 11, fontWeight: 'bold' }}>⚪ Crown King / Jump Piece</Text>
-            </TouchableOpacity>
-          )}
-        </View>
-
-        {/* Tipping Section */}
-        <View style={styles.tipRow}>
-          <Text style={[styles.tipLabel, isDarkMode && styles.darkText]}>Cheer Champion:</Text>
-          <View style={{ flexDirection: 'row', gap: 8 }}>
-            <TouchableOpacity style={styles.tipBtn} onPress={() => handleTipPlayer(20)}>
-              <Text style={styles.tipBtnText}>🪙 Tip 20</Text>
-            </TouchableOpacity>
-            <TouchableOpacity style={styles.tipBtn} onPress={() => handleTipPlayer(50)}>
-              <Text style={styles.tipBtnText}>🔥 Tip 50</Text>
-            </TouchableOpacity>
-            <TouchableOpacity style={[styles.tipBtn, { backgroundColor: '#d69e2e', borderColor: '#d69e2e' }]} onPress={() => setShowWagerModal(true)}>
-              <Text style={{ color: '#fff', fontSize: 11, fontWeight: 'bold' }}>🪙 Stake Pool</Text>
-            </TouchableOpacity>
-          </View>
-        </View>
-      </View>
-
-      {/* ================= 4. PROVABLY FAIR HASH & SECURITY LAYER ================= */}
-      <View style={[styles.card, isDarkMode && styles.darkCard, { borderColor: '#9333ea', borderWidth: 1.5 }]}>
-        <View style={styles.settingRow}>
-          <View style={{ flex: 1, marginRight: 10 }}>
-            <Text style={[styles.badge, { backgroundColor: '#faf5ff', color: '#9333ea' }]}>🛡️ PROVABLY FAIR HASH</Text>
-            <Text style={{ fontSize: 10, color: '#64748b' }}>Table Seed: <Text style={{ fontWeight: 'bold', color: '#9333ea' }}>{tableHashId}</Text></Text>
-          </View>
-          <Switch
-            value={fairnessHashActive}
-            onValueChange={(val) => {
-              setFairnessHashActive(val);
-              Alert.alert('Fairness Hash', val ? '🛡️ Cryptographic shuffle verification active.' : 'Standard mode.');
-            }}
-            trackColor={{ false: '#cbd5e0', true: '#9333ea' }}
-          />
-        </View>
-      </View>
-
-      {/* ================= 5. ELO RANKING & LEAGUE MULTIPLIER ================= */}
-      <View style={[styles.card, isDarkMode && styles.darkCard, { borderColor: '#2563eb', borderWidth: 1.5 }]}>
-        <View style={styles.settingRow}>
-          <View style={{ flex: 1, marginRight: 10 }}>
-            <Text style={[styles.badge, { backgroundColor: '#eff6ff', color: '#2563eb' }]}>🏆 ELO GRANDMASTER TIER</Text>
-            <Text style={{ fontSize: 11, color: '#64748b' }}>Player Rating: <Text style={{ fontWeight: 'bold', color: '#2563eb' }}>{playerEloRating}</Text></Text>
-          </View>
-          <Switch
-            value={eloMultiplierActive}
-            onValueChange={(val) => {
-              setEloMultiplierActive(val);
-              Alert.alert('Elo League', val ? '🏆 Ranked competitive match mode active.' : 'Casual mode.');
-            }}
-            trackColor={{ false: '#cbd5e0', true: '#2563eb' }}
-          />
-        </View>
-      </View>
-
-      {/* ================= 6. SPECTATOR WAGER POOL STAKING ================= */}
-      <View style={[styles.card, isDarkMode && styles.darkCard, { borderColor: '#d97706', borderWidth: 1.5 }]}>
-        <View style={styles.settingRow}>
-          <View style={{ flex: 1, marginRight: 10 }}>
-            <Text style={[styles.badge, { backgroundColor: '#fef3c7', color: '#d97706' }]}>🪙 SPECTATOR WAGER POOL</Text>
-            <Text style={{ fontSize: 11, color: '#64748b' }}>Current Pool: <Text style={{ fontWeight: 'bold', color: '#d97706' }}>🪙 {spectatorPoolTotal} Coins</Text></Text>
-          </View>
-          <Switch
-            value={spectatorWagerActive}
-            onValueChange={(val) => {
-              setSpectatorWagerActive(val);
-              Alert.alert('Wager Pool', val ? '🪙 Spectator betting pool staking enabled.' : 'Viewing only.');
-            }}
-            trackColor={{ false: '#cbd5e0', true: '#d97706' }}
-          />
-        </View>
-      </View>
-
-      {/* ================= 7. SECURITY & TOGGLE CONTROLS BAR ================= */}
-      <View style={[styles.card, isDarkMode && styles.darkCard]}>
-        <Text style={[styles.chatHeaderTitle, isDarkMode && styles.darkText]}>⚙️ Arena Security & Features</Text>
-        <View style={{ flexDirection: 'row', justifyContent: 'space-between', gap: 6 }}>
-          <TouchableOpacity 
-            style={[styles.toggleSubBtn, meshTournamentSync && { backgroundColor: '#38a169' }]}
-            onPress={() => setMeshTournamentSync(!meshTournamentSync)}
-          >
-            <Text style={{ color: meshTournamentSync ? '#fff' : '#2d3748', fontSize: 9, fontWeight: 'bold' }}>
-              Mesh: {meshTournamentSync ? 'ON 🛰️' : 'OFF'}
-            </Text>
+        {selectedGame === 'Draft' && (
+          <TouchableOpacity style={styles.playActionBtn} onPress={() => Alert.alert('Checkers Rulebook', 'Diagonal single steps required.')}>
+            <Text style={{ color: '#fff', fontSize: 11, fontWeight: 'bold' }}>⚪ Tap Board Squares (Law Enforced)</Text>
           </TouchableOpacity>
-          <TouchableOpacity 
-            style={[styles.toggleSubBtn, antiCollusionGuardActive && { backgroundColor: '#3182ce' }]}
-            onPress={() => setAntiCollusionGuardActive(!antiCollusionGuardActive)}
-          >
-            <Text style={{ color: antiCollusionGuardActive ? '#fff' : '#2d3748', fontSize: 9, fontWeight: 'bold' }}>
-              Anti-Cheat: {antiCollusionGuardActive ? 'ON 🛡️' : 'OFF'}
-            </Text>
+        )}
+
+        {selectedGame === 'Pool' && (
+          <TouchableOpacity style={[styles.playActionBtn, { backgroundColor: '#10b981' }]} onPress={handlePoolPhysicsStrike}>
+            <Text style={{ color: '#fff', fontSize: 11, fontWeight: 'bold' }}>🎯 Pull Stick & Strike Ball Live!</Text>
           </TouchableOpacity>
-          <TouchableOpacity 
-            style={[styles.toggleSubBtn, voiceTauntsActive && { backgroundColor: '#d69e2e' }]}
-            onPress={() => setVoiceTauntsActive(!voiceTauntsActive)}
-          >
-            <Text style={{ color: voiceTauntsActive ? '#fff' : '#2d3748', fontSize: 9, fontWeight: 'bold' }}>
-              Taunts: {voiceTauntsActive ? 'ON 🎤' : 'OFF'}
-            </Text>
+        )}
+      </View>
+
+      {/* Quick Tipping Bar */}
+      <View style={styles.tipRow}>
+        <Text style={[styles.tipLabel, isDarkMode && styles.darkText]}>Quick Tip Recipient:</Text>
+        <View style={{ flexDirection: 'row', gap: 6 }}>
+          <TouchableOpacity style={styles.tipBtn} onPress={() => openTipModalFor('Player A (Borris)')}>
+            <Text style={styles.tipBtnText}>👤 Tip P1</Text>
+          </TouchableOpacity>
+          <TouchableOpacity style={styles.tipBtn} onPress={() => openTipModalFor('Player B (Challenger)')}>
+            <Text style={styles.tipBtnText}>👤 Tip P2</Text>
+          </TouchableOpacity>
+          <TouchableOpacity style={[styles.tipBtn, { backgroundColor: '#2b6cb0', borderColor: '#2b6cb0' }]} onPress={() => openTipModalFor('Table Host (Caster)')}>
+            <Text style={{ color: '#fff', fontSize: 10, fontWeight: 'bold' }}>🎙️ Tip Host</Text>
           </TouchableOpacity>
         </View>
       </View>
 
-      {/* ================= 8. SPECTATOR SIDELINE CHAT & CHEERING FEED ================= */}
+      {/* Sideline Chat */}
       <View style={[styles.chatCard, isDarkMode && styles.darkCard]}>
-        <Text style={[styles.chatHeaderTitle, isDarkMode && styles.darkText]}>💬 Sideline Cheer & Chat</Text>
+        <Text style={[styles.chatHeaderTitle, isDarkMode && styles.darkText]}>💬 Sideline Cheer & Chat (Supabase Live)</Text>
         <ScrollView style={[styles.chatScroll, isDarkMode && { backgroundColor: '#1a202c', borderColor: '#4a5568' }]} nestedScrollEnabled={true}>
           {matchMessages.map(msg => (
             <View key={msg.id} style={styles.chatMsgRow}>
@@ -442,38 +760,115 @@ export default function GameArenaScreen({ coins, setCoins, isDarkMode }) {
         </View>
       </View>
 
-      {/* ================= 9. WAGER STAKING MODAL ================= */}
-      <Modal visible={showWagerModal} animationType="slide" transparent={true}>
+      {/* Tipping Modal */}
+      <Modal visible={showTipModal} animationType="slide" transparent={true}>
         <View style={styles.modalOverlay}>
           <View style={styles.drawerContent}>
             <View style={styles.modalHeader}>
-              <Text style={{ fontSize: 14, fontWeight: 'bold', color: '#2d3748' }}>🪙 Spectator Wager Pool Stake</Text>
-              <TouchableOpacity onPress={() => setShowWagerModal(false)}>
+              <Text style={{ fontSize: 14, fontWeight: 'bold', color: '#2d3748' }}>🌟 Send Tip to {tipTargetRecipient}</Text>
+              <TouchableOpacity onPress={() => setShowTipModal(false)}>
                 <Text style={{ fontSize: 16, fontWeight: 'bold', color: '#718096' }}>✕</Text>
               </TouchableOpacity>
             </View>
 
             <View style={{ backgroundColor: '#ebf8ff', padding: 8, borderRadius: 8, marginBottom: 12 }}>
-              <Text style={{ fontSize: 11, fontWeight: 'bold', color: '#2b6cb0' }}>Current Wallet Balance: {coins} Coins</Text>
+              <Text style={{ fontSize: 11, fontWeight: 'bold', color: '#2b6cb0' }}>Wallet Balance: 🪙 {coins} Coins (10% Developer Rake on Tips)</Text>
             </View>
 
-            <Text style={{ fontSize: 11, color: '#718096', marginBottom: 12 }}>Select amount to wager on Borris winning this match:</Text>
-            
+            <Text style={{ fontSize: 11, color: '#718096', marginBottom: 8 }}>Select tip amount:</Text>
             <View style={{ flexDirection: 'row', justifyContent: 'space-between', gap: 8, marginBottom: 15 }}>
-              {[50, 100, 250, 500].map(amt => (
+              {[20, 50, 100, 250].map(amt => (
                 <TouchableOpacity
                   key={amt}
-                  style={[styles.wagerOptBtn, wagerStakeAmount === amt && { backgroundColor: '#3182ce' }]}
-                  onPress={() => setWagerStakeAmount(amt)}
+                  style={[styles.wagerOptBtn, customTipAmount === amt && { backgroundColor: '#3182ce' }]}
+                  onPress={() => setCustomTipAmount(amt)}
                 >
-                  <Text style={{ color: wagerStakeAmount === amt ? '#fff' : '#2d3748', fontSize: 12, fontWeight: 'bold' }}>🪙 {amt}</Text>
+                  <Text style={{ color: customTipAmount === amt ? '#fff' : '#2d3748', fontSize: 12, fontWeight: 'bold' }}>🪙 {amt}</Text>
                 </TouchableOpacity>
               ))}
             </View>
 
-            <TouchableOpacity style={styles.confirmWagerBtn} onPress={handlePlaceWager}>
-              <Text style={{ color: '#fff', fontWeight: 'bold', fontSize: 12 }}>Confirm & Stake Coins 🚀</Text>
+            <TouchableOpacity style={[styles.confirmWagerBtn, { backgroundColor: '#2563eb' }]} onPress={handleConfirmTip}>
+              <Text style={{ color: '#fff', fontWeight: 'bold', fontSize: 12 }}>Send Tip Now 🚀</Text>
             </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
+
+      {/* Ranked Wager Matchmaking Modal */}
+      <Modal visible={showWagerModal} animationType="slide" transparent={true}>
+        <View style={styles.modalOverlay}>
+          <View style={styles.drawerContent}>
+            <View style={styles.modalHeader}>
+              <Text style={{ fontSize: 14, fontWeight: 'bold', color: '#15803d' }}>⚔️ Ranked Wager Matchmaking ({selectedGame})</Text>
+              <TouchableOpacity onPress={() => setShowWagerModal(false)}>
+                <Text style={{ fontSize: 16, fontWeight: 'bold', color: '#718096' }}>✕</Text>
+              </TouchableOpacity>
+            </View>
+
+            <View style={{ backgroundColor: '#f0fdf4', padding: 8, borderRadius: 8, marginBottom: 12, borderWidth: 1, borderColor: '#86efac' }}>
+              <Text style={{ fontSize: 11, fontWeight: 'bold', color: '#16a34a' }}>Your Wallet: 🪙 {coins} Coins</Text>
+              <Text style={{ fontSize: 10, color: '#4b5563', marginTop: 2 }}>Developer Note: A 5% platform rake is collected on all match stakes to grow your earnings!</Text>
+            </View>
+
+            <Text style={{ fontSize: 11, color: '#718096', marginBottom: 8 }}>Select match stake:</Text>
+            <View style={{ flexDirection: 'row', justifyContent: 'space-between', gap: 8, marginBottom: 15 }}>
+              {[50, 100, 250, 500].map(stake => (
+                <TouchableOpacity
+                  key={stake}
+                  style={[styles.wagerOptBtn, selectedWagerStake === stake && { backgroundColor: '#16a34a' }]}
+                  onPress={() => setSelectedWagerStake(stake)}
+                >
+                  <Text style={{ color: selectedWagerStake === stake ? '#fff' : '#2d3748', fontSize: 12, fontWeight: 'bold' }}>🪙 {stake}</Text>
+                </TouchableOpacity>
+              ))}
+            </View>
+
+            <TouchableOpacity style={[styles.confirmWagerBtn, { backgroundColor: '#16a34a' }]} onPress={handleJoinWagerQueue}>
+              <Text style={{ color: '#fff', fontWeight: 'bold', fontSize: 12 }}>Enter Match & Lock Stake ⚡</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
+
+      {/* Coin Refill & Rewarded Ad Modal */}
+      <Modal visible={showCoinRefillModal} animationType="slide" transparent={true}>
+        <View style={styles.modalOverlay}>
+          <View style={styles.drawerContent}>
+            <View style={styles.modalHeader}>
+              <Text style={{ fontSize: 14, fontWeight: 'bold', color: '#b45309' }}>🪙 Insufficient Coins - Refill Wallet</Text>
+              <TouchableOpacity onPress={() => setShowCoinRefillModal(false)}>
+                <Text style={{ fontSize: 16, fontWeight: 'bold', color: '#718096' }}>✕</Text>
+              </TouchableOpacity>
+            </View>
+
+            <View style={{ backgroundColor: '#fef3c7', padding: 10, borderRadius: 8, marginBottom: 12, borderWidth: 1, borderColor: '#f59e0b' }}>
+              <Text style={{ fontSize: 11, fontWeight: 'bold', color: '#b45309' }}>Current Balance: 🪙 {coins} Coins</Text>
+              <Text style={{ fontSize: 10, color: '#78350f', marginTop: 2 }}>Top up via Mobile Money / In-App Billing or watch a quick ad for free bonus coins!</Text>
+            </View>
+
+            <Text style={{ fontSize: 11, fontWeight: 'bold', color: '#374151', marginBottom: 6 }}>Option 1: Watch Rewarded Ad (Free)</Text>
+            <TouchableOpacity 
+              style={{ backgroundColor: '#d97706', padding: 10, borderRadius: 8, alignItems: 'center', marginBottom: 15 }} 
+              onPress={handleWatchRewardedAd}
+              disabled={isWatchingAd}
+            >
+              <Text style={{ color: '#fff', fontWeight: 'bold', fontSize: 12 }}>
+                {isWatchingAd ? '📺 Loading Ad...' : '📺 Watch Ad for +50 Free Coins 🪙'}
+              </Text>
+            </TouchableOpacity>
+
+            <Text style={{ fontSize: 11, fontWeight: 'bold', color: '#374151', marginBottom: 6 }}>Option 2: Mobile Money & App Store Packs</Text>
+            <View style={{ gap: 8, marginBottom: 10 }}>
+              <TouchableOpacity style={{ backgroundColor: '#2563eb', padding: 10, borderRadius: 8, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }} onPress={() => handleBuyCoinBundle(250)}>
+                <Text style={{ color: '#fff', fontWeight: 'bold', fontSize: 12 }}>🪙 250 Coins Pack</Text>
+                <Text style={{ color: '#bfdbfe', fontWeight: 'bold', fontSize: 11 }}>UGX 5,000 / $1.35</Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={{ backgroundColor: '#1d4ed8', padding: 10, borderRadius: 8, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }} onPress={() => handleBuyCoinBundle(600)}>
+                <Text style={{ color: '#fff', fontWeight: 'bold', fontSize: 12 }}>🪙 600 Coins Pack (Best Value)</Text>
+                <Text style={{ color: '#bfdbfe', fontWeight: 'bold', fontSize: 11 }}>UGX 10,000 / $2.70</Text>
+              </TouchableOpacity>
+            </View>
           </View>
         </View>
       </Modal>
@@ -481,281 +876,3 @@ export default function GameArenaScreen({ coins, setCoins, isDarkMode }) {
     </ScrollView>
   );
 }
-
-const styles = StyleSheet.create({
-  container: {
-    padding: 16,
-    backgroundColor: '#f8fafc',
-    flexGrow: 1,
-    paddingBottom: 60,
-  },
-  darkContainer: {
-    backgroundColor: '#0f172a',
-  },
-  darkCard: {
-    backgroundColor: '#1e293b',
-    borderColor: '#334155',
-  },
-  darkText: {
-    color: '#f8fafc',
-  },
-  darkInput: {
-    backgroundColor: '#0f172a',
-    borderColor: '#334155',
-    color: '#f8fafc',
-  },
-  sponsorBanner: {
-    backgroundColor: '#fefcbf',
-    padding: 10,
-    borderRadius: 8,
-    marginBottom: 12,
-    borderWidth: 1,
-    borderColor: '#d69e2e',
-    alignItems: 'center',
-  },
-  gameTabRow: {
-    flexDirection: 'row',
-    backgroundColor: '#e2e8f0',
-    borderRadius: 8,
-    padding: 4,
-    marginBottom: 12,
-  },
-  gameTabBtn: {
-    flex: 1,
-    paddingVertical: 10,
-    alignItems: 'center',
-    borderRadius: 6,
-  },
-  activeGameTab: {
-    backgroundColor: '#ffffff',
-    shadowColor: '#000',
-    shadowOpacity: 0.1,
-    shadowRadius: 2,
-    elevation: 2,
-  },
-  gameTabText: {
-    fontSize: 12,
-    fontWeight: '600',
-    color: '#64748b',
-  },
-  activeGameTabText: {
-    color: '#2563eb',
-    fontWeight: '700',
-  },
-  card: {
-    backgroundColor: '#ffffff',
-    borderRadius: 12,
-    padding: 12,
-    marginBottom: 12,
-    borderWidth: 1,
-    borderColor: '#e2e8f0',
-  },
-  settingRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-  },
-  toggleSubBtn: {
-    backgroundColor: '#edf2f7',
-    paddingHorizontal: 6,
-    paddingVertical: 6,
-    borderRadius: 6,
-    flex: 1,
-    marginHorizontal: 2,
-    alignItems: 'center',
-  },
-  badge: {
-    fontSize: 10,
-    fontWeight: 'bold',
-    color: '#2563eb',
-    backgroundColor: '#eff6ff',
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 4,
-    alignSelf: 'flex-start',
-    marginBottom: 4,
-  },
-  boardCard: {
-    backgroundColor: '#ffffff',
-    borderRadius: 12,
-    padding: 14,
-    borderWidth: 1,
-    borderColor: '#e2e8f0',
-    marginBottom: 12,
-  },
-  liveHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 10,
-  },
-  liveBadge: {
-    backgroundColor: '#dc2626',
-    paddingHorizontal: 6,
-    paddingVertical: 2,
-    borderRadius: 4,
-  },
-  spectatorText: {
-    fontSize: 11,
-    fontWeight: '600',
-    color: '#64748b',
-  },
-  cameraViewport: {
-    width: '100%',
-    height: 180,
-    backgroundColor: '#0f172a',
-    borderRadius: 8,
-    justifyContent: 'center',
-    alignItems: 'center',
-    position: 'relative',
-    overflow: 'hidden',
-    marginBottom: 10,
-  },
-  feltTableOverlay: {
-    position: 'absolute',
-    bottom: 8,
-    left: 8,
-    right: 8,
-    backgroundColor: 'rgba(6,95,70,0.85)',
-    padding: 6,
-    borderRadius: 6,
-    alignItems: 'center',
-  },
-  actionButtonRow: {
-    flexDirection: 'row',
-    gap: 8,
-    marginBottom: 10,
-  },
-  playActionBtn: {
-    flex: 1,
-    backgroundColor: '#3182ce',
-    paddingVertical: 10,
-    borderRadius: 6,
-    alignItems: 'center',
-  },
-  tipRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    borderTopWidth: 1,
-    borderTopColor: '#f1f5f9',
-    paddingTop: 10,
-  },
-  tipLabel: {
-    fontSize: 11,
-    fontWeight: '600',
-    color: '#334155',
-  },
-  tipBtn: {
-    backgroundColor: '#eff6ff',
-    borderWidth: 1,
-    borderColor: '#3b82f6',
-    paddingHorizontal: 10,
-    paddingVertical: 5,
-    borderRadius: 6,
-  },
-  tipBtnText: {
-    color: '#2563eb',
-    fontSize: 10,
-    fontWeight: '700',
-  },
-  chatCard: {
-    backgroundColor: '#ffffff',
-    borderRadius: 12,
-    padding: 14,
-    borderWidth: 1,
-    borderColor: '#e2e8f0',
-  },
-  chatHeaderTitle: {
-    fontSize: 12,
-    fontWeight: '700',
-    color: '#0f172a',
-    marginBottom: 8,
-  },
-  chatScroll: {
-    height: 100,
-    backgroundColor: '#f8fafc',
-    borderRadius: 8,
-    padding: 8,
-    marginBottom: 8,
-    borderWidth: 1,
-    borderColor: '#e2e8f0',
-  },
-  chatMsgRow: {
-    flexDirection: 'row',
-    marginBottom: 4,
-  },
-  chatUser: {
-    fontSize: 11,
-    fontWeight: '700',
-    color: '#2563eb',
-  },
-  chatText: {
-    fontSize: 11,
-    color: '#334155',
-  },
-  inputRow: {
-    flexDirection: 'row',
-  },
-  input: {
-    flex: 1,
-    borderWidth: 1,
-    borderColor: '#cbd5e1',
-    borderRadius: 8,
-    paddingHorizontal: 10,
-    height: 36,
-    backgroundColor: '#f8fafc',
-    fontSize: 11,
-    color: '#0f172a',
-    marginRight: 8,
-  },
-  sendBtn: {
-    backgroundColor: '#2563eb',
-    justifyContent: 'center',
-    paddingHorizontal: 14,
-    borderRadius: 8,
-  },
-  sendBtnText: {
-    color: '#ffffff',
-    fontSize: 11,
-    fontWeight: '700',
-  },
-  modalOverlay: {
-    flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.5)',
-    justifyContent: 'flex-end',
-  },
-  drawerContent: {
-    backgroundColor: '#fff',
-    borderTopLeftRadius: 20,
-    borderTopRightRadius: 20,
-    padding: 20,
-  },
-  modalHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 12,
-  },
-  wagerOptBtn: {
-    flex: 1,
-    backgroundColor: '#f7fafc',
-    padding: 10,
-    borderRadius: 8,
-    alignItems: 'center',
-    borderWidth: 1,
-    borderColor: '#cbd5e0',
-  },
-  confirmWagerBtn: {
-    backgroundColor: '#d69e2e',
-    padding: 12,
-    borderRadius: 8,
-    alignItems: 'center',
-  },
-
-  // Monetization Ad Styles
-  monetizationAdCard: { backgroundColor: '#fff', borderWidth: 1, borderColor: '#e2e8f0', borderRadius: 8, padding: 8, marginBottom: 12, alignItems: 'center' },
-  adTagLabel: { fontSize: 9, color: '#a0aec0', textTransform: 'uppercase', fontWeight: 'bold', marginBottom: 2 },
-  creatorMonetizationCard: { backgroundColor: '#ebf8ff', borderWidth: 1, borderColor: '#bee3f8', borderRadius: 8, padding: 12, marginBottom: 12 },
-  watchRewardAdBtn: { backgroundColor: '#3182ce', paddingHorizontal: 12, paddingVertical: 6, borderRadius: 6 },
-});

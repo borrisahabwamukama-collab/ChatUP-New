@@ -10,9 +10,9 @@ import {
   Switch,
   ActivityIndicator,
 } from 'react-native';
-import { supabase } from '../supabaseClient'; // Make sure this path points to your initialized Supabase client
+import { supabase } from '../../Services/supabaseClient';
 
-export default function LoginScreen({ navigation, isDarkMode, coins, setCoins }) {
+export default function LoginScreen({ navigation, isDarkMode, onLoginSuccess }) {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
@@ -24,7 +24,7 @@ export default function LoginScreen({ navigation, isDarkMode, coins, setCoins })
 
   // HANDLE STANDARD EMAIL & PASSWORD LOGIN
   const handleLogin = async () => {
-    if (!email || !password) {
+    if (!email.trim() || !password) {
       return Alert.alert('Fields Required ⚠️', 'Please enter both your email and password.');
     }
 
@@ -33,7 +33,7 @@ export default function LoginScreen({ navigation, isDarkMode, coins, setCoins })
     }
 
     setLoading(true);
-    const { error } = await supabase.auth.signInWithPassword({
+    const { data, error } = await supabase.auth.signInWithPassword({
       email: email.trim(),
       password: password,
     });
@@ -45,8 +45,16 @@ export default function LoginScreen({ navigation, isDarkMode, coins, setCoins })
       Alert.alert('Login Failed ⚠️', `${error.message} (Attempt ${nextAttempts}/5)`);
     } else {
       setFailedAttemptsCount(0);
+      const userId = data?.user?.id;
+      
       Alert.alert('Success 🎉', 'Logged in successfully!');
-      navigation.navigate('GroupList');
+
+      // Pass user ID up to parent navigator if callback exists, else navigate
+      if (onLoginSuccess && userId) {
+        onLoginSuccess(userId);
+      } else if (navigation && navigation.navigate) {
+        navigation.navigate('GroupList', { currentUserId: userId });
+      }
     }
   };
 
@@ -121,7 +129,14 @@ export default function LoginScreen({ navigation, isDarkMode, coins, setCoins })
         )}
       </TouchableOpacity>
 
-      <TouchableOpacity style={[styles.secondaryBtn, isDarkMode && { backgroundColor: '#1e293b', borderColor: '#334155' }]} onPress={() => navigation.navigate('Signup')}>
+      <TouchableOpacity 
+        style={[styles.secondaryBtn, isDarkMode && { backgroundColor: '#1e293b', borderColor: '#334155' }]} 
+        onPress={() => {
+          if (navigation && navigation.navigate) {
+            navigation.navigate('Signup');
+          }
+        }}
+      >
         <Text style={[styles.secondaryBtnText, isDarkMode && styles.darkText]}>Create New Account / Sign Up 📝</Text>
       </TouchableOpacity>
     </ScrollView>

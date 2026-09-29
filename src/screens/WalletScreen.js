@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   StyleSheet,
   Text,
@@ -9,11 +9,11 @@ import {
   Alert,
   Switch,
   Modal,
-  ActivityIndicator,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import { supabase } from '../../Services/supabaseClient';
 
-export default function WalletScreen({ isDarkMode, coins, setCoins }) {
+export default function WalletScreen({ isDarkMode, coins, setCoins, userId = 1 }) {
   // Architecture Tier State ('root', 'payout', 'staking', 'history', 'security', 'savedAccounts', 'peerTransfer')
   const [activeSubView, setActiveSubView] = useState('root');
 
@@ -23,7 +23,7 @@ export default function WalletScreen({ isDarkMode, coins, setCoins }) {
   const [accountNumber, setAccountNumber] = useState('');
   const [isProcessing, setIsProcessing] = useState(false);
 
-  // Saved Bank & Mobile Money Accounts List State
+  // Saved Bank & Mobile Money Accounts List State (Dynamic Supabase Sync)
   const [savedAccounts, setSavedAccounts] = useState([
     { id: '1', type: 'MTN Mobile Money', identifier: '+256 770 123456', name: 'Borris Ahabwamukama', default: true },
     { id: '2', type: 'Airtel Money', identifier: '+256 750 987654', name: 'Borris Ahabwamukama', default: false },
@@ -45,7 +45,7 @@ export default function WalletScreen({ isDarkMode, coins, setCoins }) {
   const [transferAmount, setTransferAmount] = useState('');
   const [transferNote, setTransferNote] = useState('');
 
-  // Transaction Ledger & Filter States
+  // Transaction Ledger & Filter States (Dynamic Supabase Sync)
   const [ledgerTransactions, setLedgerTransactions] = useState([
     { id: 'tx_1', type: 'Mobile Money Payout', category: 'Withdrawal', date: '24 Aug 2026', identifier: '+256 770******', amount: -1000, status: 'Completed ✅' },
     { id: 'tx_2', type: 'Yield Staking Reward', category: 'Staking', date: '18 Aug 2026', identifier: '30-Day APY Pool', amount: 40, status: 'Credited 🪙' },
@@ -58,37 +58,64 @@ export default function WalletScreen({ isDarkMode, coins, setCoins }) {
   const [showPinModal, setShowPinModal] = useState(false);
   const [securityPinInput, setSecurityPinInput] = useState('');
 
-  // Granular Security & Ledger Settings (Level 3/4)
+  // Granular Security & Ledger Settings
   const [requirePinForWithdrawal, setRequirePinForWithdrawal] = useState(true);
   const [autoEscrowLock, setAutoEscrowLock] = useState(true);
   const [multiSigProtection, setMultiSigProtection] = useState(false);
 
-  // ================= 20+ ENTERPRISE WALLET & FINTECH LAYERS =================
+  // Enterprise Wallet & Fintech Layers Drawer Toggle
+  const [showEnterpriseLayers, setShowEnterpriseLayers] = useState(false);
   const [flutterwaveMoMoGateway, setFlutterwaveMoMoGateway] = useState(true);
   const [quantumLedgerEncryption, setQuantumLedgerEncryption] = useState(true);
   const [kampalaTreasuryRelay, setKampalaTreasuryRelay] = useState(true);
   const [biometricVaultSignature, setBiometricVaultSignature] = useState(true);
   const [autonomousEscrowAudit, setAutonomousEscrowAudit] = useState(true);
-  const [zeroFeeGasSubsidizerWallet, setZeroFeeGasSubsidizerWallet] = useState(true);
-  const [smartContractYieldEscrow, setSmartContractYieldEscrow] = useState(true);
-  const [bluetoothP2pWalletSync, setBluetoothP2pWalletSync] = useState(true);
-  const [federatedAiFraudDetector, setFederatedAiFraudDetector] = useState(true);
-  const [realtimeSentimentMeshWallet, setRealtimeSentimentMeshWallet] = useState(true);
-  const [multimodalHlsStatementFeed, setMultimodalHlsStatementFeed] = useState(true);
-  const [cryptographicWalletWatermark, setCryptographicWalletWatermark] = useState(true);
-  const [automaticTransactionTranscription, setAutomaticTransactionTranscription] = useState(true);
-  const [peerToPeerMicroLoanVault, setPeerToPeerMicroLoanVault] = useState(true);
-  const [offlineLedgerSyncQueue, setOfflineLedgerSyncQueue] = useState(true);
-  const [ephemeralTokenBurnPolicy, setEphemeralTokenBurnPolicy] = useState(false);
-  const [groupBillSplitterLedger, setGroupBillSplitterLedger] = useState(true);
-  const [aiFinancialAdvisorChat, setAiFinancialAdvisorChat] = useState(true);
-  const [multiCurrencyConversionMatrix, setMultiCurrencyConversionMatrix] = useState(true);
-  const [globalEmergencyWalletLockdown, setGlobalEmergencyWalletLockdown] = useState(false);
-  const [showEnterpriseLayers, setShowEnterpriseLayers] = useState(false);
 
-  // Conversion rate: 10 Coins = 1,000 UGX
-  const coinToCashRate = 100; // UGX per coin
+  // Conversion rate: 1 Coin = 100 UGX
+  const coinToCashRate = 100; 
   const totalCashValue = coins * coinToCashRate;
+
+  useEffect(() => {
+    fetchWalletTreasuryData();
+  }, [userId]);
+
+  const fetchWalletTreasuryData = async () => {
+    try {
+      const { data: walletData, error: walletError } = await supabase
+        .from('userwallets')
+        .select('*')
+        .eq('id', userId)
+        .single();
+
+      if (walletError) {
+        console.log('Notice fetching from userwallets:', walletError.message);
+      } else if (walletData) {
+        if (walletData.coins !== undefined && setCoins) {
+          setCoins(walletData.coins);
+        }
+        if (walletData.staked_balance !== undefined) {
+          setStakedBalance(walletData.staked_balance);
+        }
+      }
+    } catch (err) {
+      console.log('Error in fetchWalletTreasuryData:', err);
+    }
+  };
+
+  const updateSupabaseCoinBalance = async (newCoinBalance, newStaked = stakedBalance) => {
+    try {
+      const { error } = await supabase
+        .from('userwallets')
+        .update({ coins: newCoinBalance, staked_balance: newStaked })
+        .eq('id', userId);
+
+      if (error) {
+        console.log('Error updating coin balance in userwallets:', error.message);
+      }
+    } catch (err) {
+      console.log('Supabase update sync exception:', err);
+    }
+  };
 
   const handleTriggerWithdrawalValidation = () => {
     const amountToWithdraw = parseInt(withdrawalAmount);
@@ -110,15 +137,18 @@ export default function WalletScreen({ isDarkMode, coins, setCoins }) {
     }
   };
 
-  const executeWithdrawal = () => {
+  const executeWithdrawal = async () => {
     const amountToWithdraw = parseInt(withdrawalAmount);
     setShowPinModal(false);
     setSecurityPinInput('');
     setIsProcessing(true);
 
-    setTimeout(() => {
+    const updatedCoins = coins - amountToWithdraw;
+
+    try {
+      await updateSupabaseCoinBalance(updatedCoins);
       setIsProcessing(false);
-      setCoins(c => c - amountToWithdraw);
+      setCoins(updatedCoins);
       
       const newTx = {
         id: 'tx_' + Date.now(),
@@ -137,7 +167,11 @@ export default function WalletScreen({ isDarkMode, coins, setCoins }) {
         'Withdrawal Requested Successfully! 💸', 
         `Your payout request for 🪙 ${amountToWithdraw} coins (Approx. ${(amountToWithdraw * coinToCashRate).toLocaleString()} UGX) via ${payoutMethod} (${accountNumber}) has been submitted for instant mobile money dispatch.`
       );
-    }, 1000);
+    } catch (err) {
+      setIsProcessing(false);
+      console.log('Withdrawal execution exception:', err);
+      Alert.alert('Error', 'Failed to process withdrawal request.');
+    }
   };
 
   const handleRegisterAccount = () => {
@@ -160,7 +194,7 @@ export default function WalletScreen({ isDarkMode, coins, setCoins }) {
     setActiveSubView('payout');
   };
 
-  const handleStakeCoins = () => {
+  const handleStakeCoins = async () => {
     const amountToStake = parseInt(stakeAmount);
     if (!amountToStake || amountToStake <= 0) {
       return Alert.alert('Error', 'Please enter a valid coin amount to stake.');
@@ -169,8 +203,12 @@ export default function WalletScreen({ isDarkMode, coins, setCoins }) {
       return Alert.alert('Insufficient Balance', 'You cannot stake more than your available coin balance.');
     }
 
-    setCoins(c => c - amountToStake);
-    setStakedBalance(prev => prev + amountToStake);
+    const updatedCoins = coins - amountToStake;
+    const updatedStaked = stakedBalance + amountToStake;
+
+    setCoins(updatedCoins);
+    setStakedBalance(updatedStaked);
+    await updateSupabaseCoinBalance(updatedCoins, updatedStaked);
     
     const newTx = {
       id: 'tx_' + Date.now(),
@@ -187,7 +225,7 @@ export default function WalletScreen({ isDarkMode, coins, setCoins }) {
     Alert.alert('Staking Successful 🔒 (+25 🪙 Bonus)', `Successfully locked 🪙 ${amountToStake} coins into the ${stakingDuration} yield pool.`);
   };
 
-  const handlePeerTransfer = () => {
+  const handlePeerTransfer = async () => {
     const amt = parseInt(transferAmount);
     if (!transferRecipient.trim() || !amt || amt <= 0) {
       return Alert.alert('Error', 'Please enter a valid recipient username/phone and transfer amount.');
@@ -196,7 +234,10 @@ export default function WalletScreen({ isDarkMode, coins, setCoins }) {
       return Alert.alert('Insufficient Balance', 'You cannot transfer more coins than your available balance.');
     }
 
-    setCoins(c => c - amt);
+    const updatedCoins = coins - amt;
+    setCoins(updatedCoins);
+    await updateSupabaseCoinBalance(updatedCoins);
+
     const newTx = {
       id: 'tx_' + Date.now(),
       type: `P2P Transfer to ${transferRecipient}`,
@@ -215,8 +256,8 @@ export default function WalletScreen({ isDarkMode, coins, setCoins }) {
   };
 
   const filteredTransactions = ledgerTransactions.filter(tx => {
-    const matchesSearch = tx.type.toLowerCase().includes(ledgerSearchQuery.toLowerCase()) ||
-                          tx.identifier.toLowerCase().includes(ledgerSearchQuery.toLowerCase());
+    const matchesSearch = tx.type?.toLowerCase().includes(ledgerSearchQuery.toLowerCase()) ||
+                          tx.identifier?.toLowerCase().includes(ledgerSearchQuery.toLowerCase());
     const matchesCategory = ledgerFilterCategory === 'All' || tx.category === ledgerFilterCategory;
     return matchesSearch && matchesCategory;
   });
@@ -224,16 +265,16 @@ export default function WalletScreen({ isDarkMode, coins, setCoins }) {
   return (
     <ScrollView style={[styles.container, isDarkMode && styles.darkContainer]} contentContainerStyle={{ padding: 15, paddingBottom: 160 }}>
       
-      {/* Dynamic Multi-Tier Header & Breadcrumb Navigation Bar */}
+      {/* Treasury Header & Breadcrumb Bar */}
       <View style={[styles.card, isDarkMode && styles.darkCard]}>
         <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
           <Text style={[styles.title, isDarkMode && styles.darkText]} numberOfLines={1}>
-            {activeSubView === 'root' ? `🪙 Financial Treasury (Wallet: ${coins} 🪙)` :
+            {activeSubView === 'root' ? `🪙 Financial Treasury (${coins} 🪙)` :
              activeSubView === 'payout' ? '💸 Payout & Mobile Money' :
-             activeSubView === 'savedAccounts' ? '🏦 Saved Accounts & Mobile Money' :
+             activeSubView === 'savedAccounts' ? '🏦 Saved Accounts' :
              activeSubView === 'staking' ? '📈 Creator Yield Staking' :
              activeSubView === 'history' ? '📜 Ledger & Transactions' :
-             activeSubView === 'peerTransfer' ? '🚀 P2P Instant Transfer' : '🛡️ Vault Security & Limits'}
+             activeSubView === 'peerTransfer' ? '🚀 P2P Instant Transfer' : '🛡️ Vault Security'}
           </Text>
           {activeSubView !== 'root' && (
             <TouchableOpacity onPress={() => setActiveSubView('root')} style={styles.backButton}>
@@ -246,59 +287,42 @@ export default function WalletScreen({ isDarkMode, coins, setCoins }) {
         </Text>
       </View>
 
-      {/* 20+ Wallet & Fintech Layers Toggle Button */}
+      {/* Enterprise Architecture Toggle */}
       <TouchableOpacity 
         style={{ backgroundColor: '#2563eb', padding: 10, borderRadius: 8, alignItems: 'center', marginBottom: 12 }}
         onPress={() => setShowEnterpriseLayers(!showEnterpriseLayers)}
       >
-        <Text style={{ color: '#fff', fontWeight: 'bold', fontSize: 13 }}>⚡ {showEnterpriseLayers ? 'Hide' : 'Show'} 20+ Wallet & Fintech Architecture Layers</Text>
+        <Text style={{ color: '#fff', fontWeight: 'bold', fontSize: 13 }}>⚡ {showEnterpriseLayers ? 'Hide' : 'Show'} Enterprise FinTech Layers</Text>
       </TouchableOpacity>
 
-      {/* ================= 20+ WALLET ENTERPRISE LAYERS DRAWER ================= */}
       {showEnterpriseLayers && (
-        <View style={{ backgroundColor: '#1e293b', padding: 10, borderRadius: 8, marginBottom: 12, maxHeight: 180 }}>
-          <Text style={{ color: '#fff', fontSize: 11, fontWeight: 'bold', marginBottom: 6, textAlign: 'center' }}>⚡ Wallet & Treasury Enterprise Layers Matrix</Text>
-          <ScrollView contentContainerStyle={{ flexDirection: 'row', flexWrap: 'wrap', gap: 6 }}>
+        <View style={{ backgroundColor: '#1e293b', padding: 10, borderRadius: 8, marginBottom: 12 }}>
+          <Text style={{ color: '#fff', fontSize: 11, fontWeight: 'bold', marginBottom: 6, textAlign: 'center' }}>⚡ Treasury Architecture Matrix</Text>
+          <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 6 }}>
             {[
               { label: '🪙 Flutterwave MoMo', val: flutterwaveMoMoGateway, setVal: setFlutterwaveMoMoGateway },
-              { label: '🔐 Quantum Ledger Encrypt', val: quantumLedgerEncryption, setVal: setQuantumLedgerEncryption },
+              { label: '🔐 Quantum Encryption', val: quantumLedgerEncryption, setVal: setQuantumLedgerEncryption },
               { label: '🇺🇬 Kampala Treasury Sync', val: kampalaTreasuryRelay, setVal: setKampalaTreasuryRelay },
               { label: '✍️ Biometric Signature', val: biometricVaultSignature, setVal: setBiometricVaultSignature },
               { label: '🛡️ Autonomous Escrow', val: autonomousEscrowAudit, setVal: setAutonomousEscrowAudit },
-              { label: '🪙 Zero-Fee Gas Subsidizer', val: zeroFeeGasSubsidizerWallet, setVal: setZeroFeeGasSubsidizerWallet },
-              { label: '🪙 Smart Contract Yield', val: smartContractYieldEscrow, setVal: setSmartContractYieldEscrow },
-              { label: '🛰️ Bluetooth P2P Wallet', val: bluetoothP2pWalletSync, setVal: setBluetoothP2pWalletSync },
-              { label: '🧠 Federated AI Fraud', val: federatedAiFraudDetector, setVal: setFederatedAiFraudDetector },
-              { label: '🌿 Sentiment Mesh Wallet', val: realtimeSentimentMeshWallet, setVal: setRealtimeSentimentMeshWallet },
-              { label: '🎥 Multimodal HLS Feed', val: multimodalHlsStatementFeed, setVal: setMultimodalHlsStatementFeed },
-              { label: '🛡️ Crypto Watermark', val: cryptographicWalletWatermark, setVal: setCryptographicWalletWatermark },
-              { label: '📜 Speech Transcription', val: automaticTransactionTranscription, setVal: setAutomaticTransactionTranscription },
-              { label: '🪙 P2P Micro-Loan Vault', val: peerToPeerMicroLoanVault, setVal: setPeerToPeerMicroLoanVault },
-              { label: '☁️ Offline Ledger Sync', val: offlineLedgerSyncQueue, setVal: setOfflineLedgerSyncQueue },
-              { label: '⏳ Ephemeral Token Burn', val: ephemeralTokenBurnPolicy, setVal: setEphemeralTokenBurnPolicy },
-              { label: '📊 Bill Splitter Ledger', val: groupBillSplitterLedger, setVal: setGroupBillSplitterLedger },
-              { label: '🤖 AI Financial Advisor', val: aiFinancialAdvisorChat, setVal: setAiFinancialAdvisorChat },
-              { label: '💱 Multi-Currency Matrix', val: multiCurrencyConversionMatrix, setVal: setMultiCurrencyConversionMatrix },
-              { label: '🚨 Global Lockdown', val: globalEmergencyWalletLockdown, setVal: setGlobalEmergencyWalletLockdown },
             ].map((layer, idx) => (
-              <div key={idx} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', background: '#0f172a', padding: '3px 6px', borderRadius: '4px', width: '48%', border: '1px solid #334155' }}>
-                <span style={{ fontSize: '9px', color: '#fff', fontWeight: 'bold' }}>{layer.label}</span>
-                <button 
-                  onClick={() => layer.setVal(!layer.val)}
-                  style={{ background: layer.val ? '#38a169' : '#e53e3e', color: '#fff', border: 'none', padding: '2px 4px', borderRadius: '3px', fontSize: '8px', fontWeight: 'bold', cursor: 'pointer' }}
+              <View key={idx} style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', backgroundColor: '#0f172a', padding: 6, borderRadius: 4, width: '48%', borderWidth: 1, borderColor: '#334155' }}>
+                <Text style={{ fontSize: 9, color: '#fff', fontWeight: 'bold', flex: 1 }} numberOfLines={1}>{layer.label}</Text>
+                <TouchableOpacity 
+                  onPress={() => layer.setVal(!layer.val)}
+                  style={{ backgroundColor: layer.val ? '#38a169' : '#e53e3e', paddingHorizontal: 6, paddingVertical: 2, borderRadius: 3 }}
                 >
-                  {layer.val ? 'ON' : 'OFF'}
-                </button>
-              </div>
+                  <Text style={{ color: '#fff', fontSize: 8, fontWeight: 'bold' }}>{layer.val ? 'ON' : 'OFF'}</Text>
+                </TouchableOpacity>
+              </View>
             ))}
-          </ScrollView>
+          </View>
         </View>
       )}
 
       {/* ================= LEVEL 1: TREASURY ROOT HUB ================= */}
       {activeSubView === 'root' && (
         <>
-          {/* Earnings Balance Overview Card */}
           <View style={[styles.card, isDarkMode && styles.darkCard, { borderColor: '#48bb78', borderWidth: 2, alignItems: 'center', padding: 20 }]}>
             <Text style={{ fontSize: 11, fontWeight: 'bold', color: '#718096', marginBottom: 4, letterSpacing: 1 }}>TOTAL LIQUID WALLET BALANCE</Text>
             <Text style={{ fontSize: 30, fontWeight: 'bold', color: '#48bb78', marginBottom: 4 }}>🪙 {coins} Coins</Text>
@@ -318,80 +342,33 @@ export default function WalletScreen({ isDarkMode, coins, setCoins }) {
             </View>
           </View>
 
-          {/* Sub-Module Navigation Cards */}
-          <TouchableOpacity style={[styles.navCard, isDarkMode && styles.darkCard]} onPress={() => setActiveSubView('payout')}>
-            <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-              <Text style={{ fontSize: 20, marginRight: 12 }}>💸</Text>
-              <View style={{ flex: 1 }}>
-                <Text style={[styles.navTitle, isDarkMode && styles.darkText]}>Payout & Mobile Money Gateway</Text>
-                <Text style={styles.navSub}>Sub-Modules: MTN/Airtel cashouts, bank wires, conversion rates</Text>
+          {[
+            { id: 'payout', icon: '💸', title: 'Payout & Mobile Money Gateway', sub: 'MTN/Airtel cashouts, bank wires, conversion rates' },
+            { id: 'savedAccounts', icon: '🏦', title: `Manage Saved Accounts (${savedAccounts.length})`, sub: 'Registered MoMo numbers, bank wires, default destinations' },
+            { id: 'staking', icon: '📈', title: 'Creator Yield & Staking Pools', sub: `APY locks, token rewards, staked balance (🪙 ${stakedBalance})` },
+            { id: 'peerTransfer', icon: '🚀', title: 'P2P Instant Coin Transfer', sub: 'Send coins instantly to creators and community members' },
+            { id: 'history', icon: '📜', title: 'Ledger & Transaction History', sub: 'Completed payouts, escrow releases, search & filter' },
+            { id: 'security', icon: '🛡️', title: 'Vault Security & Approval Rules', sub: 'PIN confirmation gates, multi-sig overrides, escrow locks' },
+          ].map(item => (
+            <TouchableOpacity key={item.id} style={[styles.navCard, isDarkMode && styles.darkCard]} onPress={() => setActiveSubView(item.id)}>
+              <View style={{ flexDirection: 'row', alignItems: 'center', flex: 1 }}>
+                <Text style={{ fontSize: 20, marginRight: 12 }}>{item.icon}</Text>
+                <View style={{ flex: 1 }}>
+                  <Text style={[styles.navTitle, isDarkMode && styles.darkText]}>{item.title}</Text>
+                  <Text style={styles.navSub}>{item.sub}</Text>
+                </View>
               </View>
-            </View>
-            <Ionicons name="chevron-forward" size={18} color="#a0aec0" />
-          </TouchableOpacity>
-
-          <TouchableOpacity style={[styles.navCard, isDarkMode && styles.darkCard]} onPress={() => setActiveSubView('savedAccounts')}>
-            <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-              <Text style={{ fontSize: 20, marginRight: 12 }}>🏦</Text>
-              <View style={{ flex: 1 }}>
-                <Text style={[styles.navTitle, isDarkMode && styles.darkText]}>Manage Saved Accounts ({savedAccounts.length})</Text>
-                <Text style={styles.navSub}>Sub-Modules: Registered MoMo numbers, bank wires, default destinations</Text>
-              </View>
-            </View>
-            <Ionicons name="chevron-forward" size={18} color="#a0aec0" />
-          </TouchableOpacity>
-
-          <TouchableOpacity style={[styles.navCard, isDarkMode && styles.darkCard]} onPress={() => setActiveSubView('staking')}>
-            <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-              <Text style={{ fontSize: 20, marginRight: 12 }}>📈</Text>
-              <View style={{ flex: 1 }}>
-                <Text style={[styles.navTitle, isDarkMode && styles.darkText]}>Creator Yield & Staking Pools</Text>
-                <Text style={styles.navSub}>Sub-Modules: APY locks, token rewards, staked coin balances (🪙 {stakedBalance})</Text>
-              </View>
-            </View>
-            <Ionicons name="chevron-forward" size={18} color="#a0aec0" />
-          </TouchableOpacity>
-
-          <TouchableOpacity style={[styles.navCard, isDarkMode && styles.darkCard]} onPress={() => setActiveSubView('peerTransfer')}>
-            <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-              <Text style={{ fontSize: 20, marginRight: 12 }}>🚀</Text>
-              <View style={{ flex: 1 }}>
-                <Text style={[styles.navTitle, isDarkMode && styles.darkText]}>P2P Instant Coin Transfer</Text>
-                <Text style={styles.navSub}>Sub-Modules: Send coins instantly to creators and community members</Text>
-              </View>
-            </View>
-            <Ionicons name="chevron-forward" size={18} color="#a0aec0" />
-          </TouchableOpacity>
-
-          <TouchableOpacity style={[styles.navCard, isDarkMode && styles.darkCard]} onPress={() => setActiveSubView('history')}>
-            <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-              <Text style={{ fontSize: 20, marginRight: 12 }}>📜</Text>
-              <View style={{ flex: 1 }}>
-                <Text style={[styles.navTitle, isDarkMode && styles.darkText]}>Ledger & Transaction History</Text>
-                <Text style={styles.navSub}>Sub-Modules: Completed payouts, escrow releases, search & filter</Text>
-              </View>
-            </View>
-            <Ionicons name="chevron-forward" size={18} color="#a0aec0" />
-          </TouchableOpacity>
-
-          <TouchableOpacity style={[styles.navCard, isDarkMode && styles.darkCard]} onPress={() => setActiveSubView('security')}>
-            <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-              <Text style={{ fontSize: 20, marginRight: 12 }}>🛡️</Text>
-              <View style={{ flex: 1 }}>
-                <Text style={[styles.navTitle, isDarkMode && styles.darkText]}>Vault Security & Approval Rules</Text>
-                <Text style={styles.navSub}>Sub-Modules: PIN confirmation gates, multi-sig overrides, escrow locks</Text>
-              </View>
-            </View>
-            <Ionicons name="chevron-forward" size={18} color="#a0aec0" />
-          </TouchableOpacity>
+              <Ionicons name="chevron-forward" size={18} color="#a0aec0" />
+            </TouchableOpacity>
+          ))}
         </>
       )}
 
-      {/* ================= LEVEL 2: WITHDRAWAL & PAYOUT SUB-MODULE ================= */}
+      {/* ================= LEVEL 2: WITHDRAWAL & PAYOUT ================= */}
       {activeSubView === 'payout' && (
         <View style={[styles.card, isDarkMode && styles.darkCard]}>
-          <Text style={[styles.cardTitle, isDarkMode && styles.darkText]}>💸 Level 2: Request Coin Withdrawal</Text>
-          <Text style={{ fontSize: 11, color: '#718096', marginBottom: 12 }}>Convert earned coins from live streams, wildlife content gifts, and tickets into fiat currency:</Text>
+          <Text style={[styles.cardTitle, isDarkMode && styles.darkText]}>💸 Request Coin Withdrawal</Text>
+          <Text style={{ fontSize: 11, color: '#718096', marginBottom: 12 }}>Convert earned coins from live streams and tours into fiat currency:</Text>
 
           <Text style={styles.inputLabel}>Coins to Withdraw:</Text>
           <TextInput
@@ -403,7 +380,7 @@ export default function WalletScreen({ isDarkMode, coins, setCoins }) {
             onChangeText={setWithdrawalAmount}
           />
 
-          <Text style={styles.inputLabel}>Select from Saved Payout Destination:</Text>
+          <Text style={styles.inputLabel}>Select Payout Destination:</Text>
           {savedAccounts.map((acc) => (
             <TouchableOpacity
               key={acc.id}
@@ -442,11 +419,11 @@ export default function WalletScreen({ isDarkMode, coins, setCoins }) {
         </View>
       )}
 
-      {/* ================= LEVEL 2: SAVED ACCOUNTS & REGISTRATION SUB-MODULE ================= */}
+      {/* ================= LEVEL 2: SAVED ACCOUNTS ================= */}
       {activeSubView === 'savedAccounts' && (
         <View style={[styles.card, isDarkMode && styles.darkCard]}>
-          <Text style={[styles.cardTitle, isDarkMode && styles.darkText]}>🏦 Registered Payout Accounts & Mobile Money</Text>
-          <Text style={{ fontSize: 11, color: '#718096', marginBottom: 12 }}>Register and verify your MTN MoMo, Airtel Money, or bank wire destinations for secure cashouts:</Text>
+          <Text style={[styles.cardTitle, isDarkMode && styles.darkText]}>🏦 Registered Payout Accounts</Text>
+          <Text style={{ fontSize: 11, color: '#718096', marginBottom: 12 }}>Register and verify your MTN MoMo, Airtel Money, or bank wire destinations:</Text>
 
           {savedAccounts.map((acc) => (
             <View key={acc.id} style={[styles.ledgerRow, isDarkMode && { backgroundColor: '#1a202c', borderColor: '#4a5568' }]}>
@@ -454,15 +431,11 @@ export default function WalletScreen({ isDarkMode, coins, setCoins }) {
                 <Text style={[{ fontSize: 12, fontWeight: 'bold' }, isDarkMode && styles.darkText]}>{acc.type}</Text>
                 <Text style={{ fontSize: 10, color: '#718096' }}>{acc.identifier} ({acc.name})</Text>
               </View>
-              <View style={{ alignItems: 'flex-end' }}>
-                <Text style={{ fontSize: 10, color: '#38a169', fontWeight: 'bold' }}>Verified 🟢</Text>
-              </View>
+              <Text style={{ fontSize: 10, color: '#38a169', fontWeight: 'bold' }}>Verified 🟢</Text>
             </View>
           ))}
 
           <Text style={[styles.inputLabel, { marginTop: 12 }]}>Add New Destination:</Text>
-          
-          <Text style={{ fontSize: 10, color: '#718096', marginBottom: 4 }}>Provider Type:</Text>
           <View style={{ flexDirection: 'row', marginBottom: 10, gap: 4 }}>
             {['MTN Mobile Money', 'Airtel Money', 'Bank Wire'].map((type) => (
               <TouchableOpacity
@@ -475,10 +448,10 @@ export default function WalletScreen({ isDarkMode, coins, setCoins }) {
             ))}
           </View>
 
-          <Text style={{ fontSize: 10, color: '#718096', marginBottom: 4 }}>Account Number / Phone Number:</Text>
+          <Text style={{ fontSize: 10, color: '#718096', marginBottom: 4 }}>Account / Phone Number:</Text>
           <TextInput
             style={[styles.chatInput, isDarkMode && styles.darkChatInput]}
-            placeholder="e.g. +256 770 000000 or Account No..."
+            placeholder="e.g. +256 770 000000"
             placeholderTextColor="#a0aec0"
             value={newAccountIdentifier}
             onChangeText={setNewAccountIdentifier}
@@ -487,7 +460,7 @@ export default function WalletScreen({ isDarkMode, coins, setCoins }) {
           <Text style={{ fontSize: 10, color: '#718096', marginBottom: 4 }}>Account Holder Name:</Text>
           <TextInput
             style={[styles.chatInput, { marginBottom: 14 }, isDarkMode && styles.darkChatInput]}
-            placeholder="e.g. Borris Ahabwamukama..."
+            placeholder="e.g. Borris Ahabwamukama"
             placeholderTextColor="#a0aec0"
             value={newAccountName}
             onChangeText={setNewAccountName}
@@ -499,11 +472,11 @@ export default function WalletScreen({ isDarkMode, coins, setCoins }) {
         </View>
       )}
 
-      {/* ================= LEVEL 2: STAKING & YIELD SUB-MODULE ================= */}
+      {/* ================= LEVEL 2: STAKING & YIELD ================= */}
       {activeSubView === 'staking' && (
         <View style={[styles.card, isDarkMode && styles.darkCard]}>
-          <Text style={[styles.cardTitle, isDarkMode && styles.darkText]}>📈 Level 2: Creator Yield Staking Pool</Text>
-          <Text style={{ fontSize: 11, color: '#718096', marginBottom: 10 }}>Lock platform coins to earn passive yield rewards (+25 🪙 bonus) and boost creator visibility.</Text>
+          <Text style={[styles.cardTitle, isDarkMode && styles.darkText]}>📈 Creator Yield Staking Pool</Text>
+          <Text style={{ fontSize: 11, color: '#718096', marginBottom: 10 }}>Lock platform coins to earn passive yield rewards (+25 🪙 bonus).</Text>
           
           <View style={{ backgroundColor: isDarkMode ? '#1a202c' : '#f7fafc', padding: 12, borderRadius: 8, marginBottom: 12 }}>
             <Text style={{ fontSize: 11, color: '#718096' }}>Currently Staked Balance:</Text>
@@ -539,16 +512,16 @@ export default function WalletScreen({ isDarkMode, coins, setCoins }) {
         </View>
       )}
 
-      {/* ================= LEVEL 2: P2P INSTANT COIN TRANSFER ================= */}
+      {/* ================= LEVEL 2: P2P TRANSFER ================= */}
       {activeSubView === 'peerTransfer' && (
         <View style={[styles.card, isDarkMode && styles.darkCard]}>
           <Text style={[styles.cardTitle, isDarkMode && styles.darkText]}>🚀 P2P Instant Coin Transfer</Text>
-          <Text style={{ fontSize: 11, color: '#718096', marginBottom: 12 }}>Transfer coins instantly to other ChatUp users or community members:</Text>
+          <Text style={{ fontSize: 11, color: '#718096', marginBottom: 12 }}>Transfer coins instantly to other users or community members:</Text>
 
           <Text style={styles.inputLabel}>Recipient Username or Phone:</Text>
           <TextInput
             style={[styles.chatInput, isDarkMode && styles.darkChatInput]}
-            placeholder="e.g. Nimusiima Asifa or +256..."
+            placeholder="e.g. Nimusiima Asifa"
             placeholderTextColor="#a0aec0"
             value={transferRecipient}
             onChangeText={setTransferRecipient}
@@ -579,10 +552,10 @@ export default function WalletScreen({ isDarkMode, coins, setCoins }) {
         </View>
       )}
 
-      {/* ================= LEVEL 2: LEDGER & TRANSACTION HISTORY ================= */}
+      {/* ================= LEVEL 2: TRANSACTION HISTORY ================= */}
       {activeSubView === 'history' && (
         <View style={[styles.card, isDarkMode && styles.darkCard]}>
-          <Text style={[styles.cardTitle, isDarkMode && styles.darkText]}>📜 Level 2: Audit & Payout Ledgers</Text>
+          <Text style={[styles.cardTitle, isDarkMode && styles.darkText]}>📜 Audit & Payout Ledgers</Text>
           
           <TextInput
             style={[styles.chatInput, { marginBottom: 8 }, isDarkMode && styles.darkChatInput]}
@@ -609,11 +582,11 @@ export default function WalletScreen({ isDarkMode, coins, setCoins }) {
           ) : (
             filteredTransactions.map(tx => (
               <View key={tx.id} style={[styles.ledgerRow, isDarkMode && { backgroundColor: '#1a202c', borderColor: '#4a5568' }]}>
-                <View>
-                  <Text style={[{ fontSize: 12, fontWeight: 'bold' }, isDarkMode && styles.darkText]}>{tx.type}</Text>
+                <View style={{ flex: 1 }}>
+                  <Text style={[{ fontSize: 12, fontWeight: 'bold' }, isDarkMode && styles.darkText]} numberOfLines={1}>{tx.type}</Text>
                   <Text style={{ fontSize: 10, color: '#718096' }}>{tx.date} • {tx.identifier}</Text>
                 </View>
-                <View style={{ alignItems: 'flex-end' }}>
+                <View style={{ alignItems: 'flex-end', marginLeft: 8 }}>
                   <Text style={{ fontSize: 12, fontWeight: 'bold', color: tx.amount < 0 ? '#e53e3e' : '#48bb78' }}>
                     {tx.amount < 0 ? `${tx.amount} Coins` : `+${tx.amount} Coins`}
                   </Text>
@@ -625,10 +598,10 @@ export default function WalletScreen({ isDarkMode, coins, setCoins }) {
         </View>
       )}
 
-      {/* ================= LEVEL 3: VAULT SECURITY & RULES ================= */}
+      {/* ================= LEVEL 3: VAULT SECURITY ================= */}
       {activeSubView === 'security' && (
         <View style={[styles.card, isDarkMode && styles.darkCard]}>
-          <Text style={[styles.cardTitle, isDarkMode && styles.darkText]}>🛡️ Level 3: Vault Security Configurations</Text>
+          <Text style={[styles.cardTitle, isDarkMode && styles.darkText]}>🛡️ Vault Security Configurations</Text>
           
           <View style={styles.toggleRow}>
             <View style={{ flex: 1, marginRight: 10 }}>
@@ -656,7 +629,7 @@ export default function WalletScreen({ isDarkMode, coins, setCoins }) {
         </View>
       )}
 
-      {/* PIN CONFIRMATION MODAL FOR WITHDRAWALS */}
+      {/* PIN CONFIRMATION MODAL */}
       <Modal visible={showPinModal} transparent animationType="slide">
         <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: 'rgba(0,0,0,0.6)', padding: 20 }}>
           <View style={{ backgroundColor: isDarkMode ? '#2d3748' : '#fff', padding: 20, borderRadius: 12, width: '100%', maxWidth: 320, alignItems: 'center' }}>

@@ -1,10 +1,21 @@
-import AsyncStorage from '@react-native-async-storage/async-storage';
 import { createClient } from '@supabase/supabase-js';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
-const SUPABASE_URL = 'https://kwktegtjowrurgdsvafv.supabase.co';
-const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imt3a3RlZ3Rqb3dydXJnZHN2YWZ2Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODcyMzMwMjYsImV4cCI6MjEwMjgwOTAyNn0.wPoSxhVxBVB3hscvSW1osX5ucZUC0fYmilkTS0D-xZ0';
+// Self-contained polyfill for TextEncoder/TextDecoder using global scope
+if (typeof global.TextEncoder === 'undefined') {
+  try {
+    const { TextEncoder, TextDecoder } = require('text-encoding');
+    global.TextEncoder = TextEncoder;
+    global.TextDecoder = TextDecoder;
+  } catch (e) {
+    console.log('TextEncoder polyfill notice:', e);
+  }
+}
 
-export const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
+const supabaseUrl = 'https://kwktegtjowrurgdsvafv.supabase.co';
+const supabaseAnonKey = 'sb_publishable_eNIi0Z0ZrsigF0Mo6DJQyg_XgtpKx1L';
+
+export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
   auth: {
     storage: AsyncStorage,
     autoRefreshToken: true,

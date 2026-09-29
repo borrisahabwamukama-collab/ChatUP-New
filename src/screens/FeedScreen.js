@@ -22,6 +22,7 @@ import * as ImagePicker from 'expo-image-picker';
 import * as Clipboard from 'expo-clipboard';
 import * as Network from 'expo-network';
 import { BannerAd, BannerAdSize, TestIds, RewardedAd, RewardedAdEventType } from 'react-native-google-mobile-ads';
+import { supabase } from '../../Services/supabaseClient';
 
 const SUPABASE_URL = 'https://kwktegtjowrurgdsvafv.supabase.co';
 const SUPABASE_ANON_KEY = 'sb_publishable_eNIiOZ0ZrsigF0Mo6DJQyg_XgtpKx1L';

@@ -13,6 +13,7 @@ import {
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { supabase } from '../../Services/supabaseClient'; // Adjust path if needed
+import AdminFeedbackScreen from './AdminFeedbackScreen'; // Adjust path if it's in a different folder
 
 export default function SettingsScreen({ isDarkMode, setIsDarkMode, onLogout, currentUser, coins, setCoins }) {
   const [activeSubView, setActiveSubView] = useState('main');
@@ -34,6 +35,15 @@ export default function SettingsScreen({ isDarkMode, setIsDarkMode, onLogout, cu
   const [maxPacketHopLimit, setMaxPacketHopLimit] = useState('7 nodes');
   const [nodeRelayPower, setNodeRelayPower] = useState('High (100mW)');
 
+  // Feedback Modal States
+  const [showFeedbackModal, setShowFeedbackModal] = useState(false);
+  const [feedbackText, setFeedbackText] = useState('');
+  const [feedbackType, setFeedbackType] = useState('General');
+  const [feedbackSubmitting, setFeedbackSubmitting] = useState(false);
+
+  // Admin Feedback Panel State
+  const [showAdminFeedback, setShowAdminFeedback] = useState(false);
+
   // Email OTP Authentication & AI Intrusion Tracking States (7-Tap Trigger)
   const [versionTapCount, setVersionTapCount] = useState(0);
   const [emailModalVisible, setEmailModalVisible] = useState(false);
@@ -46,6 +56,9 @@ export default function SettingsScreen({ isDarkMode, setIsDarkMode, onLogout, cu
   const [failedIntrusionAttempts, setFailedIntrusionAttempts] = useState(0);
   const [aiLockdownActive, setAiLockdownActive] = useState(false);
   const [isMasterUnlocked, setIsMasterUnlocked] = useState(false);
+
+  const myUsername = currentUser?.email ? currentUser.email.split('@')[0] : 'User';
+  const myUserId = currentUser?.id || currentUser?.user?.id || null;
 
   // Sync settings with Supabase profiles table on mount or toggle change
   useEffect(() => {
@@ -86,6 +99,35 @@ export default function SettingsScreen({ isDarkMode, setIsDarkMode, onLogout, cu
       }
     } catch (e) {
       console.warn('Could not sync setting to Supabase:', e);
+    }
+  };
+
+  // SEND FEEDBACK HANDLER
+  const handleSendFeedback = async () => {
+    if (!feedbackText.trim()) {
+      return Alert.alert('Error', 'Please enter your feedback or message.');
+    }
+
+    setFeedbackSubmitting(true);
+    try {
+      const { error } = await supabase.from('user_feedback').insert([{
+        user_id: myUserId,
+        username: myUsername,
+        feedback_type: feedbackType,
+        message: feedbackText.trim()
+      }]);
+
+      if (error) throw error;
+
+      Alert.alert('Thank You! 🙏', 'Your feedback has been sent successfully.');
+      setFeedbackText('');
+      setFeedbackType('General');
+      setShowFeedbackModal(false);
+    } catch (err) {
+      console.log('Feedback error:', err);
+      Alert.alert('Error', 'Could not send feedback. Try again later.');
+    } finally {
+      setFeedbackSubmitting(false);
     }
   };
 
@@ -202,6 +244,17 @@ export default function SettingsScreen({ isDarkMode, setIsDarkMode, onLogout, cu
     Alert.alert(title, message);
   };
 
+  // 🌟 RENDER ADMIN FEEDBACK SCREEN WHEN UNLOCKED AND TOGGLED 🌟
+  if (showAdminFeedback) {
+    return (
+      <AdminFeedbackScreen 
+        isDarkMode={isDarkMode} 
+        currentUser={currentUser} 
+        onBack={() => setShowAdminFeedback(false)} 
+      />
+    );
+  }
+
   return (
     <ScrollView style={[styles.container, isDarkMode && styles.darkContainer]} contentContainerStyle={{ padding: 16, paddingBottom: 100 }}>
       
@@ -262,6 +315,23 @@ export default function SettingsScreen({ isDarkMode, setIsDarkMode, onLogout, cu
       {/* LEVEL 1: ROOT HUB */}
       {activeSubView === 'main' && (
         <>
+          {/* MASTER ADMIN FEEDBACK PANEL BUTTON (Only shows when unlocked via 7-tap OTP) */}
+          {isMasterUnlocked && (
+            <TouchableOpacity 
+              style={[styles.navCard, isDarkMode && styles.darkCard, { borderColor: '#e53e3e', borderWidth: 1, backgroundColor: isDarkMode ? '#2d2d3d' : '#fff5f5' }]} 
+              onPress={() => setShowAdminFeedback(true)}
+            >
+              <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                <Text style={{ fontSize: 20, marginRight: 12 }}>👑</Text>
+                <View style={{ flex: 1 }}>
+                  <Text style={[styles.navTitle, isDarkMode && styles.darkText, { color: '#e53e3e' }]}>View User Feedback & Replies</Text>
+                  <Text style={styles.navSub}>Admin Panel: Read and respond to user feedback</Text>
+                </View>
+              </View>
+              <Ionicons name="chevron-forward" size={18} color="#e53e3e" />
+            </TouchableOpacity>
+          )}
+
           <TouchableOpacity style={[styles.navCard, isDarkMode && styles.darkCard]} onPress={() => setActiveSubView('privacy_root')}>
             <View style={{ flexDirection: 'row', alignItems: 'center' }}>
               <Text style={{ fontSize: 20, marginRight: 12 }}>🕵️</Text>
@@ -304,6 +374,21 @@ export default function SettingsScreen({ isDarkMode, setIsDarkMode, onLogout, cu
               </View>
             </View>
             <Ionicons name="chevron-forward" size={18} color="#a0aec0" />
+          </TouchableOpacity>
+
+          {/* USER FEEDBACK CARD BUTTON */}
+          <TouchableOpacity 
+            style={[styles.navCard, isDarkMode && styles.darkCard, { borderColor: '#3182ce', borderWidth: 1 }]} 
+            onPress={() => setShowFeedbackModal(true)}
+          >
+            <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+              <Text style={{ fontSize: 20, marginRight: 12 }}>💡</Text>
+              <View style={{ flex: 1 }}>
+                <Text style={[styles.navTitle, isDarkMode && styles.darkText]}>Send App Feedback & Bug Reports</Text>
+                <Text style={styles.navSub}>Share your ideas, suggestions, or report issues directly</Text>
+              </View>
+            </View>
+            <Ionicons name="chevron-forward" size={18} color="#3182ce" />
           </TouchableOpacity>
 
           <View style={[styles.card, isDarkMode && styles.darkCard]}>
@@ -546,9 +631,66 @@ export default function SettingsScreen({ isDarkMode, setIsDarkMode, onLogout, cu
         <Text style={[styles.cardTitle, isDarkMode && styles.darkText]}>ℹ️ About ChatUp Platform</Text>
         <Text style={{ fontSize: 12, color: '#718096' }}>Version: 2.6.0 (Production Release)</Text>
         <Text style={{ fontSize: 11, color: '#a0aec0', marginTop: 4, textAlign: 'center' }}>
-          Developed by Borris • Built for Sovereign Peer-to-Peer Networks in Uganda 🇺🇬.
+          Secure Peer-to-Peer Social Networking Platform. All rights reserved.
         </Text>
       </TouchableOpacity>
+
+      {/* MODAL: SEND FEEDBACK */}
+      <Modal visible={showFeedbackModal} animationType="slide" transparent={true}>
+        <View style={styles.modalOverlay}>
+          <View style={[styles.feedbackModalBox, isDarkMode && styles.darkCard]}>
+            
+            <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12, borderBottomWidth: 1, borderBottomColor: '#edf2f7', paddingBottom: 8 }}>
+              <Text style={[styles.pinTitle, isDarkMode && styles.darkText, { marginBottom: 0 }]}>💡 Send App Feedback</Text>
+              <TouchableOpacity onPress={() => setShowFeedbackModal(false)}>
+                <Ionicons name="close" size={20} color="#718096" />
+              </TouchableOpacity>
+            </View>
+
+            <Text style={{ fontSize: 11, fontWeight: 'bold', color: '#718096', marginBottom: 6 }}>Category</Text>
+            <View style={{ flexDirection: 'row', gap: 8, marginBottom: 10 }}>
+              {['General', 'Bug 🐛', 'Feature 🚀'].map((type) => {
+                const cleanType = type.split(' ')[0];
+                const isSelected = feedbackType === cleanType;
+                return (
+                  <TouchableOpacity
+                    key={type}
+                    style={[styles.chip, isSelected && styles.chipSelected]}
+                    onPress={() => setFeedbackType(cleanType)}
+                  >
+                    <Text style={[styles.chipText, isSelected && styles.chipTextSelected]}>
+                      {type}
+                    </Text>
+                  </TouchableOpacity>
+                );
+              })}
+            </View>
+
+            <Text style={{ fontSize: 11, fontWeight: 'bold', color: '#718096', marginBottom: 6 }}>Your Message</Text>
+            <TextInput
+              style={[styles.feedbackInput, isDarkMode && { color: '#fff', borderColor: '#4a5568', backgroundColor: '#1a202c' }]}
+              placeholder="Tell us what you like or what we can improve..."
+              placeholderTextColor="#a0aec0"
+              multiline
+              value={feedbackText}
+              onChangeText={setFeedbackText}
+            />
+
+            <TouchableOpacity 
+              style={styles.feedbackSubmitBtn} 
+              onPress={handleSendFeedback}
+              disabled={feedbackSubmitting}
+            >
+              {feedbackSubmitting ? (
+                <ActivityIndicator color="#fff" size="small" />
+              ) : (
+                <Text style={{ color: '#fff', fontWeight: 'bold', fontSize: 13 }}>Submit Feedback 🚀</Text>
+              )}
+            </TouchableOpacity>
+
+          </View>
+        </View>
+      </Modal>
 
       {/* Modal 1: Enter Admin Email for OTP */}
       <Modal visible={emailModalVisible} transparent={true} animationType="fade">
@@ -651,4 +793,11 @@ const styles = StyleSheet.create({
   pinBtn: { paddingVertical: 8, paddingHorizontal: 15, borderRadius: 6 },
   logoutBtnInline: { backgroundColor: '#e53e3e', paddingHorizontal: 12, paddingVertical: 6, borderRadius: 6 },
   logoutBtnText: { color: '#fff', fontSize: 11, fontWeight: 'bold' },
+  feedbackModalBox: { width: '85%', maxWidth: 360, backgroundColor: '#fff', padding: 20, borderRadius: 16 },
+  chip: { paddingHorizontal: 12, paddingVertical: 6, borderRadius: 16, backgroundColor: '#edf2f7', borderWidth: 1, borderColor: '#cbd5e0' },
+  chipSelected: { backgroundColor: '#3182ce', borderColor: '#3182ce' },
+  chipText: { fontSize: 11, fontWeight: 'bold', color: '#4a5568' },
+  chipTextSelected: { color: '#fff' },
+  feedbackInput: { backgroundColor: '#f7fafc', borderWidth: 1, borderColor: '#cbd5e0', borderRadius: 8, padding: 12, height: 90, fontSize: 13, color: '#2d3748', textAlignVertical: 'top', marginBottom: 15 },
+  feedbackSubmitBtn: { backgroundColor: '#3182ce', padding: 12, borderRadius: 10, alignItems: 'center' }
 });

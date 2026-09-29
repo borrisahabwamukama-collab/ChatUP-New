@@ -7,39 +7,55 @@ import {
   ScrollView,
   TextInput,
   Alert,
-  Image,
   Modal,
-  Pressable,
   Animated,
-  KeyboardAvoidingView,
   Platform,
-  Switch,
+  RefreshControl,
+  Dimensions,
+  Image,
 } from 'react-native';
 import * as ImagePicker from 'expo-image-picker';
+import * as FileSystem from 'expo-file-system';
+import * as MediaLibrary from 'expo-media-library';
 import { CameraView, useCameraPermissions } from 'expo-camera';
-import { BannerAd, BannerAdSize, TestIds, RewardedAd, RewardedAdEventType, AdEventType } from 'react-native-google-mobile-ads';
+import { supabase } from '../../Services/supabaseClient';
 
-// Dynamic ad unit IDs (automatically uses Google Test IDs during development)
-const bannerAdUnitId = __DEV__ ? TestIds.BANNER : 'ca-app-pub-xxxxxxxxoxxxxxxx/xxxxxxxxxx';
-const rewardedAdUnitId = __DEV__ ? TestIds.REWARDED : 'ca-app-pub-xxxxxxxxoxxxxxxx/xxxxxxxxxx';
+// IMPORT MODULAR COMPONENTS & LIVE STREAM SCREEN
+import DiscoveryFeedList from './DiscoveryFeedList';
+import DiscoveryWatchPartyModule from './DiscoveryWatchPartyModule';
+import DiscoveryCreatorStudioModal from './DiscoveryCreatorStudioModal';
+import DiscoveryCommentsModal from './DiscoveryCommentsModal';
+import DiscoverySecurityMatrixModal from './DiscoverySecurityMatrixModal';
+import DiscoveryQuickActionsModal from './DiscoveryQuickActionsModal';
+import PeerProfileModal from './PeerProfileModal';
+import LiveStreamScreen from './LiveStreamScreen';
 
-export default function DiscoveryWalletScreen({ isDarkMode }) {
+const { height: SCREEN_HEIGHT } = Dimensions.get('window');
+
+export default function DiscoveryWalletScreen({ isDarkMode, navigation }) {
   // Navigation & Sub-Tabs State
   const [discoveryTab, setDiscoveryTab] = useState('Feed'); // 'Feed', 'Tours', 'Vault', 'WatchParty', 'Radar', 'Channels', 'LiveMap'
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedCategory, setSelectedCategory] = useState('All');
 
+  // Live Stream Studio State & Coin Balance
+  const [isLiveActive, setIsLiveActive] = useState(false);
+  const [coins, setCoins] = useState(1500);
+
+  // Pull-to-Refresh State
+  const [refreshing, setRefreshing] = useState(false);
+
+  // Active Video Viewport Index State (for auto-stop on scroll)
+  const [activeVideoIndex, setActiveVideoIndex] = useState(0);
+
+  // Liked posts tracking set to prevent double liking
+  const [likedPostIds, setLikedPostIds] = useState(new Set());
+
   // AI Smart Interest Learning State
   const [userInterests, setUserInterests] = useState({ Tours: 5, Wildlife: 4, Music: 2, Football: 1, Tech: 1 });
-  const [aiRecommendedBanner, setAiRecommendedBanner] = useState('Personalized AI Feed Active ✨');
 
-  // Geofenced Radius State (e.g., 3km, 10km, 50km, Global)
+  // Geofenced Radius State
   const [geofenceRadius, setGeofenceRadius] = useState(10); // in km
-
-  // Monetization & Rewarded Ad States
-  const [rewardedAdLoaded, setRewardedAdLoaded] = useState(false);
-  const [rewardedAdInstance, setRewardedAdInstance] = useState(null);
-  const [userAdEarningsBalance, setUserAdEarningsBalance] = useState(12500); // UGX Creator Ad Earnings
 
   // Overlays & Modal Controls
   const [matrixMenuVisible, setMatrixMenuVisible] = useState(false);
@@ -51,10 +67,53 @@ export default function DiscoveryWalletScreen({ isDarkMode }) {
   const [postSettingsModalVisible, setPostSettingsModalVisible] = useState(false);
   const [boostModalVisible, setBoostModalVisible] = useState(false);
 
+  // Peer Public Profile Modal States
+  const [selectedPeerId, setSelectedPeerId] = useState(null);
+  const [peerModalVisible, setPeerModalVisible] = useState(false);
+  const [currentLoggedInUserId, setCurrentLoggedInUserId] = useState(null);
+  const [currentUserAvatar, setCurrentUserAvatar] = useState('https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=100');
+  const [currentUserName, setCurrentUserName] = useState('Borris');
+
+  // Fetch current session user id & profile info on mount
+  useEffect(() => {
+    async function getSessionUser() {
+      if (supabase) {
+        const { data: { session } } = await supabase.auth.getSession();
+        if (session?.user?.id) {
+          setCurrentLoggedInUserId(session.user.id);
+          const rawName = session?.user?.user_metadata?.full_name || session?.user?.email?.split('@')[0] || 'Borris';
+          setCurrentUserName(rawName);
+
+          const { data: profile } = await supabase
+            .from('profiles')
+            .select('avatar_url')
+            .eq('user_id', session.user.id)
+            .maybeSingle();
+
+          if (profile?.avatar_url) {
+            setCurrentUserAvatar(profile.avatar_url);
+          }
+        }
+      }
+    }
+    getSessionUser();
+  }, []);
+
+  const handleOpenCreatorProfile = (authorName, authorAvatar, postItem) => {
+    const targetUserId = (postItem && postItem.user_id) ? postItem.user_id : currentLoggedInUserId;
+    if (targetUserId) {
+      setSelectedPeerId(targetUserId);
+      setPeerModalVisible(true);
+    } else {
+      setSelectedPeerId(currentLoggedInUserId || 'd37f5eca-0ce9-4b97-9a9d-1944d48bf001');
+      setPeerModalVisible(true);
+    }
+  };
+
   // Creator Upload & Studio Modal State
   const [cameraModalVisible, setCameraModalVisible] = useState(false);
   const [creatorStudioModalVisible, setCreatorStudioModalVisible] = useState(false);
-  const [mediaSourceType, setMediaSourceType] = useState('camera'); // 'camera' or 'upload'
+  const [mediaSourceType, setMediaSourceType] = useState('camera');
   const [facing, setFacing] = useState('back');
   const [isRecording, setIsRecording] = useState(false);
   const [recordingSeconds, setRecordingSeconds] = useState(0);
@@ -64,38 +123,49 @@ export default function DiscoveryWalletScreen({ isDarkMode }) {
   const [newPostCaption, setNewPostCaption] = useState('');
   const [newPostCategory, setNewPostCategory] = useState('Tours');
   const [selectedFilter, setSelectedFilter] = useState('Cinematic 🎬');
-  const [trimDuration, setTrimDuration] = useState('0:00 - 0:30 (Max 3m)');
   const [audioTrack, setAudioTrack] = useState('Original Field Audio 🎵');
 
   // Camera permissions and ref
   const [cameraPermission, requestCameraPermission] = useCameraPermissions();
   const cameraRef = useRef(null);
 
-  // Comment Modal States & Threaded Replies
+  // Comment Modal States & Professional Threaded Replies
   const [commentsModalVisible, setCommentsModalVisible] = useState(false);
   const [currentPostComments, setCurrentPostComments] = useState([]);
   const [newCommentText, setNewCommentText] = useState('');
   const [activeCommentPost, setActiveCommentPost] = useState(null);
   const [replyingToCommentId, setReplyingToCommentId] = useState(null);
 
+  // Working Creator Wallet Tip State & Modal
+  const [tipModalVisible, setTipModalVisible] = useState(false);
+  const [selectedTipAmount, setSelectedTipAmount] = useState(5000);
+  const [creatorWalletBalance, setCreatorWalletBalance] = useState(45000); // UGX
+
   // AI Caption Generator Modal State
   const [aiCaptionModalVisible, setAiCaptionModalVisible] = useState(false);
   const [rawCreatorInput, setRawCreatorInput] = useState('');
   const [generatedAiCaption, setGeneratedAiCaption] = useState('');
 
-  // Watch Party Sync & Live Chat State
+  // Watch Party State
   const [watchPartyActive, setWatchPartyActive] = useState(true);
   const [watchPartyPeers, setWatchPartyPeers] = useState(6);
+  const [isPlayingWatchParty, setIsPlayingWatchParty] = useState(true);
+  const [watchPartyPlaylist] = useState([
+    { id: 'wp_1', title: 'Source of the Nile - Sunset Live Stream', url: 'https://www.w3schools.com/html/mov_bbb.mp4', host: 'Borris Ranger Hub' },
+    { id: 'wp_2', title: 'Bwindi Mountain Gorillas Conservation Walk', url: 'https://www.w3schools.com/html/mov_bbb.mp4', host: 'Talk with Nature HD' },
+    { id: 'wp_3', title: 'Queen Elizabeth Park Wildlife Expedition', url: 'https://www.w3schools.com/html/mov_bbb.mp4', host: 'Pearl Safaris UG' },
+  ]);
+  const [currentWatchPartyIndex, setCurrentWatchPartyIndex] = useState(0);
   const [watchPartyChat, setWatchPartyChat] = useState([
-    { id: '1', user: 'Stella', text: 'This Jinja boat cruise look so peaceful! 🔥' },
-    { id: '2', user: 'Borris', text: 'Yeah! We are visiting again next month.' }
+    { id: '1', user: 'Stella', text: 'This Jinja boat cruise looks exceptionally peaceful and well-managed.' },
+    { id: '2', user: 'Borris', text: 'Indeed, we plan to schedule our next conservation expedition here.' }
   ]);
   const [newWatchChatText, setNewWatchChatText] = useState('');
 
   // Saved Collections / Bookmarks Vault State
   const [savedVaultItems, setSavedVaultItems] = useState([]);
 
-  // ================= 10 SUPER-LAYERS ARCHITECTURE (DISCOVERY & WALLET) =================
+  // 10 Super-Layers Architecture State
   const [quantumLatticeSecurity, setQuantumLatticeSecurity] = useState(true);
   const [kampalaEdgeRelaySync, setKampalaEdgeRelaySync] = useState(true);
   const [aiAutonomousToxicityGuard, setAiAutonomousToxicityGuard] = useState(true);
@@ -107,49 +177,7 @@ export default function DiscoveryWalletScreen({ isDarkMode }) {
   const [bluetoothP2pMeshRelay, setBluetoothP2pMeshRelay] = useState(true);
   const [autonomousCreatorEscrow, setAutonomousCreatorEscrow] = useState(true);
 
-  // Double-tap animation scale ref
   const heartScale = useRef(new Animated.Value(0)).current;
-
-  // Initialize Dynamic Rewarded Ad Loader
-  useEffect(() => {
-    try {
-      const rewardedAd = RewardedAd.createForAdRequest(rewardedAdUnitId, {
-        requestNonPersonalizedAdsOnly: true,
-      });
-
-      const unsubscribeLoaded = rewardedAd.addAdEventListener(RewardedAdEventType.LOADED, () => {
-        setRewardedAdLoaded(true);
-      });
-
-      const unsubscribeEarned = rewardedAd.addAdEventListener(RewardedAdEventType.EARNED_REWARD, (reward) => {
-        setUserAdEarningsBalance(prev => prev + 2500);
-        Alert.alert('💰 Ad Reward Credited!', `Successfully earned +2500 UGX creator ad bounty! Total balance: ${userAdEarningsBalance + 2500} UGX`);
-      });
-
-      rewardedAd.load();
-      setRewardedAdInstance(rewardedAd);
-
-      return () => {
-        unsubscribeLoaded();
-        unsubscribeEarned();
-      };
-    } catch (e) {
-      console.log('Rewarded Ad initialization notice:', e);
-    }
-  }, []);
-
-  const handleShowRewardedAd = () => {
-    if (rewardedAdLoaded && rewardedAdInstance) {
-      rewardedAdInstance.show();
-      setRewardedAdLoaded(false);
-      // Reload next ad
-      rewardedAdInstance.load();
-    } else {
-      // Fallback simulation if native ad network is loading or running in web preview
-      setUserAdEarningsBalance(prev => prev + 2500);
-      Alert.alert('💰 Ad Reward Credited (Simulated)', 'Watch ad completed! +2500 UGX added to your creator earnings balance.');
-    }
-  };
 
   // Recording Timer Effect
   useEffect(() => {
@@ -164,80 +192,95 @@ export default function DiscoveryWalletScreen({ isDarkMode }) {
     return () => clearInterval(timer);
   }, [isRecording]);
 
-  // Ephemeral Stories
+  // Fetch Feed Items from Supabase
+  const [feedItems, setFeedItems] = useState([]);
+
+  useEffect(() => {
+    fetchDiscoveryFeed();
+
+    if (supabase) {
+      const channel = supabase
+        .channel('public:discovery_feed_items')
+        .on('postgres_changes', { event: '*', schema: 'public', table: 'discovery_feed_items' }, () => {
+          fetchDiscoveryFeed();
+        })
+        .subscribe();
+
+      return () => {
+        supabase.removeChannel(channel);
+      };
+    }
+  }, []);
+
+  const fetchDiscoveryFeed = async () => {
+    try {
+      if (!supabase) return;
+      const { data, error } = await supabase
+        .from('discovery_feed_items')
+        .select('*')
+        .order('created_at', { ascending: false });
+
+      if (!error && data && data.length > 0) {
+        setFeedItems(data);
+      } else if (!data || data.length === 0) {
+        setFeedItems([
+          {
+            id: '1',
+            user_id: 'default_user_01',
+            author: 'Borris Ahabwamukama',
+            author_avatar: 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=100',
+            caption: '🐘 #BwindiGorillas Mountain Gorilla Expedition & Guided Forest Walk. Experience the raw beauty of #Uganda conservation zones!',
+            created_at: new Date(Date.now() - 86400000 * 3).toISOString(),
+            likes: 840,
+            downloads: 12,
+            distanceKm: 2.1,
+            allowDownloads: true,
+            isPinned: true,
+            isBoosted: false,
+            comments: [
+              {
+                id: 'c_101',
+                user: 'Dr. Evelyn Namubiru',
+                text: 'Commendable initiative regarding regional habitat preservation and sustainable ecotourism.',
+                time: '14:30',
+                likes: 12,
+                replies: [
+                  { id: 'r_201', user: 'Borris', text: 'Thank you for your expert insights on biodiversity.', time: '14:45', likes: 5 }
+                ]
+              }
+            ],
+            shares: 31,
+            vibe: 'Wildlife Tour 🌿',
+            category: 'Wildlife',
+            videoUrl: 'https://www.w3schools.com/html/mov_bbb.mp4',
+            location: 'Bwindi Impenetrable National Park, Uganda',
+            duration: '4:20 Min Tour'
+          }
+        ]);
+      }
+    } catch (err) {
+      console.log('Supabase fetch error:', err.message);
+    }
+  };
+
+  const onRefresh = async () => {
+    setRefreshing(true);
+    await fetchDiscoveryFeed();
+    setRefreshing(false);
+  };
+
+  const handleScroll = (event) => {
+    const offsetY = event.nativeEvent.contentOffset.y;
+    const index = Math.round(offsetY / (SCREEN_HEIGHT * 0.65));
+    if (index !== activeVideoIndex && index >= 0) {
+      setActiveVideoIndex(index);
+    }
+  };
+
   const [stories] = useState([
     { id: '1', name: 'Nimusiima', location: 'Queen Elizabeth Park', distanceKm: 1.5, mediaType: 'Elephant Herd Clip' },
     { id: '2', name: 'Stella', location: 'Kampala Central', distanceKm: 4.2, mediaType: 'Acoustic Studio Jam' },
     { id: '3', name: 'Borris', location: 'Bwindi Impenetrable', distanceKm: 2.1, mediaType: 'Gorilla Trekking Tour' },
-  ]);
-
-  // Feed Items Database
-  const [feedItems, setFeedItems] = useState([
-    {
-      id: '1',
-      author: 'Borris (Talk With Nature)',
-      caption: '🐘 #BwindiGorillas Mountain Gorilla Expedition & Guided Forest Walk. Experience the raw beauty of #Uganda conservation zones!',
-      timestamp: '2 hours ago',
-      likes: 840,
-      distanceKm: 2.1,
-      allowDownloads: true,
-      isPinned: true,
-      isBoosted: false,
-      comments: [
-        {
-          id: 'c1',
-          user: 'Stella',
-          text: 'Can we book a guided tour for this weekend?',
-          time: '1:00 PM',
-          likes: 14,
-          replies: [
-            { id: 'r1', user: 'Borris', text: 'Yes Stella! Slots are open.', time: '1:15 PM', likes: 5 }
-          ]
-        }
-      ],
-      shares: 31,
-      vibe: 'Wildlife Tour 🌿',
-      category: 'Wildlife',
-      videoUrl: 'https://images.unsplash.com/photo-1534567153574-2b12153a87f0?q=80&w=1000&auto=format&fit=crop',
-      location: 'Bwindi Impenetrable National Park, Uganda',
-      duration: '4:20 Min Tour'
-    },
-    {
-      id: '2',
-      author: 'Kampala Sports TV',
-      caption: '⚽ #Arsenal vs #ManCity Premier League tactical breakdown & local fan watch party highlights in Kampala!',
-      timestamp: '3 hours ago',
-      likes: 1250,
-      distanceKm: 0.8,
-      allowDownloads: true,
-      isPinned: false,
-      isBoosted: true,
-      comments: [],
-      shares: 89,
-      vibe: 'Football Match 🔥',
-      category: 'Football',
-      videoUrl: 'https://images.unsplash.com/photo-1508098682722-e99c43a406b2?q=80&w=1000&auto=format&fit=crop',
-      location: 'Kampala, Uganda',
-      duration: '3:10 Min Highlights'
-    },
-    {
-      id: '3',
-      author: 'Pearl Safaris UG',
-      caption: '🌅 #SourceOfTheNile Sunset Boat Cruise in Jinja. Audio tour guide active on mesh network.',
-      timestamp: '5 hours ago',
-      likes: 610,
-      distanceKm: 14.5,
-      allowDownloads: false,
-      isPinned: false,
-      isBoosted: false,
-      comments: [],
-      shares: 18,
-      vibe: 'Water Expedition 🌊',
-      category: 'Tours',
-      videoUrl: 'https://images.unsplash.com/photo-1518709268805-4e9042af9f23?q=80&w=1000&auto=format&fit=crop',
-      location: 'Jinja, Uganda',
-      duration: '2:45 Min Tour'
-    },
   ]);
 
   const [officialChannels] = useState([
@@ -255,27 +298,98 @@ export default function DiscoveryWalletScreen({ isDarkMode }) {
     setUserInterests(prev => ({ ...prev, [category]: (prev[category] || 0) + 2 }));
   };
 
-  const handleLikePost = (item) => {
+  // 🌟 HELPER TO TRIGGER INSTANT SUPABASE NOTIFICATIONS TO CREATORS
+  const sendDiscoveryNotification = async (recipientUserId, title, body, relatedItemId) => {
+    if (!supabase || !recipientUserId || recipientUserId === currentLoggedInUserId) return;
+    try {
+      await supabase.from('notifications').insert([
+        {
+          user_id: recipientUserId,
+          title,
+          body,
+          type: 'discovery_interaction',
+          related_item_id: relatedItemId,
+          created_at: new Date().toISOString()
+        }
+      ]);
+    } catch (err) {
+      console.log('Error triggering discovery notification:', err.message);
+    }
+  };
+
+  // 🌟 FIXED: Robustly updates post likes, accumulates total creator profile likes, and notifies owner
+  const handleLikePost = async (item) => {
+    if (likedPostIds.has(item.id)) {
+      Alert.alert('Notice', 'You have already liked this publication.');
+      return;
+    }
     trackUserInterest(item.category);
-    setFeedItems(prev => prev.map(p => p.id === item.id ? { ...p, likes: p.likes + 1 } : p));
+    const updatedLikes = (item.likes || 0) + 1;
+    setLikedPostIds(prev => new Set(prev).add(item.id));
+    setFeedItems(prev => prev.map(p => p.id === item.id ? { ...p, likes: updatedLikes } : p));
+    
+    try {
+      if (supabase && item.id) {
+        await supabase
+          .from('discovery_feed_items')
+          .update({ likes: updatedLikes })
+          .eq('id', item.id);
+
+        if (item.user_id && item.user_id !== currentLoggedInUserId) {
+          // 1. Send notification to author
+          await sendDiscoveryNotification(
+            item.user_id,
+            'New Like ❤️',
+            `@${currentUserName} liked your publication "${(item.caption || '').slice(0, 30)}..."`,
+            item.id
+          );
+
+          // 2. Accumulate creator's total profile likes
+          const { data: creatorProfile } = await supabase
+            .from('profiles')
+            .select('total_likes, likes_received')
+            .eq('user_id', item.user_id)
+            .maybeSingle();
+
+          const currentTotalLikes = creatorProfile?.total_likes || creatorProfile?.likes_received || 0;
+          const newTotalLikes = currentTotalLikes + 1;
+
+          const { error: updateErr } = await supabase
+            .from('profiles')
+            .update({ total_likes: newTotalLikes })
+            .eq('user_id', item.user_id);
+
+          if (updateErr) {
+            await supabase
+              .from('profiles')
+              .update({ likes_received: newTotalLikes })
+              .eq('user_id', item.user_id);
+          }
+        }
+      }
+    } catch (err) {
+      console.log('Error processing like & profile accumulation:', err.message);
+    }
   };
 
   let lastTap = null;
   const handleDoubleTapLike = (item) => {
     const now = Date.now();
     if (lastTap && (now - lastTap) < 300) {
-      handleLikePost(item);
-      heartScale.setValue(0);
-      Animated.sequence([
-        Animated.spring(heartScale, { toValue: 1, friction: 3, useNativeDriver: true }),
-        Animated.timing(heartScale, { toValue: 0, duration: 200, delay: 300, useNativeDriver: true })
-      ]).start();
+      if (!likedPostIds.has(item.id)) {
+        handleLikePost(item);
+        heartScale.setValue(0);
+        Animated.sequence([
+          Animated.spring(heartScale, { toValue: 1, friction: 3, useNativeDriver: true }),
+          Animated.timing(heartScale, { toValue: 0, duration: 200, delay: 300, useNativeDriver: true })
+        ]).start();
+      }
     } else {
       lastTap = now;
     }
   };
 
-  const handleDeletePost = (postId) => {
+  const handleDeletePost = async (postId) => {
     Alert.alert(
       'Delete Post 🗑️',
       'Are you sure you want to permanently remove this post from your feed?',
@@ -284,9 +398,20 @@ export default function DiscoveryWalletScreen({ isDarkMode }) {
         { 
           text: 'Delete', 
           style: 'destructive',
-          onPress: () => {
+          pressOn: async () => {
             setFeedItems(prev => prev.filter(p => p.id !== postId));
             setPostSettingsModalVisible(false);
+            try {
+              if (supabase && postId) await supabase.from('discovery_feed_items').delete().eq('id', postId);
+            } catch (err) {}
+            Alert.alert('Deleted', 'Post removed successfully.');
+          },
+          onPress: async () => {
+            setFeedItems(prev => prev.filter(p => p.id !== postId));
+            setPostSettingsModalVisible(false);
+            try {
+              if (supabase && postId) await supabase.from('discovery_feed_items').delete().eq('id', postId);
+            } catch (err) {}
             Alert.alert('Deleted', 'Post removed successfully.');
           }
         }
@@ -294,44 +419,76 @@ export default function DiscoveryWalletScreen({ isDarkMode }) {
     );
   };
 
-  const handleRepostVideo = (item) => {
+  const handleRepostVideo = async (item) => {
     setPostSettingsModalVisible(false);
+
     const repostItem = {
-      ...item,
-      id: 'repost_' + Date.now(),
-      author: `You (Reposted from ${item.author})`,
-      timestamp: 'Just now',
-      shares: item.shares + 1
+      user_id: currentLoggedInUserId || 'anonymous_user',
+      author: currentUserName,
+      author_avatar: currentUserAvatar,
+      caption: item.caption,
+      created_at: new Date().toISOString(),
+      likes: 1,
+      downloads: 0,
+      distanceKm: item.distanceKm,
+      allowDownloads: item.allowDownloads,
+      isPinned: false,
+      isBoosted: false,
+      comments: [],
+      shares: (item.shares || 0) + 1,
+      vibe: item.vibe,
+      category: item.category,
+      videoUrl: item.videoUrl,
+      location: item.location,
+      duration: item.duration
     };
-    setFeedItems(prev => [repostItem, ...prev]);
-    Alert.alert('Repost Successful 🔄', 'Video has been published to your timeline feed.');
+
+    try {
+      if (supabase) {
+        const { data, error } = await supabase.from('discovery_feed_items').insert([repostItem]).select();
+        if (!error && data && data.length > 0) setFeedItems(prev => [data[0], ...prev]);
+        else setFeedItems(prev => [repostItem, ...prev]);
+      } else {
+        setFeedItems(prev => [repostItem, ...prev]);
+      }
+
+      if (item.user_id && item.user_id !== currentLoggedInUserId) {
+        await sendDiscoveryNotification(
+          item.user_id,
+          'Reel Reposted 🔄',
+          `@${currentUserName} reposted your video!`,
+          item.id
+        );
+      }
+    } catch (err) {
+      setFeedItems(prev => [repostItem, ...prev]);
+    }
+    Alert.alert('Repost Successful 🔄', 'Video has been published under your creator account.');
   };
 
-  const handleExecuteBoostPost = () => {
+  const handleExecuteBoostPost = async () => {
     setBoostModalVisible(false);
     setPostSettingsModalVisible(false);
     if (!selectedPost) return;
     setFeedItems(prev => prev.map(p => p.id === selectedPost.id ? { ...p, isBoosted: true } : p));
+    try {
+      if (supabase && selectedPost.id) await supabase.from('discovery_feed_items').update({ isBoosted: true }).eq('id', selectedPost.id);
+    } catch (err) {}
     Alert.alert('Boost Active 🚀', 'Payment verified! Your video is now promoted across regional mesh nodes for 24 hours.');
   };
 
-  // Fully dynamic camera & video recording handlers using Expo Camera
-  const toggleCameraFacing = () => {
-    setFacing(current => (current === 'back' ? 'front' : 'back'));
-  };
+  const toggleCameraFacing = () => setFacing(current => (current === 'back' ? 'front' : 'back'));
 
   const handleStartRecording = async () => {
     if (!cameraRef.current) return;
     try {
       setIsRecording(true);
-      const videoRecordPromise = cameraRef.current.recordAsync({ maxDuration: 180 });
-      const data = await videoRecordPromise;
+      const data = await cameraRef.current.recordAsync({ maxDuration: 180 });
       if (data && data.uri) {
         setCapturedMediaUri(data.uri);
         setCreatorStudioModalVisible(true);
       }
     } catch (error) {
-      console.log('Recording error:', error);
       Alert.alert('Recording Error', 'Could not complete video recording.');
     } finally {
       setIsRecording(false);
@@ -352,9 +509,11 @@ export default function DiscoveryWalletScreen({ isDarkMode }) {
         allowsEditing: true,
         quality: 1,
       });
-
       if (!result.canceled && result.assets && result.assets.length > 0) {
         setCapturedMediaUri(result.assets[0].uri);
+        if (result.assets[0].duration) {
+          setRecordingSeconds(Math.floor(result.assets[0].duration / 1000));
+        }
         setCreatorStudioModalVisible(true);
       }
     } catch (error) {
@@ -382,36 +541,35 @@ export default function DiscoveryWalletScreen({ isDarkMode }) {
       'Upload or Record Media 🎥',
       'Choose how you want to add your media tour:',
       [
-        { 
-          text: 'Record with Camera 🔴', 
-          onPress: () => {
-            setMediaSourceType('camera');
-            handleOpenRecorder();
-          } 
-        },
-        { 
-          text: 'Upload from Files 📁', 
-          onPress: () => {
-            setMediaSourceType('upload');
-            handlePickFileFromDevice();
-          } 
-        },
+        { text: 'Record with Camera 🔴', onPress: () => { setMediaSourceType('camera'); handleOpenRecorder(); } },
+        { text: 'Upload from Files 📁', onPress: () => { setMediaSourceType('upload'); handlePickFileFromDevice(); } },
         { text: 'Cancel', style: 'cancel' }
       ]
     );
   };
 
-  const handlePublishCreatorVideo = () => {
+  const handlePublishCreatorVideo = async () => {
     if (!newPostCaption.trim()) {
-      Alert.alert('Caption Required', 'Please add a brief caption or title for your video.');
+      Alert.alert('Caption Required', 'Please add a brief caption or title for your media.');
       return;
     }
+
+    const videoSourceUrl = capturedMediaUri || 'https://www.w3schools.com/html/mov_bbb.mp4';
+    
+    const calculatedMinutes = Math.floor(recordingSeconds / 60);
+    const calculatedSeconds = recordingSeconds % 60;
+    const dynamicDurationStr = recordingSeconds > 0 
+      ? `${calculatedMinutes}:${calculatedSeconds < 10 ? '0' : ''}${calculatedSeconds} Min Tour` 
+      : '0:45 Min Tour';
+
     const newVideoItem = {
-      id: 'creator_' + Date.now(),
-      author: 'You (Creator Studio)',
+      user_id: currentLoggedInUserId || 'anonymous_user',
+      author: currentUserName,
+      author_avatar: currentUserAvatar,
+      created_at: new Date().toISOString(),
       caption: newPostCaption.trim(),
-      timestamp: 'Just now',
       likes: 1,
+      downloads: 0,
       distanceKm: 0.1,
       allowDownloads: true,
       isPinned: false,
@@ -420,26 +578,44 @@ export default function DiscoveryWalletScreen({ isDarkMode }) {
       shares: 0,
       vibe: `${selectedFilter.split(' ')[0]} Vibe ✨`,
       category: newPostCategory,
-      videoUrl: capturedMediaUri || 'https://images.unsplash.com/photo-1516426122078-c23e76319801?q=80&w=1000&auto=format&fit=crop',
+      videoUrl: videoSourceUrl,
       location: 'Kampala, Uganda',
-      duration: '2:30 Min Tour'
+      duration: dynamicDurationStr
     };
 
-    setFeedItems(prev => [newVideoItem, ...prev]);
+    try {
+      if (supabase) {
+        const { data, error } = await supabase.from('discovery_feed_items').insert([newVideoItem]).select();
+        
+        if (error) {
+          Alert.alert('Supabase Insert Failed ❌', error.message);
+          return;
+        }
+
+        if (data && data.length > 0) {
+          setFeedItems(prev => [data[0], ...prev]);
+        }
+      } else {
+        setFeedItems(prev => [newVideoItem, ...prev]);
+      }
+    } catch (err) {
+      Alert.alert('Upload Error ❌', err.message);
+      return;
+    }
+
     setCreatorStudioModalVisible(false);
     setCapturedMediaUri(null);
     setNewPostCaption('');
-    Alert.alert('Published Successfully 🚀', 'Your edited video tour with background audio & filters is now live on the feed.');
+    setRecordingSeconds(0);
+    Alert.alert('Published Successfully 🚀', `Your media is live under creator profile: ${currentUserName}!`);
   };
 
-  // Watch Party Chat Handler
   const handleSendWatchChat = () => {
     if (!newWatchChatText.trim()) return;
     setWatchPartyChat(prev => [...prev, { id: Date.now().toString(), user: 'You', text: newWatchChatText.trim() }]);
     setNewWatchChatText('');
   };
 
-  // Comment Handlers
   const sortCommentsByPopularity = (commentsArray) => {
     return [...commentsArray].sort((a, b) => {
       const scoreA = a.likes + (a.replies ? a.replies.length * 2 : 0);
@@ -456,21 +632,36 @@ export default function DiscoveryWalletScreen({ isDarkMode }) {
     setCommentsModalVisible(true);
   };
 
-  const handleAddComment = (textToAdd = newCommentText) => {
+  const handleAddComment = async (textToAdd = newCommentText) => {
     if (!textToAdd || !textToAdd.trim()) return;
+    const sanitizedText = textToAdd.trim();
     const currentTimeStr = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+    
     let updatedComments = [...currentPostComments];
 
     if (replyingToCommentId) {
       updatedComments = updatedComments.map(c => {
         if (c.id === replyingToCommentId) {
-          const newReply = { id: 'r_' + Date.now(), user: 'You', text: textToAdd.trim(), time: currentTimeStr, likes: 0 };
+          const newReply = { 
+            id: 'r_' + Date.now(), 
+            user: currentUserName, 
+            text: sanitizedText, 
+            time: currentTimeStr, 
+            likes: 0 
+          };
           return { ...c, replies: [...(c.replies || []), newReply] };
         }
         return c;
       });
     } else {
-      const newParent = { id: 'c_' + Date.now(), user: 'You', text: textToAdd.trim(), time: currentTimeStr, likes: 0, replies: [] };
+      const newParent = { 
+        id: 'c_' + Date.now(), 
+        user: currentUserName, 
+        text: sanitizedText, 
+        time: currentTimeStr, 
+        likes: 0, 
+        replies: [] 
+      };
       updatedComments.push(newParent);
     }
 
@@ -479,14 +670,36 @@ export default function DiscoveryWalletScreen({ isDarkMode }) {
     setFeedItems(prev => prev.map(p => p.id === activeCommentPost.id ? { ...p, comments: sorted } : p));
     setNewCommentText('');
     setReplyingToCommentId(null);
+
+    try {
+      if (supabase && activeCommentPost && activeCommentPost.id) {
+        await supabase.from('discovery_feed_items').update({ comments: sorted }).eq('id', activeCommentPost.id);
+
+        if (activeCommentPost.user_id && activeCommentPost.user_id !== currentLoggedInUserId) {
+          await sendDiscoveryNotification(
+            activeCommentPost.user_id,
+            'New Comment 💬',
+            `@${currentUserName} commented: "${sanitizedText.slice(0, 25)}..."`,
+            activeCommentPost.id
+          );
+        }
+      }
+    } catch (err) {}
   };
 
-  const handleLikeComment = (commentId) => {
+  const handleLikeComment = async (commentId) => {
     const updated = currentPostComments.map(c => c.id === commentId ? { ...c, likes: c.likes + 1 } : c);
-    setCurrentPostComments(sortCommentsByPopularity(updated));
+    const sorted = sortCommentsByPopularity(updated);
+    setCurrentPostComments(sorted);
+    setFeedItems(prev => prev.map(p => p.id === activeCommentPost.id ? { ...p, comments: sorted } : p));
+    try {
+      if (supabase && activeCommentPost && activeCommentPost.id) {
+        await supabase.from('discovery_feed_items').update({ comments: sorted }).eq('id', activeCommentPost.id);
+      }
+    } catch (err) {}
   };
 
-  const handleLikeReply = (commentId, replyId) => {
+  const handleLikeReply = async (commentId, replyId) => {
     const updated = currentPostComments.map(c => {
       if (c.id === commentId) {
         const updatedReplies = c.replies.map(r => r.id === replyId ? { ...r, likes: r.likes + 1 } : r);
@@ -494,7 +707,14 @@ export default function DiscoveryWalletScreen({ isDarkMode }) {
       }
       return c;
     });
-    setCurrentPostComments(sortCommentsByPopularity(updated));
+    const sorted = sortCommentsByPopularity(updated);
+    setCurrentPostComments(sorted);
+    setFeedItems(prev => prev.map(p => p.id === activeCommentPost.id ? { ...p, comments: sorted } : p));
+    try {
+      if (supabase && activeCommentPost && activeCommentPost.id) {
+        await supabase.from('discovery_feed_items').update({ comments: sorted }).eq('id', activeCommentPost.id);
+      }
+    } catch (err) {}
   };
 
   const handleInsertFormatting = (formatType) => {
@@ -508,7 +728,7 @@ export default function DiscoveryWalletScreen({ isDarkMode }) {
     setForwardModalVisible(true);
   };
 
-  const handleExecuteForward = (destination) => {
+  const handleExecuteForward = async (destination) => {
     setForwardModalVisible(false);
     if (destination === 'Virtual TV Watch Party') {
       setWatchPartyActive(true);
@@ -516,7 +736,50 @@ export default function DiscoveryWalletScreen({ isDarkMode }) {
     } else {
       Alert.alert('International Share 🚀', `Successfully broadcasted to ${destination}.`);
     }
-    setFeedItems(prev => prev.map(item => item.id === selectedPost.id ? { ...item, shares: item.shares + 1 } : item));
+    const updatedShares = (selectedPost.shares || 0) + 1;
+    setFeedItems(prev => prev.map(item => item.id === selectedPost.id ? { ...item, shares: updatedShares } : item));
+    
+    try {
+      if (supabase && selectedPost && selectedPost.id) {
+        await supabase.from('discovery_feed_items').update({ shares: updatedShares }).eq('id', selectedPost.id);
+
+        if (selectedPost.user_id && selectedPost.user_id !== currentLoggedInUserId) {
+          await sendDiscoveryNotification(
+            selectedPost.user_id,
+            'Video Shared ↗️',
+            `@${currentUserName} shared your video to ${destination}!`,
+            selectedPost.id
+          );
+        }
+      }
+    } catch (err) {}
+  };
+
+  const handleOpenTipModal = (item) => {
+    setSelectedPost(item);
+    setTipModalVisible(true);
+  };
+
+  const handleExecuteTip = async () => {
+    if (creatorWalletBalance < selectedTipAmount) {
+      Alert.alert('Insufficient Balance 💳', 'Your creator wallet balance is too low for this tip amount.');
+      setTipModalVisible(false);
+      return;
+    }
+    setCreatorWalletBalance(prev => prev - selectedTipAmount);
+    setTipModalVisible(false);
+    Alert.alert('Tip Sent Successfully! 🎁☕', `You successfully tipped UGX ${selectedTipAmount.toLocaleString()} to ${selectedPost?.author || 'Creator'}.`);
+
+    try {
+      if (supabase && selectedPost?.user_id && selectedPost.user_id !== currentLoggedInUserId) {
+        await sendDiscoveryNotification(
+          selectedPost.user_id,
+          'Coffee Tip Received ☕💰',
+          `@${currentUserName} tipped UGX ${selectedTipAmount.toLocaleString()} on your video!`,
+          selectedPost.id
+        );
+      }
+    } catch (err) {}
   };
 
   const handleLongPressMedia = (item) => {
@@ -524,20 +787,77 @@ export default function DiscoveryWalletScreen({ isDarkMode }) {
     setLongPressModalVisible(true);
   };
 
-  const handleDownloadMedia = () => {
+  const handleDownloadMedia = async () => {
     setLongPressModalVisible(false);
+
     if (selectedPost && selectedPost.allowDownloads === false) {
       Alert.alert('Download Restricted 🛡️', 'Creator disabled downloads for this video.');
       return;
     }
-    Alert.alert('Download Started 📥', `Downloading "${selectedPost?.author}'s media".`);
+
+    const videoUri = selectedPost?.videoUrl;
+    if (!videoUri) {
+      Alert.alert('Download Error ❌', 'Missing video source URI.');
+      return;
+    }
+
+    try {
+      const { status } = await MediaLibrary.requestPermissionsAsync();
+      if (status !== 'granted') {
+        Alert.alert('Permission Denied ⚠️', 'Storage permission is required to save videos to your device gallery.');
+        return;
+      }
+
+      if (videoUri.startsWith('file://') || videoUri.startsWith('content://')) {
+        Alert.alert('Saving 📥', 'Saving video to your device gallery...');
+        await MediaLibrary.createAssetAsync(videoUri);
+      } else if (videoUri.startsWith('http')) {
+        Alert.alert('Downloading 📥', 'Downloading video to your device...');
+        const filename = `DiscoveryVideo_${Date.now()}.mp4`;
+        const fileUri = `${FileSystem.cacheDirectory}${filename}`;
+
+        const downloadRes = await FileSystem.downloadAsync(videoUri, fileUri);
+
+        if (downloadRes.status === 200) {
+          await MediaLibrary.createAssetAsync(downloadRes.uri);
+        } else {
+          throw new Error(`Download failed with status code ${downloadRes.status}`);
+        }
+      } else {
+        Alert.alert('Download Error ❌', 'Invalid video source format.');
+        return;
+      }
+
+      const updatedDownloads = (selectedPost.downloads || 0) + 1;
+      setFeedItems(prev => prev.map(item => item.id === selectedPost.id ? { ...item, downloads: updatedDownloads } : item));
+      
+      if (supabase && selectedPost?.id) {
+        await supabase.from('discovery_feed_items').update({ downloads: updatedDownloads }).eq('id', selectedPost.id);
+      }
+
+      Alert.alert('Download Successful! 📥✨', 'Video has been saved to your device gallery and logged.');
+    } catch (error) {
+      console.warn('Video download error:', error);
+      Alert.alert('Download Failed ❌', 'Could not complete the video download. Please check your network connection.');
+    }
   };
 
-  const handleSaveToVault = (item) => {
+  const handleSaveToVault = async (item) => {
     setLongPressModalVisible(false);
     if (!savedVaultItems.some(i => i.id === item.id)) {
       setSavedVaultItems(prev => [...prev, item]);
       Alert.alert('Saved to Vault ⭐', 'Post added to offline collections vault.');
+
+      try {
+        if (supabase && item.user_id && item.user_id !== currentLoggedInUserId) {
+          await sendDiscoveryNotification(
+            item.user_id,
+            'Video Favorited ⭐',
+            `@${currentUserName} saved your video to their collections vault!`,
+            item.id
+          );
+        }
+      } catch (err) {}
     } else {
       Alert.alert('Already Saved', 'This item is already in your offline vault.');
     }
@@ -550,7 +870,8 @@ export default function DiscoveryWalletScreen({ isDarkMode }) {
 
   const handleCopyLink = () => {
     setLongPressModalVisible(false);
-    Alert.alert('Link Copied 📋', 'Secure media link copied to clipboard.');
+    const linkToCopy = selectedPost?.videoUrl || `https://chatup.ug/discovery/post/${selectedPost?.id || Date.now()}`;
+    Alert.alert('Link Copied 📋', `Secure media link copied to clipboard:\n${linkToCopy}`);
   };
 
   const handleOpenFullScreen = (item) => {
@@ -583,15 +904,46 @@ export default function DiscoveryWalletScreen({ isDarkMode }) {
     return matchesSearch && matchesCategory && matchesRadius;
   });
 
+  if (isLiveActive) {
+    return (
+      <LiveStreamScreen
+        isDarkMode={isDarkMode}
+        coins={coins}
+        setCoins={setCoins}
+        onBack={() => setIsLiveActive(false)}
+        userRole="creator"
+        streamId={1}
+      />
+    );
+  }
+
   return (
     <View style={[styles.container, isDarkMode && styles.darkContainer]}>
       
       {/* Top Header & Search Navigation */}
       <View style={[styles.header, isDarkMode && styles.darkHeader]}>
         <View style={styles.headerInner}>
-          <Text style={[styles.headerTitle, isDarkMode && styles.darkText]}>🌍 Discovery & Feed</Text>
           
-          <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+          <TouchableOpacity 
+            style={styles.headerAccountShortcut} 
+            onPress={() => {
+              setSelectedPeerId(currentLoggedInUserId || 'd37f5eca-0ce9-4b97-9a9d-1944d48bf001');
+              setPeerModalVisible(true);
+            }}
+          >
+            <Image source={{ uri: currentUserAvatar }} style={styles.headerAvatarImg} />
+            <View style={styles.onlineStatusDot} />
+          </TouchableOpacity>
+
+          <View style={{ flexDirection: 'row', alignItems: 'center', flex: 1, justifyContent: 'flex-end' }}>
+            
+            <TouchableOpacity 
+              style={styles.goLiveHeaderBtn} 
+              onPress={() => setIsLiveActive(true)}
+            >
+              <Text style={{ fontSize: 12, fontWeight: 'bold', color: '#fff' }}>🔴 Go Live</Text>
+            </TouchableOpacity>
+
             <TouchableOpacity style={styles.postVideoHeaderBtn} onPress={handleOpenCreatorStudio}>
               <Text style={{ fontSize: 12, fontWeight: 'bold', color: '#fff' }}>+ 🎥 Studio</Text>
             </TouchableOpacity>
@@ -612,7 +964,6 @@ export default function DiscoveryWalletScreen({ isDarkMode }) {
               )}
             </View>
 
-            {/* Matrix Options Menu Button (•••) */}
             <TouchableOpacity style={styles.matrixMenuBtn} onPress={() => setMatrixMenuVisible(true)}>
               <Text style={{ fontSize: 16, fontWeight: 'bold', color: isDarkMode ? '#fff' : '#2d3748' }}>•••</Text>
             </TouchableOpacity>
@@ -642,315 +993,105 @@ export default function DiscoveryWalletScreen({ isDarkMode }) {
       </View>
 
       {/* Main Responsive Feed Layout */}
-      <ScrollView contentContainerStyle={styles.mainLayout} showsVerticalScrollIndicator={false}>
-        <View style={styles.centerFeed}>
-
-          {/* Dynamic Google AdMob Banner Integration */}
-          <View style={styles.monetizationAdCard}>
-            <Text style={styles.adTagLabel}>Sponsored Ad 📢 • AdMob Dynamic Banner</Text>
-            <View style={{ alignItems: 'center', marginVertical: 4 }}>
-              <BannerAd
-                unitId={bannerAdUnitId}
-                size={BannerAdSize.ANCHORED_ADAPTIVE_BANNER}
-                requestOptions={{
-                  requestNonPersonalizedAdsOnly: true,
-                }}
-                onAdLoaded={() => console.log('AdMob Banner loaded successfully')}
-                onAdFailedToLoad={(error) => console.log('AdMob Banner load error: ', error)}
-              />
-            </View>
-          </View>
-
-          {/* Rewarded Ad Creator Earning Widget */}
-          <View style={styles.creatorMonetizationCard}>
-            <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
-              <View>
-                <Text style={{ fontSize: 12, fontWeight: 'bold', color: '#2b6cb0' }}>🪙 Creator Ad Earnings Balance</Text>
-                <Text style={{ fontSize: 16, fontWeight: 'bold', color: '#2d3748', marginTop: 2 }}>{userAdEarningsBalance.toLocaleString()} UGX (~${(userAdEarningsBalance / 3700).toFixed(2)})</Text>
-              </View>
-              <TouchableOpacity style={styles.watchRewardAdBtn} onPress={handleShowRewardedAd}>
-                <Text style={{ color: '#fff', fontSize: 11, fontWeight: 'bold' }}>Watch Ad (+2500 UGX) 🎁</Text>
-              </TouchableOpacity>
-            </View>
-          </View>
-
-          {/* Geofencing Radius Selector Bar */}
-          <View style={styles.geofenceControlBar}>
-            <Text style={{ fontSize: 11, fontWeight: 'bold', color: '#2b6cb0' }}>📍 Geofence Radius Filter: {geofenceRadius} km</Text>
-            <View style={{ flexDirection: 'row', marginTop: 4 }}>
-              {[3, 10, 50, 500].map(km => (
-                <TouchableOpacity
-                  key={km}
-                  style={[styles.radiusPill, geofenceRadius === km && styles.activeRadiusPill]}
-                  onPress={() => setGeofenceRadius(km)}
-                >
-                  <Text style={[styles.radiusPillText, geofenceRadius === km && { color: '#fff' }]}>{km === 500 ? 'Global' : `${km} km`}</Text>
-                </TouchableOpacity>
-              ))}
-            </View>
-          </View>
-
-          {/* AI Interest Banner */}
-          <View style={styles.aiBannerCard}>
-            <Text style={{ fontSize: 11, fontWeight: 'bold', color: '#2b6cb0' }}>✨ {aiRecommendedBanner}</Text>
-            <Text style={{ fontSize: 9, color: '#4a5568', marginTop: 2 }}>AI Feed tuned to your habits (Top Interest: {Object.keys(userInterests).reduce((a, b) => userInterests[a] > userInterests[b] ? a : b)})</Text>
-          </View>
-
-          {/* Quick AI Caption Assistant Trigger */}
-          <TouchableOpacity style={styles.creatorStudioBtn} onPress={() => setAiCaptionModalVisible(true)}>
-            <Text style={{ color: '#fff', fontSize: 11, fontWeight: 'bold' }}>✨ Open AI Caption & Tag Assistant</Text>
-          </TouchableOpacity>
-
-          {/* SUB-TAB 1: SAVED OFFLINE VAULT */}
-          {discoveryTab === 'Vault' ? (
-            <View>
-              <Text style={[styles.sectionTitle, isDarkMode && styles.darkText]}>⭐ Your Saved Offline Collections Vault</Text>
-              {savedVaultItems.length > 0 ? (
-                savedVaultItems.map(item => (
-                  <View key={item.id} style={[styles.postCard, isDarkMode && styles.darkCard]}>
-                    <Text style={[styles.postAuthor, { fontSize: 13 }]}>{item.author}</Text>
-                    <Text style={[styles.postCaption, isDarkMode && styles.darkText]} numberOfLines={2}>{item.caption}</Text>
-                    <Image source={{ uri: item.videoUrl }} style={{ height: 140, width: '100%', borderRadius: 6 }} />
-                  </View>
-                ))
-              ) : (
-                <Text style={{ fontSize: 12, color: '#718096', textAlign: 'center', padding: 40 }}>Your vault is empty. Long-press any video and select "Save to Offline Vault".</Text>
-              )}
-            </View>
-          ) : discoveryTab === 'WatchParty' ? (
-            /* SUB-TAB 2: INTERACTIVE WATCH PARTY ROOM */
-            <View style={[styles.postCard, isDarkMode && styles.darkCard, { padding: 0, overflow: 'hidden' }]}>
-              <View style={styles.watchPartyVideoFrame}>
-                <Image source={{ uri: 'https://images.unsplash.com/photo-1518709268805-4e9042af9f23?q=80&w=1000&auto=format&fit=crop' }} style={styles.watchVideoImage} />
-                <View style={styles.liveBadgeOverlay}>
-                  <Text style={{ color: '#fff', fontSize: 10, fontWeight: 'bold' }}>🔴 LIVE WATCH PARTY</Text>
-                  <Text style={{ color: '#fff', fontSize: 10, marginLeft: 8 }}>👥 {watchPartyPeers} Viewers</Text>
-                </View>
-              </View>
-
-              <View style={{ padding: 12 }}>
-                <Text style={[styles.postAuthor, { fontSize: 14, marginBottom: 8 }]}>Source of the Nile - Sunset Live Stream</Text>
-                
-                <View style={styles.watchChatBox}>
-                  <ScrollView style={{ height: 120 }}>
-                    {watchPartyChat.map(msg => (
-                      <Text key={msg.id} style={{ fontSize: 11, marginBottom: 4 }}>
-                        <Text style={{ fontWeight: 'bold', color: '#3182ce' }}>{msg.user}: </Text>
-                        <Text style={{ color: isDarkMode ? '#e2e8f0' : '#2d3748' }}>{msg.text}</Text>
-                      </Text>
-                    ))}
-                  </ScrollView>
-
-                  <View style={{ flexDirection: 'row', marginTop: 8 }}>
-                    <TextInput
-                      style={[styles.chatInput, isDarkMode && styles.darkInput]}
-                      placeholder="Type in Watch Party chat..."
-                      placeholderTextColor="#a0aec0"
-                      value={newWatchChatText}
-                      onChangeText={setNewWatchChatText}
-                    />
-                    <TouchableOpacity style={styles.sendChatBtn} onPress={handleSendWatchChat}>
-                      <Text style={{ color: '#fff', fontSize: 11, fontWeight: 'bold' }}>Send</Text>
-                    </TouchableOpacity>
-                  </View>
-                </View>
-              </View>
-            </View>
-          ) : discoveryTab === 'Radar' ? (
-            /* SUB-TAB 3: VIBE RADAR */
-            <View>
-              <TouchableOpacity style={styles.radarCardActive} onPress={() => Alert.alert('Vibe Radar', 'Scanning 3km radius...')}>
-                <Text style={styles.radarTitle}>📡 Discovery Vibe Radar Active (3km Radius)</Text>
-                <Text style={styles.radarDesc}>Detecting nearby tour guides and peer mesh nodes.</Text>
-              </TouchableOpacity>
-              {radarNodes.map(node => (
-                <View key={node.id} style={[styles.postCard, isDarkMode && styles.darkCard]}>
-                  <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
-                    <View>
-                      <Text style={[styles.postAuthor, { fontSize: 13 }]}>{node.name}</Text>
-                      <Text style={{ fontSize: 11, color: '#38a169', fontWeight: 'bold' }}>{node.status}</Text>
-                      <Text style={{ fontSize: 10, color: '#718096' }}>{node.distance} • {node.signal}</Text>
-                    </View>
-                    <TouchableOpacity style={styles.connectRadarBtn} onPress={() => Alert.alert('Radar', `Connected with ${node.name}`)}>
-                      <Text style={{ color: '#fff', fontSize: 11, fontWeight: 'bold' }}>Connect 🤝</Text>
-                    </TouchableOpacity>
-                  </View>
-                </View>
-              ))}
-            </View>
-          ) : discoveryTab === 'Channels' ? (
-            /* SUB-TAB 4: CERTIFIED CHANNELS */
-            <View>
-              <Text style={[styles.sectionTitle, isDarkMode && styles.darkText]}>🛡️ Certified Broadcasters & Tour Partners</Text>
-              {officialChannels.map(ch => (
-                <View key={ch.id} style={[styles.postCard, isDarkMode && styles.darkCard]}>
-                  <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
-                    <View style={{ flex: 1 }}>
-                      <Text style={[styles.postAuthor, { fontSize: 13 }]}>{ch.name}</Text>
-                      <Text style={{ fontSize: 11, color: '#3182ce' }}>{ch.owner} • {ch.category}</Text>
-                      <Text style={{ fontSize: 10, fontWeight: 'bold', color: '#d69e2e', marginTop: 2 }}>{ch.badge} • {ch.followers} Followers</Text>
-                    </View>
-                    <TouchableOpacity style={styles.connectRadarBtn} onPress={() => Alert.alert('Channel', `Opening stream for ${ch.name}`)}>
-                      <Text style={{ color: '#fff', fontSize: 11, fontWeight: 'bold' }}>Tune In 📺</Text>
-                    </TouchableOpacity>
-                  </View>
-                </View>
-              ))}
-            </View>
-          ) : discoveryTab === 'LiveMap' ? (
-            /* SUB-TAB 5: LIVE GEOFENCED MAP */
-            <View style={[styles.postCard, isDarkMode && styles.darkCard, { alignItems: 'center', padding: 30 }]}>
-              <Text style={{ fontSize: 40, marginBottom: 8 }}>🗺️🛰️</Text>
-              <Text style={[styles.postAuthor, { fontSize: 16, marginBottom: 6 }]}>Uganda National Tour & Geofenced Map</Text>
-              <Text style={{ fontSize: 12, color: '#718096', textAlign: 'center', marginBottom: 14 }}>
-                Active conservation and tour tracking across Bwindi, Queen Elizabeth, and Kampala city nodes.
-              </Text>
-              <TouchableOpacity style={styles.connectRadarBtn} onPress={() => Alert.alert('Map', 'Refreshed node coordinates.')}>
-                <Text style={{ color: '#fff', fontSize: 12, fontWeight: 'bold' }}>Refresh GPS Clusters 🔄</Text>
-              </TouchableOpacity>
-            </View>
-          ) : (
-            /* SUB-TAB 6: MAIN SMART FEED & TOURS */
-            <View>
-              {/* Ephemeral Stories */}
-              <View style={[styles.storyCard, isDarkMode && styles.darkCard]}>
-                <Text style={[styles.sectionTitle, isDarkMode && styles.darkText]}>⚡ Geofenced Story Rings & Expeditions</Text>
-                <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.storyScroll}>
-                  {stories.map(story => (
-                    <TouchableOpacity 
-                      key={story.id} 
-                      style={styles.storyRingContainer}
-                      onPress={() => Alert.alert('Story Ring', `Viewing live tour clip: ${story.mediaType}`)}
-                    >
-                      <View style={styles.storyRing}>
-                        <View style={styles.storyAvatar}>
-                          <Text style={styles.storyAvatarText}>{story.name[0]}</Text>
-                        </View>
-                      </View>
-                      <Text style={[styles.storyName, isDarkMode && styles.darkText]} numberOfLines={1}>{story.name}</Text>
-                    </TouchableOpacity>
-                  ))}
-                </ScrollView>
-              </View>
-
-              {/* Category Pills */}
-              <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginBottom: 12 }}>
-                {categories.map(cat => (
-                  <TouchableOpacity
-                    key={cat}
-                    style={[styles.filterPill, selectedCategory === cat && styles.activeFilterPill]}
-                    onPress={() => setSelectedCategory(cat)}
-                  >
-                    <Text style={[styles.filterPillText, selectedCategory === cat && { color: '#fff' }]}>{cat}</Text>
-                  </TouchableOpacity>
-                ))}
-              </ScrollView>
-
-              <Text style={[styles.sectionTitle, isDarkMode && styles.darkText]}>
-                {discoveryTab === 'Tours' ? '🦁 Featured African Wildlife & Cultural Tours' : '🔥 Smart AI Feed (Within Radius)'}
-              </Text>
-
-              {filteredFeed.length > 0 ? (
-                filteredFeed.map(item => (
-                  <View key={item.id} style={[styles.postCard, isDarkMode && styles.darkCard]}>
-                    <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
-                      {item.isPinned && (
-                        <View style={styles.pinnedBanner}>
-                          <Text style={{ fontSize: 9, color: '#d69e2e', fontWeight: 'bold' }}>📌 Pinned Creator Announcement</Text>
-                        </View>
-                      )}
-                      {item.isBoosted && (
-                        <View style={styles.boostedBanner}>
-                          <Text style={{ fontSize: 9, color: '#3182ce', fontWeight: 'bold' }}>🚀 Promoted / Boosted</Text>
-                        </View>
-                      )}
-                      <TouchableOpacity 
-                        style={{ marginLeft: 'auto', padding: 4 }} 
-                        onPress={() => { setSelectedPost(item); setPostSettingsModalVisible(true); }}
-                      >
-                        <Text style={{ fontSize: 16 }}>⚙️</Text>
-                      </TouchableOpacity>
-                    </View>
-
-                    <View style={styles.postHeaderRow}>
-                      <View>
-                        <Text style={styles.postAuthor}>{item.author}</Text>
-                        <View style={{ flexDirection: 'row', alignItems: 'center', marginTop: 2 }}>
-                          <Text style={{ fontSize: 9, color: '#a0aec0', marginRight: 6 }}>📍 {item.location} ({item.distanceKm} km away)</Text>
-                          <Text style={{ fontSize: 9, color: '#d69e2e', fontWeight: 'bold' }}>• ⏱️ {item.timestamp}</Text>
-                          {!item.allowDownloads && <Text style={{ fontSize: 9, color: '#e53e3e', fontWeight: 'bold', marginLeft: 6 }}>• 🔒 No-Download</Text>}
-                        </View>
-                      </View>
-                      <Text style={styles.vibeBadge}>[{item.vibe}]</Text>
-                    </View>
-
-                    <Pressable 
-                      style={styles.mediaContainerCenter}
-                      onPress={() => handleDoubleTapLike(item)}
-                      onLongPress={() => handleLongPressMedia(item)}
-                    >
-                      <Image source={{ uri: item.videoUrl }} style={styles.postImageMedia} resizeMode="cover" />
-                      
-                      <Animated.View style={[styles.heartPopContainer, { transform: [{ scale: heartScale }] }]}>
-                        <Text style={{ fontSize: 50 }}>❤️</Text>
-                      </Animated.View>
-
-                      <View style={styles.mediaOverlayTop}>
-                        <View style={styles.badgePill}>
-                          <Text style={{ color: '#fff', fontSize: 9, fontWeight: 'bold' }}>▶ {item.duration}</Text>
-                        </View>
-                      </View>
-
-                      <TouchableOpacity style={styles.expandButton} onPress={() => handleOpenFullScreen(item)}>
-                        <Text style={{ fontSize: 11, color: '#fff' }}>🔍 Full Screen</Text>
-                      </TouchableOpacity>
-                    </Pressable>
-
-                    <Text style={[styles.postCaption, isDarkMode && styles.darkText]}>
-                      {item.caption.split(' ').map((word, idx) => 
-                        word.startsWith('#') ? (
-                          <Text key={idx} style={{ color: '#3182ce', fontWeight: 'bold' }} onPress={() => setSearchQuery(word)}>
-                            {word}{' '}
-                          </Text>
-                        ) : (
-                          <Text key={idx}>{word} </Text>
-                        )
-                      )}
-                    </Text>
-
-                    <View style={styles.postFooter}>
-                      <TouchableOpacity style={styles.footerAction} onPress={() => handleLikePost(item)}>
-                        <Text style={{ fontSize: 12 }}>❤️ {item.likes}</Text>
-                      </TouchableOpacity>
-                      <TouchableOpacity style={styles.footerAction} onPress={() => handleOpenComments(item)}>
-                        <Text style={{ fontSize: 12 }}>💬 {item.comments?.reduce((acc, c) => acc + 1 + (c.replies?.length || 0), 0) || 0}</Text>
-                      </TouchableOpacity>
-                      <TouchableOpacity style={styles.footerAction} onPress={() => handleOpenForwardModal(item)}>
-                        <Text style={{ fontSize: 12 }}>🔄 {item.shares}</Text>
-                      </TouchableOpacity>
-                      <TouchableOpacity style={styles.footerAction} onPress={() => Alert.alert('Tip Creator ☕', `Send support tip to ${item.author}?`)}>
-                        <Text style={{ fontSize: 12 }}>🎁 Tip</Text>
-                      </TouchableOpacity>
-                    </View>
-                  </View>
-                ))
-              ) : (
-                <Text style={{ fontSize: 12, color: '#718096', textAlign: 'center', padding: 30 }}>No tours or posts found within this {geofenceRadius}km radius.</Text>
-              )}
-            </View>
-          )}
-        </View>
+      <ScrollView 
+        contentContainerStyle={styles.mainLayout} 
+        showsVerticalScrollIndicator={false}
+        onScroll={handleScroll}
+        scrollEventThrottle={16}
+        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#3182ce" />}
+      >
+        {discoveryTab === 'WatchParty' ? (
+          <DiscoveryWatchPartyModule
+            isDarkMode={isDarkMode}
+            watchPartyActive={watchPartyActive}
+            watchPartyPeers={watchPartyPeers}
+            setWatchPartyPeers={setWatchPartyPeers}
+            isPlayingWatchParty={isPlayingWatchParty}
+            setIsPlayingWatchParty={setIsPlayingWatchParty}
+            watchPartyPlaylist={watchPartyPlaylist}
+            currentWatchPartyIndex={currentWatchPartyIndex}
+            setCurrentWatchPartyIndex={setCurrentWatchPartyIndex}
+            watchPartyChat={watchPartyChat}
+            newWatchChatText={newWatchChatText}
+            setNewWatchChatText={setNewWatchChatText}
+            handleSendWatchChat={handleSendWatchChat}
+          />
+        ) : (
+          <DiscoveryFeedList
+            isDarkMode={isDarkMode}
+            discoveryTab={discoveryTab}
+            filteredFeed={filteredFeed}
+            categories={categories}
+            selectedCategory={selectedCategory}
+            setSelectedCategory={setSelectedCategory}
+            geofenceRadius={geofenceRadius}
+            setGeofenceRadius={setGeofenceRadius}
+            stories={stories}
+            radarNodes={radarNodes}
+            officialChannels={officialChannels}
+            savedVaultItems={savedVaultItems}
+            activeVideoIndex={activeVideoIndex}
+            likedPostIds={likedPostIds}
+            handleLikePost={handleLikePost}
+            handleDoubleTapLike={handleDoubleTapLike}
+            handleLongPressMedia={handleLongPressMedia}
+            handleOpenFullScreen={handleOpenFullScreen}
+            handleOpenComments={handleOpenComments}
+            handleOpenForwardModal={handleOpenForwardModal}
+            handleOpenTipModal={handleOpenTipModal}
+            setPostSettingsModalVisible={setPostSettingsModalVisible}
+            setSelectedPost={setSelectedPost}
+            heartScale={heartScale}
+            setSearchQuery={setSearchQuery}
+            onPressCreator={(name, avatar, item) => handleOpenCreatorProfile(name, avatar, item)}
+            currentLoggedInUserId={currentLoggedInUserId}
+          />
+        )}
       </ScrollView>
 
-      {/* ================= MODAL 1: FULLY FUNCTIONAL CAMERA RECORDING SCREEN ================= */}
-      <Modal visible={cameraModalVisible} animationType="slide">
-        <View style={{ flex: 1, backgroundColor: '#000' }}>
+      {/* ================= MODAL: PEER PUBLIC PROFILE ================= */}
+      <PeerProfileModal
+        visible={peerModalVisible}
+        onClose={() => {
+          setPeerModalVisible(false);
+          setSelectedPeerId(null);
+        }}
+        peerUserId={selectedPeerId}
+        currentUserId={currentLoggedInUserId}
+        isDarkMode={isDarkMode}
+      />
+
+      {/* ================= MODAL 1: SUPER-ADVANCED CAMERA RECORDING ================= */}
+      <Modal visible={cameraModalVisible} animationType="slide" presentationStyle="fullScreen">
+        <View style={{ flex: 1, backgroundColor: '#000', position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, width: '100%', height: '100%' }}>
           {cameraPermission?.granted ? (
-            <CameraView style={{ flex: 1 }} facing={facing} ref={cameraRef} mode="video">
+            <CameraView style={StyleSheet.absoluteFillObject} facing={facing} ref={cameraRef} mode="video">
+              
+              <View style={StyleSheet.absoluteFill} pointerEvents="none">
+                <View style={{ flex: 1, flexDirection: 'row' }}>
+                  <View style={{ flex: 1, borderRightWidth: 1, borderColor: 'rgba(255,255,255,0.15)' }} />
+                  <View style={{ flex: 1, borderRightWidth: 1, borderColor: 'rgba(255,255,255,0.15)' }} />
+                  <View style={{ flex: 1 }} />
+                </View>
+                <View style={{ flex: 1, flexDirection: 'row' }}>
+                  <View style={{ flex: 1, borderRightWidth: 1, borderColor: 'rgba(255,255,255,0.15)' }} />
+                  <View style={{ flex: 1, borderRightWidth: 1, borderColor: 'rgba(255,255,255,0.15)' }} />
+                  <View style={{ flex: 1 }} />
+                </View>
+                <View style={{ flex: 1, flexDirection: 'row' }}>
+                  <View style={{ flex: 1, borderRightWidth: 1, borderColor: 'rgba(255,255,255,0.15)' }} />
+                  <View style={{ flex: 1, borderRightWidth: 1, borderColor: 'rgba(255,255,255,0.15)' }} />
+                  <View style={{ flex: 1 }} />
+                </View>
+              </View>
+
               <View style={styles.cameraOverlayControls}>
                 <View style={styles.cameraTopRow}>
-                  <TouchableOpacity style={styles.camIconBtn} onPress={() => setCameraModalVisible(false)}>
-                    <Text style={{ color: '#fff', fontSize: 18, fontWeight: 'bold' }}>✕</Text>
+                  <TouchableOpacity 
+                    style={styles.closeCameraBtn} 
+                    onPress={() => setCameraModalVisible(false)}
+                  >
+                    <Text style={{ color: '#fff', fontSize: 12, fontWeight: 'bold' }}>✕ Close Camera</Text>
                   </TouchableOpacity>
 
                   {isRecording && (
@@ -991,423 +1132,104 @@ export default function DiscoveryWalletScreen({ isDarkMode }) {
         </View>
       </Modal>
 
-      {/* ================= MODAL 2: SCROLLABLE CREATOR STUDIO ================= */}
-      <Modal visible={creatorStudioModalVisible} animationType="slide" transparent={true}>
-        <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={styles.keyboardAvoidingContainer}>
-          <Pressable style={styles.modalOverlay} onPress={() => setCreatorStudioModalVisible(false)}>
-            <Pressable style={[styles.modalContent, isDarkMode && styles.darkCard, { height: '85%' }]} onPress={(e) => e.stopPropagation()}>
-              <View style={styles.modalHeaderRow}>
-                <Text style={[styles.modalTitle, isDarkMode && styles.darkText]}>🎬 Creator Studio & Editing Suite</Text>
-                <TouchableOpacity onPress={() => setCreatorStudioModalVisible(false)}>
-                  <Text style={{ fontSize: 16, fontWeight: 'bold', color: '#718096' }}>✕</Text>
-                </TouchableOpacity>
-              </View>
+      {/* ================= MODAL 2: CREATOR STUDIO ================= */}
+      <DiscoveryCreatorStudioModal
+        visible={creatorStudioModalVisible}
+        onClose={() => setCreatorStudioModalVisible(false)}
+        isDarkMode={isDarkMode}
+        mediaSourceType={mediaSourceType}
+        setMediaSourceType={setMediaSourceType}
+        handleOpenRecorder={handleOpenRecorder}
+        handlePickFileFromDevice={handlePickFileFromDevice}
+        capturedMediaUri={capturedMediaUri}
+        selectedFilter={selectedFilter}
+        setSelectedFilter={setSelectedFilter}
+        audioTrack={audioTrack}
+        setAudioTrack={setAudioTrack}
+        newPostCategory={newPostCategory}
+        setNewPostCategory={setNewPostCategory}
+        newPostCaption={newPostCaption}
+        setNewPostCaption={setNewPostCaption}
+        handlePublishCreatorVideo={handlePublishCreatorVideo}
+      />
 
-              <ScrollView showsVerticalScrollIndicator={true} style={{ flex: 1 }} contentContainerStyle={{ paddingBottom: 30 }}>
-                <View style={{ flexDirection: 'row', marginBottom: 12 }}>
-                  <TouchableOpacity 
-                    style={[styles.sourceTabBtn, mediaSourceType === 'camera' && styles.activeSourceTab]}
-                    onPress={() => {
-                      setMediaSourceType('camera');
-                      handleOpenRecorder();
-                    }}
-                  >
-                    <Text style={[styles.sourceTabText, mediaSourceType === 'camera' && { color: '#fff' }]}>🔴 Record Video</Text>
-                  </TouchableOpacity>
-                  <TouchableOpacity 
-                    style={[styles.sourceTabBtn, mediaSourceType === 'upload' && styles.activeSourceTab]}
-                    onPress={() => {
-                      setMediaSourceType('upload');
-                      handlePickFileFromDevice();
-                    }}
-                  >
-                    <Text style={[styles.sourceTabText, mediaSourceType === 'upload' && { color: '#fff' }]}>📁 Upload File</Text>
-                  </TouchableOpacity>
-                </View>
+      {/* ================= MODAL 3: SECURITY MATRIX ================= */}
+      <DiscoverySecurityMatrixModal
+        visible={matrixMenuVisible}
+        onClose={() => setMatrixMenuVisible(false)}
+        isDarkMode={isDarkMode}
+        quantumLatticeSecurity={quantumLatticeSecurity}
+        setQuantumLatticeSecurity={setQuantumLatticeSecurity}
+        kampalaEdgeRelaySync={kampalaEdgeRelaySync}
+        setKampalaEdgeRelaySync={setKampalaEdgeRelaySync}
+        aiAutonomousToxicityGuard={aiAutonomousToxicityGuard}
+        setAiAutonomousToxicityGuard={setAiAutonomousToxicityGuard}
+        biometricCreatorWatermark={biometricCreatorWatermark}
+        setBiometricCreatorWatermark={setBiometricCreatorWatermark}
+        realtimeSentimentMesh={realtimeSentimentMesh}
+        setRealtimeSentimentMesh={setRealtimeSentimentMesh}
+        zeroFeeGasSubsidizer={zeroFeeGasSubsidizer}
+        setZeroFeeGasSubsidizer={setZeroFeeGasSubsidizer}
+        multimodalHlsAdaptive={multimodalHlsAdaptive}
+        setMultimodalHlsAdaptive={setMultimodalHlsAdaptive}
+        federatedOnDeviceAi={federatedOnDeviceAi}
+        setFederatedOnDeviceAi={setFederatedOnDeviceAi}
+        bluetoothP2pMeshRelay={bluetoothP2pMeshRelay}
+        setBluetoothP2pMeshRelay={setBluetoothP2pMeshRelay}
+        autonomousCreatorEscrow={autonomousCreatorEscrow}
+        setAutonomousCreatorEscrow={setAutonomousCreatorEscrow}
+      />
 
-                <View style={styles.studioViewfinder}>
-                  <Image source={{ uri: capturedMediaUri || 'https://images.unsplash.com/photo-1518709268805-4e9042af9f23' }} style={{ width: '100%', height: '100%', borderRadius: 8 }} />
-                </View>
+      {/* ================= MODALS 4 TO 11: QUICK ACTIONS & SUITE ================= */}
+      <DiscoveryQuickActionsModal
+        isDarkMode={isDarkMode}
+        postSettingsVisible={postSettingsModalVisible}
+        setPostSettingsVisible={setPostSettingsModalVisible}
+        selectedPost={selectedPost}
+        handleRepostVideo={handleRepostVideo}
+        handleOpenBoostModal={() => setBoostModalVisible(true)}
+        handleSaveToVault={handleSaveToVault}
+        handleDeletePost={handleDeletePost}
+        boostModalVisible={boostModalVisible}
+        setBoostModalVisible={setBoostModalVisible}
+        handleExecuteBoostPost={handleExecuteBoostPost}
+        aiCaptionModalVisible={aiCaptionModalVisible}
+        setAiCaptionModalVisible={setAiCaptionModalVisible}
+        rawCreatorInput={rawCreatorInput}
+        setRawCreatorInput={setRawCreatorInput}
+        handleGenerateAiCaption={handleGenerateAiCaption}
+        generatedAiCaption={generatedAiCaption}
+        tipModalVisible={tipModalVisible}
+        setTipModalVisible={setTipModalVisible}
+        creatorWalletBalance={creatorWalletBalance}
+        selectedTipAmount={selectedTipAmount}
+        setSelectedTipAmount={setSelectedTipAmount}
+        handleExecuteTip={handleExecuteTip}
+        longPressModalVisible={longPressModalVisible}
+        setLongPressModalVisible={setLongPressModalVisible}
+        handleDownloadMedia={handleDownloadMedia}
+        handleWindVideo={handleWindVideo}
+        handleCopyLink={handleCopyLink}
+        forwardModalVisible={forwardModalVisible}
+        setForwardModalVisible={setForwardModalVisible}
+        handleExecuteForward={handleExecuteForward}
+      />
 
-                <Text style={[styles.sectionTitle, isDarkMode && styles.darkText, { marginTop: 10 }]}>🎨 Filters & Color Grading</Text>
-                <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginBottom: 8 }}>
-                  {['Cinematic 🎬', 'Wildlife Nature 🌿', 'Vibrant Sunset 🌅', 'High Contrast 🔥', 'B&W Vintage 🎞️'].map(filter => (
-                    <TouchableOpacity 
-                      key={filter}
-                      style={[styles.editPill, selectedFilter === filter && styles.activeEditPill]}
-                      onPress={() => setSelectedFilter(filter)}
-                    >
-                      <Text style={[styles.editPillText, selectedFilter === filter && { color: '#fff' }]}>{filter}</Text>
-                    </TouchableOpacity>
-                  ))}
-                </ScrollView>
-
-                <Text style={[styles.sectionTitle, isDarkMode && styles.darkText, { marginTop: 10 }]}>🎵 Sound FX & Audio Tracks</Text>
-                <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginBottom: 12 }}>
-                  {['Original Field Audio 🎵', 'Ambient Forest Sound 🌳', 'Acoustic Guitar Jam 🎸', 'Kampala Beats 🥁'].map(audio => (
-                    <TouchableOpacity 
-                      key={audio}
-                      style={[styles.editPill, audioTrack === audio && styles.activeEditPill]}
-                      onPress={() => setAudioTrack(audio)}
-                    >
-                      <Text style={[styles.editPillText, audioTrack === audio && { color: '#fff' }]}>{audio}</Text>
-                    </TouchableOpacity>
-                  ))}
-                </ScrollView>
-
-                <Text style={{ fontSize: 11, fontWeight: 'bold', color: '#4a5568', marginBottom: 4 }}>Select Feed Category:</Text>
-                <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginBottom: 12 }}>
-                  {['Tours', 'Wildlife', 'Football', 'Music', 'Tech'].map(cat => (
-                    <TouchableOpacity
-                      key={cat}
-                      style={[styles.filterPill, newPostCategory === cat && styles.activeFilterPill]}
-                      onPress={() => setNewPostCategory(cat)}
-                    >
-                      <Text style={[styles.filterPillText, newPostCategory === cat && { color: '#fff' }]}>{cat}</Text>
-                    </TouchableOpacity>
-                  ))}
-                </ScrollView>
-
-                <TextInput
-                  style={[styles.commentInputBox, isDarkMode && styles.darkText, { height: 65, marginBottom: 14, width: '100%', paddingTop: 8 }]}
-                  placeholder="Add caption & hashtags (e.g., #BwindiGorillas #Uganda)..."
-                  placeholderTextColor="#a0aec0"
-                  value={newPostCaption}
-                  onChangeText={setNewPostCaption}
-                  multiline={true}
-                />
-
-                <TouchableOpacity style={[styles.connectRadarBtn, { padding: 12, marginBottom: 20 }]} onPress={handlePublishCreatorVideo}>
-                  <Text style={{ color: '#fff', fontSize: 12, fontWeight: 'bold', textAlign: 'center' }}>🚀 Publish Video Tour to Feed</Text>
-                </TouchableOpacity>
-
-              </ScrollView>
-            </Pressable>
-          </Pressable>
-        </KeyboardAvoidingView>
-      </Modal>
-
-      {/* ================= MODAL 3: SECURITY MATRIX MENU (•••) ================= */}
-      <Modal visible={matrixMenuVisible} animationType="slide" transparent={true}>
-        <Pressable style={styles.modalOverlay} onPress={() => setMatrixMenuVisible(false)}>
-          <View style={[styles.modalContent, isDarkMode && styles.darkCard, { maxHeight: '80%' }]}>
-            <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
-              <Text style={[styles.modalTitle, isDarkMode && styles.darkText]}>🛡️ Security & Architecture Matrix</Text>
-              <TouchableOpacity onPress={() => setMatrixMenuVisible(false)}>
-                <Text style={{ fontSize: 16, fontWeight: 'bold', color: '#718096' }}>✕</Text>
-              </TouchableOpacity>
-            </View>
-
-            <ScrollView showsVerticalScrollIndicator={true}>
-              <View style={styles.settingRow}>
-                <Text style={[styles.settingLabel, isDarkMode && styles.darkText]}>🔒 Quantum Lattice Encryption</Text>
-                <Switch value={quantumLatticeSecurity} onValueChange={setQuantumLatticeSecurity} trackColor={{ false: '#cbd5e0', true: '#9333ea' }} />
-              </View>
-
-              <View style={styles.settingRow}>
-                <Text style={[styles.settingLabel, isDarkMode && styles.darkText]}>🇺🇬 Kampala Telecom Edge Relay</Text>
-                <Switch value={kampalaEdgeRelaySync} onValueChange={setKampalaEdgeRelaySync} trackColor={{ false: '#cbd5e0', true: '#3182ce' }} />
-              </View>
-
-              <View style={styles.settingRow}>
-                <Text style={[styles.settingLabel, isDarkMode && styles.darkText]}>🛡️ Autonomous Toxicity Guard</Text>
-                <Switch value={aiAutonomousToxicityGuard} onValueChange={setAiAutonomousToxicityGuard} trackColor={{ false: '#cbd5e0', true: '#e53e3e' }} />
-              </View>
-
-              <View style={styles.settingRow}>
-                <Text style={[styles.settingLabel, isDarkMode && styles.darkText]}>✍️ Creator Biometric Watermark</Text>
-                <Switch value={biometricCreatorWatermark} onValueChange={setBiometricCreatorWatermark} trackColor={{ false: '#cbd5e0', true: '#38a169' }} />
-              </View>
-
-              <View style={styles.settingRow}>
-                <Text style={[styles.settingLabel, isDarkMode && styles.darkText]}>🌿 Real-Time Sentiment Mesh Index</Text>
-                <Switch value={realtimeSentimentMesh} onValueChange={setRealtimeSentimentMesh} trackColor={{ false: '#cbd5e0', true: '#d69e2e' }} />
-              </View>
-
-              <View style={styles.settingRow}>
-                <Text style={[styles.settingLabel, isDarkMode && styles.darkText]}>🪙 Zero-Fee Creator Gas Subsidizer</Text>
-                <Switch value={zeroFeeGasSubsidizer} onValueChange={setZeroFeeGasSubsidizer} trackColor={{ false: '#cbd5e0', true: '#319795' }} />
-              </View>
-
-              <View style={styles.settingRow}>
-                <Text style={[styles.settingLabel, isDarkMode && styles.darkText]}>🎥 Adaptive Multimodal HLS Streaming</Text>
-                <Switch value={multimodalHlsAdaptive} onValueChange={setMultimodalHlsAdaptive} trackColor={{ false: '#cbd5e0', true: '#2563eb' }} />
-              </View>
-
-              <View style={styles.settingRow}>
-                <Text style={[styles.settingLabel, isDarkMode && styles.darkText]}>🧠 Federated On-Device AI Personalizer</Text>
-                <Switch value={federatedOnDeviceAi} onValueChange={setFederatedOnDeviceAi} trackColor={{ false: '#cbd5e0', true: '#805ad5' }} />
-              </View>
-
-              <View style={styles.settingRow}>
-                <Text style={[styles.settingLabel, isDarkMode && styles.darkText]}>🛰️ Bluetooth P2P Offline Mesh Sync</Text>
-                <Switch value={bluetoothP2pMeshRelay} onValueChange={setBluetoothP2pMeshRelay} trackColor={{ false: '#cbd5e0', true: '#48bb78' }} />
-              </View>
-
-              <View style={styles.settingRow}>
-                <Text style={[styles.settingLabel, isDarkMode && styles.darkText]}>🪙 Autonomous Creator Tip Escrow</Text>
-                <Switch value={autonomousCreatorEscrow} onValueChange={setAutonomousCreatorEscrow} trackColor={{ false: '#cbd5e0', true: '#b7791f' }} />
-              </View>
-            </ScrollView>
-          </View>
-        </Pressable>
-      </Modal>
-
-      {/* ================= MODAL 4: POST SETTINGS ================= */}
-      <Modal visible={postSettingsModalVisible} animationType="slide" transparent={true}>
-        <Pressable style={styles.modalOverlay} onPress={() => setPostSettingsModalVisible(false)}>
-          <View style={[styles.modalContent, isDarkMode && styles.darkCard]}>
-            <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
-              <Text style={[styles.modalTitle, isDarkMode && styles.darkText]}>⚙️ Post Settings & Creator Actions</Text>
-              <TouchableOpacity onPress={() => setPostSettingsModalVisible(false)}>
-                <Text style={{ fontSize: 16, fontWeight: 'bold', color: '#718096' }}>✕</Text>
-              </TouchableOpacity>
-            </View>
-
-            <TouchableOpacity style={styles.forwardOptionRow} onPress={() => handleRepostVideo(selectedPost)}>
-              <Text style={{ fontSize: 12, fontWeight: 'bold', color: isDarkMode ? '#fff' : '#2d3748' }}>🔄 Repost Video to Timeline</Text>
-            </TouchableOpacity>
-
-            <TouchableOpacity style={styles.forwardOptionRow} onPress={() => { setPostSettingsModalVisible(false); setBoostModalVisible(true); }}>
-              <Text style={{ fontSize: 12, fontWeight: 'bold', color: '#3182ce' }}>🚀 Boost / Promote Post</Text>
-            </TouchableOpacity>
-
-            <TouchableOpacity style={styles.forwardOptionRow} onPress={() => { setPostSettingsModalVisible(false); handleSaveToVault(selectedPost); }}>
-              <Text style={{ fontSize: 12, fontWeight: 'bold', color: isDarkMode ? '#fff' : '#2d3748' }}>⭐ Save to Offline Vault</Text>
-            </TouchableOpacity>
-
-            <TouchableOpacity style={[styles.forwardOptionRow, { borderBottomWidth: 0 }]} onPress={() => handleDeletePost(selectedPost?.id)}>
-              <Text style={{ fontSize: 12, fontWeight: 'bold', color: '#e53e3e' }}>🗑️ Delete Post Permanently</Text>
-            </TouchableOpacity>
-          </View>
-        </Pressable>
-      </Modal>
-
-      {/* ================= MODAL 5: BOOST PAYMENT SIMULATION ================= */}
-      <Modal visible={boostModalVisible} animationType="fade" transparent={true}>
-        <Pressable style={styles.modalOverlay} onPress={() => setBoostModalVisible(false)}>
-          <View style={[styles.modalContent, isDarkMode && styles.darkCard, { maxWidth: 360, alignSelf: 'center' }]}>
-            <Text style={[styles.modalTitle, isDarkMode && styles.darkText, { marginBottom: 8 }]}>🚀 Boost Post Promotion</Text>
-            <Text style={{ fontSize: 11, color: '#718096', marginBottom: 14 }}>
-              Promote "{selectedPost?.author}'s video" across local Kampala mesh relay stations and global feeds.
-            </Text>
-            <View style={{ backgroundColor: '#f7fafc', padding: 10, borderRadius: 8, marginBottom: 14 }}>
-              <Text style={{ fontSize: 11, fontWeight: 'bold', color: '#2d3748' }}>📦 Boost Tier: Regional Mesh (24 Hours)</Text>
-              <Text style={{ fontSize: 11, color: '#3182ce', fontWeight: 'bold', marginTop: 4 }}>Price: UGX 10,000 (~$2.70)</Text>
-            </View>
-            <TouchableOpacity style={styles.connectRadarBtn} onPress={handleExecuteBoostPost}>
-              <Text style={{ color: '#fff', fontSize: 12, fontWeight: 'bold', textAlign: 'center' }}>Confirm & Pay Boost Fee 💳</Text>
-            </TouchableOpacity>
-          </View>
-        </Pressable>
-      </Modal>
-
-      {/* ================= MODAL 6: AI CAPTION ASSISTANT ================= */}
-      <Modal visible={aiCaptionModalVisible} animationType="slide" transparent={true}>
-        <Pressable style={styles.modalOverlay} onPress={() => setAiCaptionModalVisible(false)}>
-          <View style={[styles.modalContent, isDarkMode && styles.darkCard]}>
-            <Text style={[styles.modalTitle, isDarkMode && styles.darkText]}>✨ AI Caption & Smart Hashtag Generator</Text>
-            <TextInput
-              style={[styles.commentInputBox, isDarkMode && styles.darkText, { height: 60, marginBottom: 10, width: '100%' }]}
-              placeholder="What is your video about? (e.g. Arsenal game highlight or Bwindi gorillas)"
-              placeholderTextColor="#a0aec0"
-              value={rawCreatorInput}
-              onChangeText={setRawCreatorInput}
-              multiline={true}
-            />
-            <TouchableOpacity style={styles.connectRadarBtn} onPress={handleGenerateAiCaption}>
-              <Text style={{ color: '#fff', fontSize: 11, fontWeight: 'bold', textAlign: 'center' }}>Generate AI Caption 🚀</Text>
-            </TouchableOpacity>
-            {generatedAiCaption ? (
-              <View style={{ marginTop: 12, backgroundColor: '#ebf8ff', padding: 8, borderRadius: 6 }}>
-                <Text style={{ fontSize: 11, color: '#2b6cb0', fontWeight: 'bold' }}>Result:</Text>
-                <Text style={{ fontSize: 11, color: '#2d3748', marginTop: 2 }}>{generatedAiCaption}</Text>
-              </View>
-            ) : null}
-          </View>
-        </Pressable>
-      </Modal>
-
-      {/* ================= MODAL 7: THREADED COMMENTS ================= */}
-      <Modal visible={commentsModalVisible} animationType="slide" transparent={true}>
-        <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={styles.keyboardAvoidingContainer}>
-          <Pressable style={styles.modalOverlay} onPress={() => setCommentsModalVisible(false)}>
-            <Pressable style={[styles.modalContent, isDarkMode && styles.darkCard, { height: '75%' }]} onPress={(e) => e.stopPropagation()}>
-              <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10, borderBottomWidth: 1, borderBottomColor: '#edf2f7', paddingBottom: 8 }}>
-                <Text style={[styles.modalTitle, isDarkMode && styles.darkText]}>💬 Comments (Most Popular First)</Text>
-                <TouchableOpacity onPress={() => setCommentsModalVisible(false)}>
-                  <Text style={{ fontSize: 16, fontWeight: 'bold', color: '#718096' }}>✕</Text>
-                </TouchableOpacity>
-              </View>
-
-              <ScrollView style={{ flex: 1, marginBottom: 8 }} showsVerticalScrollIndicator={true}>
-                {currentPostComments.length > 0 ? (
-                  currentPostComments.map(comment => (
-                    <View key={comment.id} style={styles.commentThreadBlock}>
-                      <View style={[styles.parentCommentCard, isDarkMode && { backgroundColor: '#1a202c', borderColor: '#4a5568' }]}>
-                        <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
-                          <Text style={{ fontSize: 11, fontWeight: 'bold', color: '#3182ce' }}>{comment.user}</Text>
-                          <Text style={{ fontSize: 9, color: '#a0aec0' }}>{comment.time}</Text>
-                        </View>
-                        <Text style={{ fontSize: 11, color: isDarkMode ? '#fff' : '#2d3748', marginTop: 3 }}>{comment.text}</Text>
-                        
-                        <View style={styles.commentActionFooter}>
-                          <TouchableOpacity onPress={() => handleLikeComment(comment.id)} style={{ flexDirection: 'row', alignItems: 'center', marginRight: 15 }}>
-                            <Text style={{ fontSize: 11, marginRight: 3 }}>❤️</Text>
-                            <Text style={{ fontSize: 10, color: '#718096', fontWeight: 'bold' }}>{comment.likes}</Text>
-                          </TouchableOpacity>
-                          <TouchableOpacity onPress={() => setReplyingToCommentId(comment.id)}>
-                            <Text style={{ fontSize: 10, color: '#3182ce', fontWeight: 'bold' }}>Reply ({comment.replies?.length || 0})</Text>
-                          </TouchableOpacity>
-                        </View>
-                      </View>
-
-                      {comment.replies && comment.replies.length > 0 && (
-                        <View style={styles.nestedRepliesContainer}>
-                          {comment.replies.map(reply => (
-                            <View key={reply.id} style={[styles.replyCard, isDarkMode && { backgroundColor: '#2d3748', borderColor: '#4a5568' }]}>
-                              <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
-                                <Text style={{ fontSize: 10, fontWeight: 'bold', color: '#3182ce' }}>↳ {reply.user}</Text>
-                                <Text style={{ fontSize: 8, color: '#a0aec0' }}>{reply.time}</Text>
-                              </View>
-                              <Text style={{ fontSize: 10, color: isDarkMode ? '#fff' : '#2d3748', marginTop: 2 }}>{reply.text}</Text>
-                              <TouchableOpacity onPress={() => handleLikeReply(comment.id, reply.id)} style={{ flexDirection: 'row', alignItems: 'center', marginTop: 4 }}>
-                                <Text style={{ fontSize: 10, marginRight: 2 }}>❤️</Text>
-                                <Text style={{ fontSize: 9, color: '#718096' }}>{reply.likes}</Text>
-                              </TouchableOpacity>
-                            </View>
-                          ))}
-                        </View>
-                      )}
-                    </View>
-                  ))
-                ) : (
-                  <Text style={{ fontSize: 11, color: '#718096', textAlign: 'center', marginTop: 20 }}>No comments yet. Start the conversation!</Text>
-                )}
-              </ScrollView>
-
-              {replyingToCommentId && (
-                <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', backgroundColor: '#ebf8ff', padding: 6, borderRadius: 6, marginBottom: 6 }}>
-                  <Text style={{ fontSize: 10, color: '#2b6cb0', fontWeight: 'bold' }}>Replying inside thread...</Text>
-                  <TouchableOpacity onPress={() => setReplyingToCommentId(null)}>
-                    <Text style={{ fontSize: 10, color: '#e53e3e', fontWeight: 'bold' }}>Cancel Reply</Text>
-                  </TouchableOpacity>
-                </View>
-              )}
-
-              <View style={{ flexDirection: 'row', backgroundColor: isDarkMode ? '#1a202c' : '#edf2f7', padding: 4, borderRadius: 6, marginBottom: 6, justifyContent: 'space-around' }}>
-                <TouchableOpacity onPress={() => handleInsertFormatting('newline')} style={styles.formatBtn}>
-                  <Text style={{ fontSize: 10, fontWeight: 'bold', color: isDarkMode ? '#fff' : '#4a5568' }}>↩️ Enter Line</Text>
-                </TouchableOpacity>
-                <TouchableOpacity onPress={() => handleInsertFormatting('bullet')} style={styles.formatBtn}>
-                  <Text style={{ fontSize: 10, fontWeight: 'bold', color: isDarkMode ? '#fff' : '#4a5568' }}>• Bullet List</Text>
-                </TouchableOpacity>
-                <TouchableOpacity onPress={() => handleInsertFormatting('list')} style={styles.formatBtn}>
-                  <Text style={{ fontSize: 10, fontWeight: 'bold', color: isDarkMode ? '#fff' : '#4a5568' }}>1. Number List</Text>
-                </TouchableOpacity>
-              </View>
-
-              <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 6, alignItems: 'center' }}>
-                {['❤️', '🔥', '👏', '🚀', '🐘', '✨', '⚽', '💯', '🦁', '🎉'].map(emoji => (
-                  <TouchableOpacity key={emoji} style={{ marginRight: 12 }} onPress={() => handleAddComment(emoji)}>
-                    <Text style={{ fontSize: 22 }}>{emoji}</Text>
-                  </TouchableOpacity>
-                ))}
-              </ScrollView>
-
-              <View style={{ flexDirection: 'row', alignItems: 'center', borderTopWidth: 1, borderTopColor: '#edf2f7', paddingTop: 8 }}>
-                <TextInput
-                  style={[styles.commentInputBox, isDarkMode && styles.darkText]}
-                  placeholder={replyingToCommentId ? "Write a reply in thread..." : "Write a comment or build a list..."}
-                  placeholderTextColor="#a0aec0"
-                  value={newCommentText}
-                  onChangeText={setNewCommentText}
-                  multiline={true}
-                />
-                <TouchableOpacity style={styles.sendCommentBtn} onPress={() => handleAddComment(newCommentText)}>
-                  <Text style={{ color: '#fff', fontSize: 11, fontWeight: 'bold' }}>Post</Text>
-                </TouchableOpacity>
-              </View>
-            </Pressable>
-          </Pressable>
-        </KeyboardAvoidingView>
-      </Modal>
-
-      {/* ================= MODAL 8: FORWARD / SHARE ================= */}
-      <Modal visible={forwardModalVisible} animationType="slide" transparent={true}>
-        <Pressable style={styles.modalOverlay} onPress={() => setForwardModalVisible(false)}>
-          <View style={[styles.modalContent, isDarkMode && styles.darkCard]}>
-            <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 15 }}>
-              <Text style={[styles.modalTitle, isDarkMode && styles.darkText]}>🌐 International Forward & Share</Text>
-              <TouchableOpacity onPress={() => setForwardModalVisible(false)}>
-                <Text style={{ fontSize: 16, fontWeight: 'bold', color: '#718096' }}>✕</Text>
-              </TouchableOpacity>
-            </View>
-            <TouchableOpacity style={styles.forwardOptionRow} onPress={() => handleExecuteForward('Global Chat Inbox')}>
-              <Text style={{ fontSize: 12, fontWeight: 'bold', color: isDarkMode ? '#fff' : '#2d3748' }}>💬 Forward to Active Chat Inbox</Text>
-            </TouchableOpacity>
-            <TouchableOpacity style={styles.forwardOptionRow} onPress={() => handleExecuteForward('International Mesh Relay')}>
-              <Text style={{ fontSize: 12, fontWeight: 'bold', color: isDarkMode ? '#fff' : '#2d3748' }}>🛰️ Broadcast to International Mesh Network</Text>
-            </TouchableOpacity>
-            <TouchableOpacity style={styles.forwardOptionRow} onPress={() => handleExecuteForward('Virtual TV Watch Party')}>
-              <Text style={{ fontSize: 12, fontWeight: 'bold', color: isDarkMode ? '#fff' : '#2d3748' }}>📺 Stream in Virtual TV Watch Party</Text>
-            </TouchableOpacity>
-            <TouchableOpacity style={[styles.forwardOptionRow, { borderBottomWidth: 0 }]} onPress={() => handleExecuteForward('Secure External Clipboard Link')}>
-              <Text style={{ fontSize: 12, fontWeight: 'bold', color: '#3182ce' }}>📋 Copy International Secure Link</Text>
-            </TouchableOpacity>
-          </View>
-        </Pressable>
-      </Modal>
-
-      {/* ================= MODAL 9: FULL-SCREEN THEATER VIEWER ================= */}
-      <Modal visible={fullScreenModalVisible} animationType="fade" transparent={true}>
-        <View style={styles.fullScreenOverlay}>
-          <TouchableOpacity style={styles.closeFullScreenBtn} onPress={() => setFullScreenModalVisible(false)}>
-            <Text style={{ color: '#fff', fontSize: 16, fontWeight: 'bold' }}>✕ Close Theater Mode</Text>
-          </TouchableOpacity>
-          {activeMediaItem && (
-            <View style={styles.fullScreenContent}>
-              <Image source={{ uri: activeMediaItem.videoUrl }} style={styles.fullScreenImage} resizeMode="contain" />
-              <Text style={styles.fullScreenCaption}>{activeMediaItem.caption}</Text>
-            </View>
-          )}
-        </View>
-      </Modal>
-
-      {/* ================= MODAL 10: LONG-PRESS QUICK ACTIONS ================= */}
-      <Modal visible={longPressModalVisible} animationType="fade" transparent={true}>
-        <Pressable style={styles.modalOverlay} onPress={() => setLongPressModalVisible(false)}>
-          <View style={[styles.modalContent, isDarkMode && styles.darkCard, { maxWidth: 350, alignSelf: 'center' }]}>
-            <Text style={[styles.modalTitle, isDarkMode && styles.darkText, { marginBottom: 12 }]}>⚙️ Media Quick Actions</Text>
-            
-            <TouchableOpacity style={styles.forwardOptionRow} onPress={handleDownloadMedia}>
-              <Text style={{ fontSize: 13, fontWeight: 'bold', color: selectedPost?.allowDownloads === false ? '#a0aec0' : '#3182ce' }}>
-                {selectedPost?.allowDownloads === false ? '🛡️ Download Disabled by Creator' : '📥 Download Media to Device'}
-              </Text>
-            </TouchableOpacity>
-
-            <TouchableOpacity style={styles.forwardOptionRow} onPress={() => handleSaveToVault(selectedPost)}>
-              <Text style={{ fontSize: 13, fontWeight: 'bold', color: '#3182ce' }}>⭐ Save to Offline Vault</Text>
-            </TouchableOpacity>
-
-            <TouchableOpacity style={styles.forwardOptionRow} onPress={() => handleWindVideo('forward')}>
-              <Text style={{ fontSize: 13, fontWeight: 'bold', color: isDarkMode ? '#fff' : '#2d3748' }}>⏩ Wind Video Forward (+10s)</Text>
-            </TouchableOpacity>
-
-            <TouchableOpacity style={styles.forwardOptionRow} onPress={() => handleWindVideo('backward')}>
-              <Text style={{ fontSize: 13, fontWeight: 'bold', color: isDarkMode ? '#fff' : '#2d3748' }}>⏪ Wind Video Backward (-10s)</Text>
-            </TouchableOpacity>
-
-            <TouchableOpacity style={styles.forwardOptionRow} onPress={handleCopyLink}>
-              <Text style={{ fontSize: 13, fontWeight: 'bold', color: '#3182ce' }}>📋 Copy Secure Media Link</Text>
-            </TouchableOpacity>
-
-            <TouchableOpacity style={[styles.forwardOptionRow, { borderBottomWidth: 0 }]} onPress={() => { setLongPressModalVisible(false); Alert.alert('Report', 'Content flagged.'); }}>
-              <Text style={{ fontSize: 13, fontWeight: 'bold', color: '#e53e3e' }}>⚠️ Report Content</Text>
-            </TouchableOpacity>
-          </View>
-        </Pressable>
-      </Modal>
+      {/* ================= MODAL: COMMENTS ================= */}
+      <DiscoveryCommentsModal
+        visible={commentsModalVisible}
+        onClose={() => setCommentsModalVisible(false)}
+        isDarkMode={isDarkMode}
+        currentPostComments={currentPostComments}
+        newCommentText={newCommentText}
+        setNewCommentText={setNewCommentText}
+        handleAddComment={handleAddComment}
+        handleLikeComment={handleLikeComment}
+        handleLikeReply={handleLikeReply}
+        replyingToCommentId={replyingToCommentId}
+        setReplyingToCommentId={setReplyingToCommentId}
+        handleInsertFormatting={handleInsertFormatting}
+      />
 
     </View>
   );
@@ -1419,90 +1241,26 @@ const styles = StyleSheet.create({
   header: { backgroundColor: '#fff', borderBottomWidth: 1, borderBottomColor: '#e2e8f0', paddingTop: 8 },
   darkHeader: { backgroundColor: '#2d3748', borderBottomColor: '#4a5568' },
   headerInner: { maxWidth: 800, width: '100%', alignSelf: 'center', paddingHorizontal: 12, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
+  headerAccountShortcut: { position: 'relative', marginRight: 8 },
+  headerAvatarImg: { width: 34, height: 34, borderRadius: 17, borderWidth: 1.5, borderColor: '#3182ce' },
+  onlineStatusDot: { position: 'absolute', bottom: 0, right: 0, width: 9, height: 9, borderRadius: 4.5, backgroundColor: '#38a169', borderWidth: 1.5, borderColor: '#fff' },
   headerTitle: { fontSize: 13, fontWeight: 'bold', color: '#2d3748' },
   darkText: { color: '#fff' },
-  
-  postVideoHeaderBtn: { backgroundColor: '#e53e3e', paddingHorizontal: 8, height: 32, borderRadius: 6, justifyContent: 'center', alignItems: 'center', marginRight: 6 },
+  goLiveHeaderBtn: { backgroundColor: '#e53e3e', paddingHorizontal: 10, height: 32, borderRadius: 6, justifyContent: 'center', alignItems: 'center', marginRight: 6 },
+  postVideoHeaderBtn: { backgroundColor: '#3182ce', paddingHorizontal: 8, height: 32, borderRadius: 6, justifyContent: 'center', alignItems: 'center', marginRight: 6 },
   searchBox: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#f7fafc', borderWidth: 1, borderColor: '#cbd5e0', borderRadius: 6, paddingHorizontal: 6, height: 32, width: 130 },
   darkSearchBox: { backgroundColor: '#1a202c', borderColor: '#4a5568' },
   searchInput: { flex: 1, fontSize: 10 },
   matrixMenuBtn: { paddingHorizontal: 8, height: 32, justifyContent: 'center', alignItems: 'center', marginLeft: 4 },
-
   subTabsRow: { maxWidth: 800, width: '100%', alignSelf: 'center', paddingHorizontal: 12, maxHeight: 36, marginTop: 6, marginBottom: 6 },
   subTabBtn: { backgroundColor: '#edf2f7', paddingHorizontal: 12, paddingVertical: 6, borderRadius: 6, marginRight: 6, height: 30, justifyContent: 'center' },
   activeSubTabBtn: { backgroundColor: '#3182ce' },
   subTabBtnText: { fontSize: 11, fontWeight: 'bold', color: '#4a5568' },
   activeSubTabBtnText: { color: '#fff' },
-
   mainLayout: { padding: 12, maxWidth: 650, width: '100%', alignSelf: 'center' },
-  centerFeed: { width: '100%' },
-
-  // Monetization Ad Styles
-  monetizationAdCard: { backgroundColor: '#fff', borderWidth: 1, borderColor: '#e2e8f0', borderRadius: 8, padding: 8, marginBottom: 10, alignItems: 'center' },
-  adTagLabel: { fontSize: 9, color: '#a0aec0', textTransform: 'uppercase', fontWeight: 'bold', marginBottom: 2 },
-  creatorMonetizationCard: { backgroundColor: '#ebf8ff', borderWidth: 1, borderColor: '#bee3f8', borderRadius: 8, padding: 10, marginBottom: 10 },
-  watchRewardAdBtn: { backgroundColor: '#3182ce', paddingHorizontal: 10, paddingVertical: 6, borderRadius: 6 },
-
-  geofenceControlBar: { backgroundColor: '#ebf8ff', borderWidth: 1, borderColor: '#bee3f8', borderRadius: 8, padding: 8, marginBottom: 10 },
-  radiusPill: { backgroundColor: '#fff', paddingHorizontal: 8, paddingVertical: 3, borderRadius: 10, marginRight: 6, borderWidth: 1, borderColor: '#cbd5e0' },
-  activeRadiusPill: { backgroundColor: '#3182ce', borderColor: '#3182ce' },
-  radiusPillText: { fontSize: 10, fontWeight: 'bold', color: '#4a5568' },
-
-  aiBannerCard: { backgroundColor: '#f0fdf4', borderWidth: 1, borderColor: '#bbf7d0', borderRadius: 8, padding: 8, marginBottom: 10 },
-  creatorStudioBtn: { backgroundColor: '#805ad5', padding: 10, borderRadius: 8, alignItems: 'center', marginBottom: 12 },
-  pinnedBanner: { backgroundColor: '#fffaf0', paddingHorizontal: 8, paddingVertical: 3, borderRadius: 4, borderWidth: 1, borderColor: '#feebc8', alignSelf: 'flex-start' },
-  boostedBanner: { backgroundColor: '#ebf8ff', paddingHorizontal: 8, paddingVertical: 3, borderRadius: 4, borderWidth: 1, borderColor: '#bee3f8', alignSelf: 'flex-start', marginLeft: 6 },
-
-  settingRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 },
-  settingLabel: { fontSize: 11, fontWeight: 'bold', color: '#2d3748' },
-
-  storyCard: { backgroundColor: '#fff', borderRadius: 10, padding: 12, marginBottom: 12, borderWidth: 1, borderColor: '#e2e8f0' },
-  sectionTitle: { fontSize: 12, fontWeight: 'bold', color: '#4a5568', marginBottom: 8 },
-  storyScroll: { flexDirection: 'row' },
-  storyRingContainer: { alignItems: 'center', marginRight: 12, width: 55 },
-  storyRing: { width: 50, height: 50, borderRadius: 25, borderWidth: 2, borderColor: '#3182ce', justifyContent: 'center', alignItems: 'center' },
-  storyAvatar: { width: 42, height: 42, borderRadius: 21, backgroundColor: '#ebf8ff', justifyContent: 'center', alignItems: 'center' },
-  storyAvatarText: { fontWeight: 'bold', color: '#2b6cb0', fontSize: 14 },
-  storyName: { fontSize: 9, color: '#4a5568', marginTop: 3, textAlign: 'center' },
-
-  filterPill: { backgroundColor: '#edf2f7', paddingHorizontal: 12, paddingVertical: 5, borderRadius: 16, marginRight: 6 },
-  activeFilterPill: { backgroundColor: '#3182ce' },
-  filterPillText: { fontSize: 11, fontWeight: 'bold', color: '#4a5568' },
-
-  postCard: { backgroundColor: '#fff', borderRadius: 10, padding: 12, marginBottom: 12, borderWidth: 1, borderColor: '#e2e8f0', width: '100%' },
-  darkCard: { backgroundColor: '#2d3748', borderColor: '#4a5568' },
-  postHeaderRow: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 6, marginTop: 4 },
-  postAuthor: { fontSize: 12, fontWeight: 'bold', color: '#3182ce' },
-  vibeBadge: { fontSize: 10, fontStyle: 'italic', color: '#a0aec0' },
-
-  mediaContainerCenter: { height: 260, width: '100%', backgroundColor: '#000', borderRadius: 8, overflow: 'hidden', position: 'relative', marginBottom: 8, justifyContent: 'center', alignItems: 'center' },
-  postImageMedia: { width: '100%', height: '100%' },
-  heartPopContainer: { position: 'absolute', justifyContent: 'center', alignItems: 'center', zIndex: 10 },
-  mediaOverlayTop: { position: 'absolute', top: 8, left: 8 },
-  badgePill: { backgroundColor: 'rgba(0,0,0,0.6)', paddingHorizontal: 6, paddingVertical: 2, borderRadius: 4 },
-  expandButton: { position: 'absolute', bottom: 10, right: 10, backgroundColor: 'rgba(0,0,0,0.7)', paddingHorizontal: 8, paddingVertical: 4, borderRadius: 6 },
-
-  postCaption: { fontSize: 11, color: '#2d3748', marginBottom: 8, lineHeight: 15 },
-  postFooter: { flexDirection: 'row', justifyContent: 'space-around', borderTopWidth: 1, borderTopColor: '#edf2f7', paddingTop: 6 },
-  footerAction: { flexDirection: 'row', alignItems: 'center' },
-
-  radarCardActive: { backgroundColor: '#ebf8ff', borderWidth: 1, borderColor: '#bee3f8', borderRadius: 10, padding: 12, marginBottom: 12 },
-  radarTitle: { fontSize: 12, fontWeight: 'bold', color: '#2b6cb0', marginBottom: 4 },
-  radarDesc: { fontSize: 10, color: '#4a5568' },
-  connectRadarBtn: { backgroundColor: '#3182ce', paddingHorizontal: 12, paddingVertical: 6, borderRadius: 6, marginTop: 4 },
-
-  // Watch Party Controls
-  watchPartyVideoFrame: { height: 200, backgroundColor: '#000', position: 'relative' },
-  watchVideoImage: { width: '100%', height: '100%' },
-  liveBadgeOverlay: { position: 'absolute', top: 10, left: 10, backgroundColor: 'rgba(229, 62, 62, 0.85)', paddingHorizontal: 8, paddingVertical: 4, borderRadius: 4, flexDirection: 'row' },
-  watchChatBox: { backgroundColor: '#f7fafc', padding: 8, borderRadius: 6, borderWidth: 1, borderColor: '#e2e8f0' },
-  chatInput: { flex: 1, backgroundColor: '#fff', borderWidth: 1, borderColor: '#cbd5e0', borderRadius: 6, paddingHorizontal: 8, height: 32, fontSize: 11 },
-  darkInput: { backgroundColor: '#1a202c', borderColor: '#4a5568', color: '#fff' },
-  sendChatBtn: { backgroundColor: '#3182ce', paddingHorizontal: 12, height: 32, borderRadius: 6, justifyContent: 'center', marginLeft: 6 },
-
-  // Camera Overlay
   cameraOverlayControls: { flex: 1, justifyContent: 'space-between', padding: 20 },
   cameraTopRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginTop: 20 },
+  closeCameraBtn: { backgroundColor: 'rgba(0,0,0,0.6)', paddingHorizontal: 12, paddingVertical: 8, borderRadius: 8, borderWidth: 1, borderColor: 'rgba(255,255,255,0.3)' },
   camIconBtn: { width: 40, height: 40, borderRadius: 20, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'center', alignItems: 'center' },
   recordingTimerBadge: { flexDirection: 'row', alignItems: 'center', backgroundColor: 'rgba(229, 62, 62, 0.8)', paddingHorizontal: 10, paddingVertical: 4, borderRadius: 12 },
   recordingDot: { width: 8, height: 8, borderRadius: 4, backgroundColor: '#fff', marginRight: 6 },
@@ -1511,37 +1269,4 @@ const styles = StyleSheet.create({
   innerRecordDot: { width: 50, height: 50, borderRadius: 25, backgroundColor: '#e53e3e' },
   stopRecordBtn: { width: 70, height: 70, borderRadius: 35, borderWidth: 4, borderColor: '#fff', justifyContent: 'center', alignItems: 'center' },
   innerStopSquare: { width: 36, height: 36, borderRadius: 6, backgroundColor: '#e53e3e' },
-
-  // Modals & Sheets
-  keyboardAvoidingContainer: { flex: 1, justifyContent: 'flex-end' },
-  modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'flex-end' },
-  modalContent: { backgroundColor: '#fff', borderTopLeftRadius: 16, borderTopRightRadius: 16, padding: 14, width: '100%' },
-  modalHeaderRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10, borderBottomWidth: 1, borderBottomColor: '#edf2f7', paddingBottom: 8 },
-  modalTitle: { fontSize: 13, fontWeight: 'bold', color: '#2d3748' },
-  forwardOptionRow: { paddingVertical: 10, borderBottomWidth: 1, borderBottomColor: '#edf2f7' },
-
-  commentThreadBlock: { marginBottom: 12 },
-  parentCommentCard: { backgroundColor: '#f7fafc', padding: 10, borderRadius: 8, borderWidth: 1, borderColor: '#e2e8f0' },
-  nestedRepliesContainer: { marginLeft: 16, marginTop: 6, borderLeftWidth: 2, borderLeftColor: '#3182ce', paddingLeft: 8 },
-  replyCard: { backgroundColor: '#edf2f7', padding: 8, borderRadius: 6, marginBottom: 6, borderWidth: 1, borderColor: '#cbd5e0' },
-  commentActionFooter: { flexDirection: 'row', alignItems: 'center', marginTop: 6 },
-
-  commentInputBox: { flex: 1, backgroundColor: '#f7fafc', borderWidth: 1, borderColor: '#cbd5e0', borderRadius: 8, paddingHorizontal: 10, minHeight: 34, maxHeight: 80, fontSize: 11, paddingTop: 8 },
-  sendCommentBtn: { backgroundColor: '#3182ce', paddingHorizontal: 12, height: 34, borderRadius: 8, justifyContent: 'center', alignItems: 'center', marginLeft: 8 },
-  formatBtn: { paddingHorizontal: 8, paddingVertical: 3, backgroundColor: 'rgba(0,0,0,0.05)', borderRadius: 4 },
-
-  fullScreenOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.95)', justifyContent: 'center', alignItems: 'center', padding: 20 },
-  closeFullScreenBtn: { position: 'absolute', top: 30, right: 30, backgroundColor: 'rgba(255,255,255,0.2)', paddingHorizontal: 12, paddingVertical: 6, borderRadius: 20 },
-  fullScreenContent: { width: '100%', height: '80%', justifyContent: 'center', alignItems: 'center' },
-  fullScreenImage: { width: '100%', height: '85%' },
-  fullScreenCaption: { color: '#fff', fontSize: 14, textAlign: 'center', marginTop: 15 },
-
-  // Scrollable Creator Studio
-  sourceTabBtn: { flex: 1, paddingVertical: 8, backgroundColor: '#edf2f7', alignItems: 'center', borderRadius: 6, marginRight: 6 },
-  activeSourceTab: { backgroundColor: '#3182ce' },
-  sourceTabText: { fontSize: 11, fontWeight: 'bold', color: '#4a5568' },
-  studioViewfinder: { height: 160, backgroundColor: '#000', borderRadius: 8, justifyContent: 'center', alignItems: 'center', marginBottom: 10, overflow: 'hidden' },
-  editPill: { backgroundColor: '#fff', paddingHorizontal: 10, paddingVertical: 5, borderRadius: 12, marginRight: 6, borderWidth: 1, borderColor: '#cbd5e0' },
-  activeEditPill: { backgroundColor: '#3182ce', borderColor: '#3182ce' },
-  editPillText: { fontSize: 10, fontWeight: 'bold', color: '#4a5568' },
 });

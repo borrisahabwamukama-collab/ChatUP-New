@@ -1,4 +1,4 @@
-package com.borrisahabwamukama.chatup
+package com.chatup408.chatup
 
 import android.os.Build
 import android.os.Bundle

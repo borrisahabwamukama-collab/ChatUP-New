@@ -8,7 +8,7 @@ import {
   ScrollView,
   Alert,
 } from 'react-native';
-import { supabase } from '../supabase'; // Adjust path if needed
+import { supabase } from '../../Services/supabaseClient';
 
 export default function ChatUpLiveScreen({ isDarkMode, coins, setCoins }) {
   // ChatUp Live Core States

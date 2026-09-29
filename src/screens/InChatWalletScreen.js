@@ -10,6 +10,7 @@ import {
   Switch,
 } from 'react-native';
 import { BannerAd, BannerAdSize, TestIds, RewardedAd, RewardedAdEventType } from 'react-native-google-mobile-ads';
+import { supabase } from '../../Services/supabaseClient';
 
 // Dynamic Google AdMob Unit IDs (Automatic Test IDs during development)
 const bannerAdUnitId = __DEV__ ? TestIds.BANNER : 'ca-app-pub-xxxxxxxxoxxxxxxx/xxxxxxxxxx';

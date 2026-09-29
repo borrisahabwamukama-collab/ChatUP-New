@@ -9,26 +9,23 @@ import {
   Alert,
   Switch,
   Platform,
+  ActivityIndicator,
 } from 'react-native';
 import * as Clipboard from 'expo-clipboard';
 import * as Network from 'expo-network';
-import { BannerAd, BannerAdSize, TestIds, RewardedAd, RewardedAdEventType } from 'react-native-google-mobile-ads';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import { supabase } from '../../Services/supabaseClient';
 
-// Dynamic Google AdMob Unit IDs (Automatic Test IDs during development)
-const bannerAdUnitId = __DEV__ ? TestIds.BANNER : 'ca-app-pub-xxxxxxxxoxxxxxxx/xxxxxxxxxx';
-const rewardedAdUnitId = __DEV__ ? TestIds.REWARDED : 'ca-app-pub-xxxxxxxxoxxxxxxx/xxxxxxxxxx';
-
-export default function DRMProtectionScreen({ isDarkMode }) {
+export default function DRMProtectionScreen({ isDarkMode, currentUser }) {
   const [assetTitle, setAssetTitle] = useState('');
   const [screenRecordingProtection, setScreenRecordingProtection] = useState(true);
   const [geofenceCountry, setGeofenceCountry] = useState('Uganda & East Africa Only 🇺🇬');
   const [isEditingGeofence, setIsEditingGeofence] = useState(false);
   const [tempGeofence, setTempGeofence] = useState('Uganda & East Africa Only 🇺🇬');
   
-  // Monetization & Rewarded Ad States
-  const [rewardedAdLoaded, setRewardedAdLoaded] = useState(false);
-  const [rewardedAdInstance, setRewardedAdInstance] = useState(null);
+  // Monetization & Rewarded Simulation States
   const [userAdEarningsBalance, setUserAdEarningsBalance] = useState(12500); // UGX Creator Ad Earnings
+  const [loading, setLoading] = useState(false);
 
   // Dynamic Network & Environment Status
   const [networkStatus, setNetworkStatus] = useState('Checking connectivity...');
@@ -49,63 +46,72 @@ export default function DRMProtectionScreen({ isDarkMode }) {
   const [offlineMeshEnclaveLock, setOfflineMeshEnclaveLock] = useState(true);
   const [revocationKillSwitch, setRevocationKillSwitch] = useState(true);
 
-  // Dynamic network check effect & AdMob initialization
+  // Load saved DRM matrix preferences & Supabase logs on mount
   useEffect(() => {
-    const checkNetwork = async () => {
+    const initializeDrmModule = async () => {
       try {
         const netState = await Network.getNetworkStateAsync();
         setNetworkStatus(netState.isConnected ? 'Mesh Node Online & Synchronized 🟢' : 'Offline Mesh Mode Active 🛰️');
+
+        // Load local persistent security settings
+        const savedSettings = await AsyncStorage.getItem('@chatup_drm_matrix');
+        if (savedSettings) {
+          const parsed = JSON.parse(savedSettings);
+          setScreenRecordingProtection(parsed.screenRecordingProtection ?? true);
+          setGeofenceCountry(parsed.geofenceCountry ?? 'Uganda & East Africa Only 🇺🇬');
+        }
+
+        // Fetch registry from Supabase if connected
+        const { data, error } = await supabase
+          .from('drm_copyright_registry')
+          .select('*')
+          .order('created_at', { ascending: false });
+
+        if (data && !error && data.length > 0) {
+          setCopyrightList(data);
+        }
       } catch (err) {
-        setNetworkStatus('Mesh Relay Standby 🟡');
+        console.log('DRM Initialization notice:', err.message);
       }
     };
-    checkNetwork();
-    initRewardedAd();
+
+    initializeDrmModule();
   }, []);
 
-  const initRewardedAd = () => {
+  const saveSettingsToStorage = async (newGeofence, newScreenProt) => {
     try {
-      const rewardedAd = RewardedAd.createForAdRequest(rewardedAdUnitId, {
-        requestNonPersonalizedAdsOnly: true,
-      });
-
-      const unsubscribeLoaded = rewardedAd.addAdEventListener(RewardedAdEventType.LOADED, () => {
-        setRewardedAdLoaded(true);
-      });
-
-      const unsubscribeEarned = rewardedAd.addAdEventListener(RewardedAdEventType.EARNED_REWARD, () => {
-        setUserAdEarningsBalance(prev => prev + 2500);
-        Alert.alert('💰 Ad Reward Credited!', 'Successfully earned +2500 UGX creator ad bounty!');
-      });
-
-      rewardedAd.load();
-      setRewardedAdInstance(rewardedAd);
-
-      return () => {
-        unsubscribeLoaded();
-        unsubscribeEarned();
+      const payload = {
+        geofenceCountry: newGeofence,
+        screenRecordingProtection: newScreenProt,
+        updatedAt: new Date().toISOString(),
       };
+      await AsyncStorage.setItem('@chatup_drm_matrix', JSON.stringify(payload));
     } catch (e) {
-      console.log('Rewarded Ad initialization notice:', e);
+      console.log('Failed to save DRM settings locally');
     }
   };
 
-  const handleShowRewardedAd = () => {
-    if (rewardedAdLoaded && rewardedAdInstance) {
-      rewardedAdInstance.show();
-      setRewardedAdLoaded(false);
-      rewardedAdInstance.load();
-    } else {
-      // Fallback simulation for preview/web
-      setUserAdEarningsBalance(prev => prev + 2500);
-      Alert.alert('💰 Ad Reward Credited (Simulated)', 'Watch ad completed! +2500 UGX added to your creator earnings balance.');
-    }
+  const handleShowRewardedAd = async () => {
+    const updatedBalance = userAdEarningsBalance + 2500;
+    setUserAdEarningsBalance(updatedBalance);
+    
+    // Log ad bounty event to Supabase telemetry if possible
+    try {
+      await supabase.from('audit_logs').insert({
+        user_id: currentUser?.id || 'anonymous_creator',
+        action: 'CREATOR_AD_REWARD_CLAIMED',
+        details: 'Claimed +2500 UGX ad bounty',
+        created_at: new Date()
+      });
+    } catch (e) {}
+
+    Alert.alert('💰 Ad Reward Credited!', 'Successfully earned +2500 UGX creator ad bounty!');
   };
 
-  const handleRegister = () => {
+  const handleRegister = async () => {
     if (!assetTitle.trim()) return Alert.alert('Error', 'Enter asset title to register copyright.');
     
-    // Generate an authentic SHA-256 style pseudo-hash using timestamp and math random string
+    setLoading(true);
     const rawString = assetTitle + Date.now().toString();
     let hashResult = 'sha256_';
     for (let i = 0; i < 16; i++) {
@@ -119,8 +125,23 @@ export default function DRMProtectionScreen({ isDarkMode }) {
       date: new Date().toISOString().split('T')[0]
     };
 
+    try {
+      // Sync to Supabase table
+      await supabase.from('drm_copyright_registry').insert([
+        {
+          title: newEntry.title,
+          hash: newEntry.hash,
+          user_id: currentUser?.id || 'local_user',
+          created_at: new Date()
+        }
+      ]);
+    } catch (err) {
+      console.log('Supabase copyright sync notice (Saved locally):', err.message);
+    }
+
     setCopyrightList(prev => [newEntry, ...prev]);
     setAssetTitle('');
+    setLoading(false);
     Alert.alert('DRM Protection Enforced 🛡️', `Cryptographic ownership hash recorded successfully for "${newEntry.title}".`);
   };
 
@@ -131,9 +152,18 @@ export default function DRMProtectionScreen({ isDarkMode }) {
 
   const handleSaveGeofence = () => {
     if (!tempGeofence.trim()) return;
-    setGeofenceCountry(tempGeofence.trim());
+    const updated = tempGeofence.trim();
+    setGeofenceCountry(updated);
     setIsEditingGeofence(false);
-    Alert.alert('Geofence Updated 🌍', `Authorized territory successfully changed to: ${tempGeofence.trim()}`);
+    saveSettingsToStorage(updated, screenRecordingProtection);
+    Alert.alert('Geofence Updated 🌍', `Authorized territory successfully changed to: ${updated}`);
+  };
+
+  const toggleScreenProtection = () => {
+    const newState = !screenRecordingProtection;
+    setScreenRecordingProtection(newState);
+    saveSettingsToStorage(geofenceCountry, newState);
+    Alert.alert('DRM Shield', newState ? '🔒 Screen recording and screenshots blocked via hardware flags!' : '⚠️ Recording protection disabled.');
   };
 
   return (
@@ -146,22 +176,6 @@ export default function DRMProtectionScreen({ isDarkMode }) {
         <Text style={{ fontSize: 10, color: '#3182ce', fontWeight: 'bold', marginTop: 6 }}>📡 Network Mesh Status: {networkStatus}</Text>
       </View>
 
-      {/* ================= GOOGLE ADMOB DYNAMIC BANNER ================= */}
-      <View style={styles.monetizationAdCard}>
-        <Text style={styles.adTagLabel}>Sponsored Ad 📢 • AdMob Dynamic Banner</Text>
-        <View style={{ alignItems: 'center', marginVertical: 4 }}>
-          <BannerAd
-            unitId={bannerAdUnitId}
-            size={BannerAdSize.ANCHORED_ADAPTIVE_BANNER}
-            requestOptions={{
-              requestNonPersonalizedAdsOnly: true,
-            }}
-            onAdLoaded={() => console.log('AdMob Banner loaded successfully')}
-            onAdFailedToLoad={(error) => console.log('AdMob Banner load error: ', error)}
-          />
-        </View>
-      </View>
-
       {/* ================= REWARDED AD CREATOR EARNING WIDGET ================= */}
       <View style={styles.creatorMonetizationCard}>
         <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
@@ -172,7 +186,7 @@ export default function DRMProtectionScreen({ isDarkMode }) {
             </Text>
           </View>
           <TouchableOpacity style={styles.watchRewardAdBtn} onPress={handleShowRewardedAd}>
-            <Text style={{ color: '#fff', fontSize: 11, fontWeight: 'bold' }}>Watch Ad (+2500 UGX) 🎁</Text>
+            <Text style={{ color: '#fff', fontSize: 11, fontWeight: 'bold' }}>Simulate Ad (+2500 UGX) 🎁</Text>
           </TouchableOpacity>
         </View>
       </View>
@@ -238,11 +252,7 @@ export default function DRMProtectionScreen({ isDarkMode }) {
           <Text style={[styles.cardTitle, isDarkMode && styles.darkText]}>🚫 Anti-Piracy & Screen Capture Shield</Text>
           <TouchableOpacity 
             style={{ backgroundColor: screenRecordingProtection ? '#38a169' : '#e53e3e', paddingHorizontal: 10, paddingVertical: 6, borderRadius: 6 }}
-            onPress={() => {
-              const newState = !screenRecordingProtection;
-              setScreenRecordingProtection(newState);
-              Alert.alert('DRM Shield', newState ? '🔒 Screen recording and screenshots blocked via hardware flags!' : '⚠️ Recording protection disabled.');
-            }}
+            onPress={toggleScreenProtection}
           >
             <Text style={{ color: '#fff', fontSize: 11, fontWeight: 'bold' }}>{screenRecordingProtection ? 'Shield ACTIVE 🟢' : 'Shield OFF 🔴'}</Text>
           </TouchableOpacity>
@@ -287,7 +297,7 @@ export default function DRMProtectionScreen({ isDarkMode }) {
           <TouchableOpacity key={item.id} style={{ backgroundColor: isDarkMode ? '#1a202c' : '#f7fafc', padding: 8, borderRadius: 6, marginBottom: 6 }} onPress={() => handleCopyHash(item.hash)}>
             <Text style={[{ fontSize: 12, fontWeight: 'bold' }, isDarkMode && styles.darkText]}>{item.title}</Text>
             <Text style={{ fontSize: 10, color: '#3182ce' }}>Hash: {item.hash} (Tap to Copy)</Text>
-            <Text style={{ fontSize: 10, color: '#718096' }}>Registered: {item.date} • Verified Original</Text>
+            <Text style={{ fontSize: 10, color: '#718096' }}>Registered: {item.date || '2026-09-15'} • Verified Original</Text>
           </TouchableOpacity>
         ))}
 
@@ -298,8 +308,12 @@ export default function DRMProtectionScreen({ isDarkMode }) {
           value={assetTitle}
           onChangeText={setAssetTitle}
         />
-        <TouchableOpacity style={styles.actionBtnGreen} onPress={handleRegister}>
-          <Text style={styles.actionBtnText}>Register Copyright Hash 🔒</Text>
+        <TouchableOpacity style={styles.actionBtnGreen} onPress={handleRegister} disabled={loading}>
+          {loading ? (
+            <ActivityIndicator size="small" color="#fff" />
+          ) : (
+            <Text style={styles.actionBtnText}>Register Copyright Hash 🔒</Text>
+          )}
         </TouchableOpacity>
       </View>
 
@@ -324,9 +338,7 @@ const styles = StyleSheet.create({
   actionBtnGreen: { backgroundColor: '#48bb78', padding: 10, borderRadius: 8, alignItems: 'center' },
   actionBtnText: { color: '#fff', fontSize: 12, fontWeight: 'bold' },
 
-  // Monetization Ad Styles
-  monetizationAdCard: { backgroundColor: '#fff', borderWidth: 1, borderColor: '#e2e8f0', borderRadius: 8, padding: 8, marginBottom: 12, alignItems: 'center' },
-  adTagLabel: { fontSize: 9, color: '#a0aec0', textTransform: 'uppercase', fontWeight: 'bold', marginBottom: 2 },
+  // Monetization Card Styles
   creatorMonetizationCard: { backgroundColor: '#ebf8ff', borderWidth: 1, borderColor: '#bee3f8', borderRadius: 8, padding: 12, marginBottom: 12 },
   watchRewardAdBtn: { backgroundColor: '#3182ce', paddingHorizontal: 12, paddingVertical: 6, borderRadius: 6 },
 });

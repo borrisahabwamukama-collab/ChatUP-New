@@ -15,17 +15,26 @@ import {
 import { supabase } from '../../Services/supabaseClient';
 
 export default function SignupScreen({ navigation, isDarkMode, coins, setCoins }) {
+  // Core Auth & Password States
   const [email, setEmail] = useState('');
-  const [otpCodeInput, setOtpCodeInput] = useState('');
-  const [showOtpField, setShowOtpField] = useState(false);
+  const [password, setPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
   const [isLoading, setIsLoading] = useState(false);
+
+  // Complete Profile Fields
+  const [fullName, setFullName] = useState('');
+  const [handle, setHandle] = useState('');
+  const [phoneNumber, setPhoneNumber] = useState('');
+  const [country, setCountry] = useState('Uganda');
+  const [dateOfBirth, setDateOfBirth] = useState('');
+  const [hobbies, setHobbies] = useState('');
+  const [bio, setBio] = useState('');
 
   // LAYER 1: BIOMETRIC & PASSKEY AUTO-ENROLLMENT TOGGLE
   const [biometricEnrollEnabled, setBiometricEnrollEnabled] = useState(true);
 
   // LAYER 2: MULTI-FACTOR AUTHENTICATION (MFA) SETUP
   const [mfaSetupEnabled, setMfaSetupEnabled] = useState(false);
-  const [phoneNumber, setPhoneNumber] = useState('');
 
   // LAYER 3: CREATOR ACCOUNT & STATION FRANCHISE ROLE
   const [selectedCreatorRole, setSelectedCreatorRole] = useState('Wildlife & Eco Streamer 🌿');
@@ -39,82 +48,89 @@ export default function SignupScreen({ navigation, isDarkMode, coins, setCoins }
   // LAYER 4: TERMS OF SERVICE & COPYRIGHT COMPLIANCE SHIELD
   const [acceptedTerms, setAcceptedTerms] = useState(false);
 
-  // STEP 1: TRIGGER SUPABASE EMAIL OTP SIGNUP
-  const handleSendOtp = async () => {
-    if (!email.trim()) {
-      return Alert.alert('Missing Field', 'Please enter your email address.');
+  // DIRECT PASSWORD SIGNUP WITH FULL PROFILE METADATA
+  const handleRegisterWithPassword = async () => {
+    if (!email.trim() || !password || !fullName.trim()) {
+      return Alert.alert('Missing Fields ⚠️', 'Please fill in your Display Name, Email, and Password.');
+    }
+    if (password.length < 6) {
+      return Alert.alert('Weak Password ⚠️', 'Password must be at least 6 characters long.');
+    }
+    if (password !== confirmPassword) {
+      return Alert.alert('Password Mismatch ⚠️', 'Passwords do not match.');
     }
     if (!acceptedTerms) {
-      return Alert.alert('Compliance Error', 'You must accept the Terms of Service and Copyright Shield agreement.');
+      return Alert.alert('Compliance Error ⚠️', 'You must accept the Terms of Service and Copyright Shield agreement.');
     }
 
     setIsLoading(true);
 
-    const { error } = await supabase.auth.signInWithOtp({
+    const formattedHandle = handle.trim().startsWith('@') ? handle.trim() : `@${handle.trim() || email.split('@')[0]}`;
+
+    // 1. Sign up user with Supabase Auth
+    const { data, error } = await supabase.auth.signUp({
       email: email.trim(),
+      password: password,
       options: {
         data: {
+          full_name: fullName.trim(),
+          handle: formattedHandle,
+          phone: phoneNumber.trim(),
+          country: country.trim(),
+          date_of_birth: dateOfBirth.trim(),
+          hobbies: hobbies.trim(),
+          bio: bio.trim(),
           creator_role: selectedCreatorRole,
-          phone: phoneNumber,
           biometric_enabled: biometricEnrollEnabled,
         },
       },
     });
 
-    setIsLoading(false);
-
-    if (error) {
-      Alert.alert('Signup Failed', error.message);
-    } else {
-      setShowOtpField(true);
-      if (setCoins) setCoins(c => c + 10); // Reward for initiating registration
-      Alert.alert(
-        'Verification Code Sent 📩',
-        `A 6-digit verification code has been dispatched to ${email}. Please check your inbox!`
-      );
-    }
-  };
-
-  // STEP 2: VERIFY OTP CODE AND COMPLETE ACCOUNT PROVISIONING
-  const handleVerifyOtp = async () => {
-    if (!otpCodeInput.trim()) {
-      return Alert.alert('Missing OTP', 'Please enter the 6-digit code sent to your email.');
-    }
-
-    setIsLoading(true);
-
-    const { data, error } = await supabase.auth.verifyOtp({
-      email: email.trim(),
-      token: otpCodeInput.trim(),
-      type: 'email',
-    });
-
     if (error) {
       setIsLoading(false);
-      return Alert.alert('Verification Failed ⚠️', error.message);
+      return Alert.alert('Registration Failed ❌', error.message);
     }
 
-    // Upsert creator metadata into user profiles table
-    if (data?.user) {
-      await supabase.from('profiles').upsert({
-        id: data.user.id,
-        email: email.trim(),
-        phone: phoneNumber,
+    // Safely resolve user ID with session fallback
+    let userId = data?.user?.id;
+    if (!userId) {
+      const { data: sessionData } = await supabase.auth.getSession();
+      userId = sessionData?.session?.user?.id;
+    }
+
+    // 2. Explicitly write/upsert record into the profiles table with all fields populated
+    if (userId) {
+      const { error: profileError } = await supabase.from('profiles').upsert({
+        id: userId,
+        username: formattedHandle,
+        full_name: fullName.trim(),
+        phone: phoneNumber.trim(),
+        country: country.trim(),
+        date_of_birth: dateOfBirth.trim(),
+        hobbies: hobbies.trim(),
+        bio: bio.trim(),
         creator_role: selectedCreatorRole,
-        biometric_enabled: biometricEnrollEnabled,
-      });
+        avatar_url: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150',
+        total_likes: 0,
+      }, { onConflict: 'id' });
+
+      if (profileError) {
+        console.warn('Profile upsert warning:', profileError.message);
+      }
+    } else {
+      console.warn('Could not resolve user ID for profile upsert.');
     }
 
     setIsLoading(false);
-    if (setCoins) setCoins(c => c + 100); // Generous reward for successful signup & verification
+    if (setCoins) setCoins(c => c + 100);
 
     Alert.alert(
-      'Account Verified & Provisioned 🎉 (+100 🪙)',
-      `Welcome aboard! Provisioned with role: ${selectedCreatorRole}.`
+      'Account Created Successfully! 🎉 (+100 🪙)',
+      `Welcome aboard, ${fullName}! Your creator profile is ready.`
     );
 
     if (navigation && navigation.navigate) {
-      navigation.navigate('GroupList');
+      navigation.navigate('GroupList', { currentUserId: userId });
     }
   };
 
@@ -131,44 +147,118 @@ export default function SignupScreen({ navigation, isDarkMode, coins, setCoins }
         <View style={styles.headerContainer}>
           <Text style={[styles.title, isDarkMode && styles.darkText]}>🚀 Create ChatUp Account (Wallet: {coins} 🪙)</Text>
           <Text style={[styles.subtitle, isDarkMode && { color: '#a0aec0' }]}>
-            Register your creator passport using secure Email OTP authentication.
+            Register instantly using email and password authentication.
           </Text>
         </View>
 
-        {/* Email Input Card */}
-        <View style={[styles.card, isDarkMode && styles.darkCard]}>
+        {/* COMPREHENSIVE PROFILE & CREDENTIALS CARD */}
+        <View style={[styles.card, isDarkMode && styles.darkCard, { borderColor: '#3182ce', borderWidth: 1 }]}>
+          <Text style={[styles.cardTitle, isDarkMode && styles.darkText, { color: '#3182ce', marginBottom: 8 }]}>
+            👤 Creator Profile & Security Passcode
+          </Text>
+
+          <Text style={styles.inputLabel}>Display Name *</Text>
           <TextInput 
-            placeholder="Email Address" 
+            placeholder="e.g. Borris" 
+            placeholderTextColor={isDarkMode ? '#718096' : '#a0aec0'}
+            value={fullName} 
+            onChangeText={setFullName} 
+            style={[styles.input, isDarkMode && styles.darkInput]} 
+          />
+
+          <Text style={styles.inputLabel}>Handle</Text>
+          <TextInput 
+            placeholder="e.g. @borris" 
+            placeholderTextColor={isDarkMode ? '#718096' : '#a0aec0'}
+            value={handle} 
+            onChangeText={setHandle} 
+            style={[styles.input, isDarkMode && styles.darkInput]} 
+            autoCapitalize="none"
+          />
+
+          <Text style={styles.inputLabel}>Email Address *</Text>
+          <TextInput 
+            placeholder="name@example.com" 
             placeholderTextColor={isDarkMode ? '#718096' : '#a0aec0'}
             value={email} 
             onChangeText={setEmail} 
             style={[styles.input, isDarkMode && styles.darkInput]} 
             autoCapitalize="none" 
             keyboardType="email-address"
-            editable={!showOtpField}
+          />
+
+          <Text style={styles.inputLabel}>Password *</Text>
+          <TextInput 
+            placeholder="At least 6 characters..." 
+            placeholderTextColor={isDarkMode ? '#718096' : '#a0aec0'}
+            value={password} 
+            onChangeText={setPassword} 
+            style={[styles.input, isDarkMode && styles.darkInput]} 
+            secureTextEntry
+            autoCapitalize="none"
+          />
+
+          <Text style={styles.inputLabel}>Confirm Password *</Text>
+          <TextInput 
+            placeholder="Re-enter password..." 
+            placeholderTextColor={isDarkMode ? '#718096' : '#a0aec0'}
+            value={confirmPassword} 
+            onChangeText={setConfirmPassword} 
+            style={[styles.input, isDarkMode && styles.darkInput]} 
+            secureTextEntry
+            autoCapitalize="none"
+          />
+
+          <Text style={styles.inputLabel}>Phone Number</Text>
+          <TextInput 
+            placeholder="+256 770 000000" 
+            placeholderTextColor={isDarkMode ? '#718096' : '#a0aec0'}
+            value={phoneNumber} 
+            onChangeText={setPhoneNumber} 
+            style={[styles.input, isDarkMode && styles.darkInput]} 
+            keyboardType="phone-pad"
+          />
+
+          <Text style={styles.inputLabel}>Country / Region</Text>
+          <TextInput 
+            placeholder="e.g. Uganda" 
+            placeholderTextColor={isDarkMode ? '#718096' : '#a0aec0'}
+            value={country} 
+            onChangeText={setCountry} 
+            style={[styles.input, isDarkMode && styles.darkInput]} 
+          />
+
+          <Text style={styles.inputLabel}>Date of Birth</Text>
+          <TextInput 
+            placeholder="Month Day, Year (e.g. April 4)" 
+            placeholderTextColor={isDarkMode ? '#718096' : '#a0aec0'}
+            value={dateOfBirth} 
+            onChangeText={setDateOfBirth} 
+            style={[styles.input, isDarkMode && styles.darkInput]} 
+          />
+
+          <Text style={styles.inputLabel}>Hobbies & Interests</Text>
+          <TextInput 
+            placeholder="e.g. Coding, Football, Nature" 
+            placeholderTextColor={isDarkMode ? '#718096' : '#a0aec0'}
+            value={hobbies} 
+            onChangeText={setHobbies} 
+            style={[styles.input, isDarkMode && styles.darkInput]} 
+          />
+
+          <Text style={styles.inputLabel}>Bio & Channel Description</Text>
+          <TextInput 
+            placeholder="Write a short bio..." 
+            placeholderTextColor={isDarkMode ? '#718096' : '#a0aec0'}
+            value={bio} 
+            onChangeText={setBio} 
+            style={[styles.input, isDarkMode && styles.darkInput, { height: 60, textAlignVertical: 'top', marginBottom: 0 }]} 
+            multiline
           />
         </View>
 
-        {/* Email OTP Code Input Field (Revealed when code is sent) */}
-        {showOtpField && (
-          <View style={[styles.card, isDarkMode && styles.darkCard, { borderColor: '#3182ce', borderWidth: 1 }]}>
-            <Text style={[styles.cardTitle, isDarkMode && styles.darkText, { color: '#3182ce', marginBottom: 6 }]}>
-              Enter 6-Digit Email Verification Code:
-            </Text>
-            <TextInput
-              style={[styles.input, isDarkMode && styles.darkInput, { marginBottom: 0 }]}
-              placeholder="123456"
-              placeholderTextColor={isDarkMode ? '#718096' : '#a0aec0'}
-              value={otpCodeInput}
-              onChangeText={setOtpCodeInput}
-              keyboardType="numeric"
-              maxLength={6}
-            />
-          </View>
-        )}
-
         {/* LAYER 1: BIOMETRIC & PASSKEY AUTO-ENROLLMENT */}
-        <View style={[styles.card, isDarkMode && styles.darkCard, { borderColor: '#3182ce', borderWidth: 1 }]}>
+        <View style={[styles.card, isDarkMode && styles.darkCard]}>
           <View style={styles.settingRow}>
             <View style={{ flex: 1, marginRight: 10 }}>
               <Text style={[styles.cardTitle, isDarkMode && styles.darkText]}>🔒 Biometric & Passkey Fast-Login</Text>
@@ -178,40 +268,27 @@ export default function SignupScreen({ navigation, isDarkMode, coins, setCoins }
               value={biometricEnrollEnabled} 
               onValueChange={setBiometricEnrollEnabled} 
               trackColor={{ false: '#cbd5e0', true: '#3182ce' }}
-              disabled={showOtpField}
             />
           </View>
         </View>
 
         {/* LAYER 2: MULTI-FACTOR AUTHENTICATION (MFA) */}
-        <View style={[styles.card, isDarkMode && styles.darkCard, { borderColor: '#d69e2e', borderWidth: 1 }]}>
+        <View style={[styles.card, isDarkMode && styles.darkCard]}>
           <View style={styles.settingRow}>
             <View style={{ flex: 1, marginRight: 10 }}>
               <Text style={[styles.cardTitle, isDarkMode && styles.darkText]}>🛡️ Multi-Factor Authentication (MFA)</Text>
-              <Text style={{ fontSize: 11, color: isDarkMode ? '#a0aec0' : '#718096' }}>Add Mobile Number verification for advanced safety.</Text>
+              <Text style={{ fontSize: 11, color: isDarkMode ? '#a0aec0' : '#718096' }}>Add secondary verification for advanced safety.</Text>
             </View>
             <Switch 
               value={mfaSetupEnabled} 
               onValueChange={setMfaSetupEnabled} 
               trackColor={{ false: '#cbd5e0', true: '#d69e2e' }}
-              disabled={showOtpField}
             />
           </View>
-          {mfaSetupEnabled && (
-            <TextInput
-              style={[styles.input, isDarkMode && styles.darkInput, { marginTop: 10, marginBottom: 0 }]}
-              placeholder="Mobile Number (e.g. +256 700 000000)..."
-              placeholderTextColor={isDarkMode ? '#718096' : '#a0aec0'}
-              keyboardType="phone-pad"
-              value={phoneNumber}
-              onChangeText={setPhoneNumber}
-              editable={!showOtpField}
-            />
-          )}
         </View>
 
         {/* LAYER 3: CREATOR ACCOUNT & STATION FRANCHISE ROLE */}
-        <View style={[styles.card, isDarkMode && styles.darkCard, { borderColor: '#48bb78', borderWidth: 1 }]}>
+        <View style={[styles.card, isDarkMode && styles.darkCard]}>
           <Text style={[styles.cardTitle, isDarkMode && styles.darkText]}>📡 Select Creator Role & Station Genre</Text>
           <Text style={{ fontSize: 11, color: isDarkMode ? '#a0aec0' : '#718096', marginBottom: 8 }}>Instantly provisions your customized EPG channel category:</Text>
           
@@ -220,8 +297,7 @@ export default function SignupScreen({ navigation, isDarkMode, coins, setCoins }
               <TouchableOpacity
                 key={role}
                 style={[styles.chip, selectedCreatorRole === role && styles.activeChip, isDarkMode && styles.darkChip]}
-                onPress={() => !showOtpField && setSelectedCreatorRole(role)}
-                disabled={showOtpField}
+                onPress={() => setSelectedCreatorRole(role)}
               >
                 <Text style={[styles.chipText, selectedCreatorRole === role && { color: '#fff' }, isDarkMode && selectedCreatorRole !== role && { color: '#cbd5e0' }]}>
                   {role}
@@ -235,8 +311,7 @@ export default function SignupScreen({ navigation, isDarkMode, coins, setCoins }
         <View style={[styles.card, isDarkMode && styles.darkCard, { paddingVertical: 12 }]}>
           <TouchableOpacity 
             style={{ flexDirection: 'row', alignItems: 'center' }}
-            onPress={() => !showOtpField && setAcceptedTerms(!acceptedTerms)}
-            disabled={showOtpField}
+            onPress={() => setAcceptedTerms(!acceptedTerms)}
           >
             <Text style={{ fontSize: 16, marginRight: 10, color: acceptedTerms ? '#38a169' : '#cbd5e0' }}>
               {acceptedTerms ? '☑️' : '◻️'}
@@ -247,39 +322,17 @@ export default function SignupScreen({ navigation, isDarkMode, coins, setCoins }
           </TouchableOpacity>
         </View>
 
-        {/* Action Buttons */}
-        {!showOtpField ? (
-          <TouchableOpacity 
-            style={[styles.primaryButton, isLoading && { opacity: 0.7 }]} 
-            onPress={handleSendOtp}
-            disabled={isLoading}
-          >
-            {isLoading ? <ActivityIndicator color="#fff" style={{ marginRight: 8 }} /> : null}
-            <Text style={styles.primaryButtonText}>
-              {isLoading ? 'Sending OTP Code...' : 'Sign Up & Send Code 📩'}
-            </Text>
-          </TouchableOpacity>
-        ) : (
-          <>
-            <TouchableOpacity 
-              style={[styles.primaryButton, isLoading && { opacity: 0.7 }]} 
-              onPress={handleVerifyOtp}
-              disabled={isLoading}
-            >
-              {isLoading ? <ActivityIndicator color="#fff" style={{ marginRight: 8 }} /> : null}
-              <Text style={styles.primaryButtonText}>
-                {isLoading ? 'Verifying Code...' : 'Verify & Complete Registration 🚀'}
-              </Text>
-            </TouchableOpacity>
-
-            <TouchableOpacity 
-              style={[styles.secondaryButton, isDarkMode && { backgroundColor: '#2d3748' }, { marginBottom: 8 }]} 
-              onPress={() => { setShowOtpField(false); setOtpCodeInput(''); }}
-            >
-              <Text style={[styles.secondaryButtonText, isDarkMode && styles.darkText]}>Change Email / Edit Info ✏️</Text>
-            </TouchableOpacity>
-          </>
-        )}
+        {/* Action Button */}
+        <TouchableOpacity 
+          style={[styles.primaryButton, isLoading && { opacity: 0.7 }]} 
+          onPress={handleRegisterWithPassword}
+          disabled={isLoading}
+        >
+          {isLoading ? <ActivityIndicator color="#fff" style={{ marginRight: 8 }} /> : null}
+          <Text style={styles.primaryButtonText}>
+            {isLoading ? 'Creating Account...' : 'Register Permanent Account 🚀'}
+          </Text>
+        </TouchableOpacity>
 
         <TouchableOpacity 
           style={[styles.secondaryButton, isDarkMode && { backgroundColor: '#2d3748' }]} 
@@ -306,8 +359,9 @@ const styles = StyleSheet.create({
   card: { backgroundColor: '#fff', borderRadius: 12, padding: 12, marginBottom: 12, borderWidth: 1, borderColor: '#e2e8f0' },
   darkCard: { backgroundColor: '#2d3748', borderColor: '#4a5568' },
   cardTitle: { fontSize: 13, fontWeight: 'bold', color: '#2d3748', marginBottom: 4 },
+  inputLabel: { fontSize: 10, fontWeight: 'bold', color: '#a0aec0', marginBottom: 2, marginTop: 6 },
   settingRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
-  input: { borderWidth: 1, borderColor: '#cbd5e0', padding: 12, marginBottom: 10, borderRadius: 8, backgroundColor: '#f7fafc', color: '#2d3748', fontSize: 13 },
+  input: { borderWidth: 1, borderColor: '#cbd5e0', padding: 10, marginBottom: 6, borderRadius: 8, backgroundColor: '#f7fafc', color: '#2d3748', fontSize: 12 },
   darkInput: { backgroundColor: '#1a202c', borderColor: '#4a5568', color: '#fff' },
   chip: { backgroundColor: '#edf2f7', paddingHorizontal: 12, paddingVertical: 8, borderRadius: 8, marginRight: 8 },
   darkChip: { backgroundColor: '#1a202c', borderWidth: 1, borderColor: '#4a5568' },

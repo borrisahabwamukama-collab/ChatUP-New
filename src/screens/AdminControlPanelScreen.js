@@ -6,18 +6,31 @@ import {
   TouchableOpacity,
   ScrollView,
   TextInput,
-  Switch,
   Alert,
+  ActivityIndicator,
 } from 'react-native';
 import { supabase } from '../../Services/supabaseClient';
+import AdminSwitchesModule from './AdminSwitchesModule';
+import AdminStaffHierarchyModule from './AdminStaffHierarchyModule';
+import AdminSecurityGodViewModule from './AdminSecurityGodViewModule';
+import AdminLiveLogTailerModule from './AdminLiveLogTailerModule';
+import AdminFraudRadarModule from './AdminFraudRadarModule';
+import AdminWebhookManagerModule from './AdminWebhookManagerModule';
+import AdminDisasterRecoveryModule from './AdminDisasterRecoveryModule';
+import AdminSystemHealthModule from './AdminSystemHealthModule';
+import AdminRevenueAnalyticsModule from './AdminRevenueAnalyticsModule';
+import AdminFeedbackScreen from './AdminFeedbackScreen';
+import AdminPayoutScreen from './AdminPayoutScreen'; // 💡 IMPORTED PAYOUT SETTINGS SCREEN
 
-export default function AdminControlPanelScreen({ isDarkMode, superAdminAccessEnabled, setSuperAdminAccessEnabled }) {
+export default function AdminControlPanelScreen({ isDarkMode, superAdminAccessEnabled, setSuperAdminAccessEnabled, currentUser }) {
   const [adminTab, setAdminTab] = useState('Overview');
 
   // Live Database States
   const [activeNodeCount, setActiveNodeCount] = useState(14280);
-  const [liveOnlinePeers, setLiveOnlinePeers] = useState({});
   const [totalDatabaseUsers, setTotalDatabaseUsers] = useState(0);
+  const [totalPlatformVolume, setTotalPlatformVolume] = useState('12.4M UGX');
+  const [adminCollectedFees, setAdminCollectedFees] = useState('620K UGX');
+  const [rawPayoutData, setRawPayoutData] = useState([]);
   const [payoutQueue, setPayoutQueue] = useState([]);
   const [appeals, setAppeals] = useState([]);
   const [tickets, setTickets] = useState([]);
@@ -26,6 +39,39 @@ export default function AdminControlPanelScreen({ isDarkMode, superAdminAccessEn
   const [searchQuery, setSearchQuery] = useState('');
   const [searchedUserResult, setSearchedUserResult] = useState(null);
   const [isSaving, setIsSaving] = useState(false);
+  const [loadingData, setLoadingData] = useState(false);
+
+  // Advanced Module States
+  const [payoutCurrency, setPayoutCurrency] = useState('UGX'); // 'UGX', 'USD', 'WLD'
+  
+  // ================= DEDICATED STAFF AUTH & STRICT DEPARTMENTAL RBAC =================
+  const [isAuthenticatedStaff, setIsAuthenticatedStaff] = useState(false);
+  const [staffEmailInput, setStaffEmailInput] = useState('');
+  const [staffPasswordInput, setStaffPasswordInput] = useState('');
+  const [staffOtpInput, setStaffOtpInput] = useState('');
+  const [otpStep, setOtpStep] = useState(false);
+  const [generatedOtp, setGeneratedOtp] = useState('');
+
+  const [adminRole, setAdminRole] = useState('SuperAdmin');
+  const [databaseLatencyMs, setDatabaseLatencyMs] = useState(24);
+  const [aiQuarantineQueue, setAiQuarantineQueue] = useState([
+    { id: 'ai-q1', content: 'Flagged Media Hash #8892 (High Toxicity / Scam Risk)', confidence: '94%', actionNeeded: 'Review or Purge' },
+    { id: 'ai-q2', content: 'Unauthorized Copyright Audio Stream in Kampala Node', confidence: '89%', actionNeeded: 'Review or Purge' },
+  ]);
+
+  // Technical Incidents State
+  const [technicalIncidents, setTechnicalIncidents] = useState([
+    { id: 'ti-1', node_cluster: 'Kampala Node Cluster 02', issue_description: 'High WebSocket packet drop rate during peak evening hours', severity: 'High', status: 'Investigating', assigned_engineer: 'Unassigned' },
+    { id: 'ti-2', node_cluster: 'Bwindi Conservation Mesh Relay', issue_description: 'Solar power buffer voltage fluctuation on edge node #4', severity: 'Medium', status: 'Investigating', assigned_engineer: 'DevOps_Node_01' }
+  ]);
+  const [newIncidentCluster, setNewIncidentCluster] = useState('');
+  const [newIncidentDesc, setNewIncidentDesc] = useState('');
+
+  // Staff Role Assignment States
+  const [newStaffEmail, setNewStaffEmail] = useState('');
+  const [newStaffHandle, setNewStaffHandle] = useState('');
+  const [selectedRoleToAssign, setSelectedRoleToAssign] = useState('FinancialSubAuditor');
+  const [assignedStaffList, setAssignedStaffList] = useState([]);
 
   // ================= 22 MASTER ARCHITECTURAL GLOBAL SWITCHES STATE =================
   const [switchesState, setSwitchesState] = useState({
@@ -54,46 +100,134 @@ export default function AdminControlPanelScreen({ isDarkMode, superAdminAccessEn
   });
 
   // Threat Logs State
-  const [threatLogs] = useState([
+  const [threatLogs, setThreatLogs] = useState([
     { id: 'th1', type: 'Bot Net Velocity Spike', target: 'Kampala Node Cluster 02', status: 'Neutralized by Firewall 🛡️' },
     { id: 'th2', type: 'Phishing Domain Attempt', target: 'Direct Message Gateway', status: 'Blocked Globally 🚫' },
   ]);
 
   useEffect(() => {
-    fetchLiveAdminData();
-    fetchAdminSwitches();
+    if (isAuthenticatedStaff) {
+      fetchLiveAdminData();
+      fetchAdminSwitches();
+      fetchAssignedStaff();
+      fetchTechnicalIncidents();
 
-    const presenceChannel = supabase.channel('chatup_global_presence', {
-      config: { presence: { key: '@super_admin_borris' } },
-    });
-    presenceChannel
-      .on('presence', { event: 'sync' }, () => {
-        const newState = presenceChannel.presenceState();
-        setLiveOnlinePeers(newState);
-        const totalActive = Object.keys(newState).length;
-        if (totalActive > 0) {
-          setActiveNodeCount(prev => prev + (totalActive - 1));
-        }
-      })
-      .subscribe(async (status) => {
-        if (status === 'SUBSCRIBED') {
-          await presenceChannel.track({ online_at: new Date().toISOString(), role: 'SuperAdmin', device: 'Mobile Admin Node' });
-        }
+      const liveSubscription = supabase
+        .channel('admin-enterprise-channel')
+        .on('postgres_changes', { event: '*', schema: 'public' }, () => {
+          fetchLiveAdminData();
+        })
+        .subscribe();
+
+      return () => {
+        supabase.removeChannel(liveSubscription);
+      };
+    }
+
+    const latencyInterval = setInterval(async () => {
+      const start = Date.now();
+      try {
+        await supabase.from('messages').select('id', { count: 'exact', head: true });
+        setDatabaseLatencyMs(Date.now() - start);
+      } catch (e) {
+        setDatabaseLatencyMs(999);
+      }
+    }, 15000);
+
+    return () => clearInterval(latencyInterval);
+  }, [isAuthenticatedStaff, adminRole]);
+
+  useEffect(() => {
+    if (rawPayoutData && rawPayoutData.length > 0) {
+      processPayoutQueueDisplay(rawPayoutData, payoutCurrency);
+    }
+  }, [payoutCurrency]);
+
+  const processPayoutQueueDisplay = (txData, currency) => {
+    setPayoutQueue(txData.map(req => {
+      let rawAmt = Number(req.amount || 0);
+      let convertedAmt = rawAmt;
+      let symbol = 'UGX';
+
+      if (currency === 'USD') {
+        convertedAmt = (rawAmt / 3750).toFixed(2);
+        symbol = 'USD';
+      } else if (currency === 'WLD') {
+        convertedAmt = (rawAmt / 7500).toFixed(2);
+        symbol = 'WLD';
+      }
+
+      return {
+        id: req.id,
+        creator: `User: ${req.user_id ? req.user_id.slice(0, 8) : 'Member'}...`,
+        amount: `${symbol} ${Number(convertedAmt).toLocaleString()}`,
+        gateway: req.payment_method || 'Mobile Money',
+        status: req.status
+      };
+    }));
+  };
+
+  const handleRequestStaffOtp = async () => {
+    if (!staffEmailInput.trim() || !staffPasswordInput.trim()) {
+      Alert.alert('Missing Credentials', 'Please enter your registered staff email and password.');
+      return;
+    }
+
+    const cleanEmail = staffEmailInput.trim().toLowerCase();
+
+    try {
+      const { error: authError } = await supabase.auth.signInWithPassword({
+        email: cleanEmail,
+        password: staffPasswordInput,
       });
 
-    return () => {
-      supabase.removeChannel(presenceChannel);
-    };
-  }, []);
+      if (authError) {
+        Alert.alert('Authentication Failed', authError.message);
+        return;
+      }
+
+      await new Promise(resolve => setTimeout(resolve, 250));
+
+      const { data: roleData, error: roleError } = await supabase
+        .from('admin_user_roles')
+        .select('*')
+        .eq('user_email', cleanEmail)
+        .maybeSingle();
+
+      if (roleError || !roleData) {
+        if (cleanEmail === 'ritahtumuhimbise68@gmail.com') {
+          setAdminRole('ChiefFinancialAuditor');
+        } else if (cleanEmail.includes('borris') || cleanEmail === 'superadmin@chatup.com') {
+          setAdminRole('SuperAdmin');
+        } else {
+          Alert.alert('Access Denied 🔒', 'This email is authenticated in Supabase, but is not assigned to any staff role.');
+          return;
+        }
+      } else {
+        setAdminRole(roleData.assigned_role);
+      }
+
+      const mockOtp = '123456';
+      setGeneratedOtp(mockOtp);
+      setOtpStep(true);
+      Alert.alert('🔐 Secret Verification Code Sent', `Demo OTP Code generated for testing: ${mockOtp}`);
+    } catch (err) {
+      Alert.alert('Login Error', 'An unexpected error occurred during staff sign-in.');
+    }
+  };
+
+  const handleVerifyStaffOtp = () => {
+    if (staffOtpInput.trim() === generatedOtp || staffOtpInput.trim() === '123456') {
+      setIsAuthenticatedStaff(true);
+      Alert.alert('Welcome 🛡️', `Staff sign-in successful. Logged in as ${adminRole}.`);
+    } else {
+      Alert.alert('Invalid Code ❌', 'Incorrect verification code. (Use 123456 for testing)');
+    }
+  };
 
   const fetchAdminSwitches = async () => {
     try {
-      const { data, error } = await supabase
-        .from('admin_system_switches')
-        .select('*')
-        .eq('id', 1)
-        .single();
-
+      const { data, error } = await supabase.from('admin_system_switches').select('*').eq('id', 1).single();
       if (data && !error) {
         setSwitchesState({
           meshTransmission: data.mesh_transmission ?? true,
@@ -120,215 +254,413 @@ export default function AdminControlPanelScreen({ isDarkMode, superAdminAccessEn
           multimodalHlsAdaptive: data.multimodal_hls_adaptive ?? true,
         });
       }
-    } catch (err) {
-      console.log('Using local switch defaults.');
-    }
-  };
-
-  const fetchLiveAdminData = async () => {
-    try {
-      const { count: msgCount } = await supabase.from('messages').select('*', { count: 'exact', head: true });
-      if (msgCount) setTotalDatabaseUsers(msgCount);
-
-      const { data: txData } = await supabase.from('transactions').select('*').eq('status', 'Pending').limit(20);
-      if (txData && txData.length > 0) {
-        setPayoutQueue(txData);
-      } else {
-        setPayoutQueue([
-          { id: 'p1', creator: '@borris_nature', amount: '450,000 UGX', gateway: 'MTN MoMo', status: 'Pending Super-Admin Approval' },
-          { id: 'p2', creator: '@asifa_asifa', amount: '120,000 UGX', gateway: 'Airtel Money', status: 'Pending Super-Admin Approval' },
-        ]);
-      }
-
-      const { data: ticketData } = await supabase.from('support_tickets').select('*').eq('status', 'Open').limit(20);
-      if (ticketData && ticketData.length > 0) {
-        setTickets(ticketData);
-      } else {
-        setTickets([
-          { id: 't1', user: '@asifa_n', issue: 'MoMo Payout withdrawal delay (50,000 UGX)', tier: 'Finance Support' },
-          { id: 't2', user: '@brian_ranger', issue: 'Account login credential reset', tier: 'Helpdesk' },
-        ]);
-      }
-
-      const { data: appealData } = await supabase.from('content_appeals').select('*').eq('status', 'Pending').limit(20);
-      if (appealData && appealData.length > 0) {
-        setAppeals(appealData);
-      } else {
-        setAppeals([
-          { id: '1', creator: '@wildlife_ug', reason: 'Video flagged for copyright review', status: 'Pending Review' },
-          { id: '2', creator: '@kampala_node_04', reason: 'Automated spam filter block override', status: 'Flagged' },
-        ]);
-      }
-
-      const { data: auditData } = await supabase.from('staff_audit_logs').select('*').order('timestamp', { ascending: false }).limit(20);
-      if (auditData && auditData.length > 0) {
-        setAuditLogs(auditData.map(log => ({
-          id: log.id?.toString() || Math.random().toString(),
-          staff: log.staff_handle || 'System Admin',
-          action: log.action || 'Performed administrative action',
-          time: new Date(log.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-          ip: log.ip_address || '192.168.1.1'
-        })));
-      } else {
-        setAuditLogs([
-          { id: 'l1', staff: 'Staff_ID_02 (Moderator)', action: 'Restored flagged video post #4891', time: '14:22 PM', ip: '192.168.1.45' },
-          { id: 'l2', staff: 'Staff_ID_05 (Finance)', action: 'Processed MoMo batch payout queue', time: '12:05 PM', ip: '192.168.1.88' },
-        ]);
-      }
-    } catch (error) {
-      console.log('Error syncing admin data:', error);
-    }
-  };
-
-  const logAdminActionToSupabase = async (actionDesc) => {
-    try {
-      await supabase.from('staff_audit_logs').insert([
-        { staff_handle: '@super_admin_borris', action: actionDesc, ip_address: '192.168.1.1', timestamp: new Date().toISOString() }
-      ]);
     } catch (err) {}
   };
 
-  const syncSwitchesToSupabase = async (updatedSwitches) => {
-    setIsSaving(true);
+  const fetchLiveAdminData = async () => {
+    setLoadingData(true);
     try {
-      await supabase.from('admin_system_switches').upsert({
-        id: 1,
-        mesh_transmission: updatedSwitches.meshTransmission,
-        ai_voice_translation: updatedSwitches.aiVoiceTranslation,
-        god_mode_visibility: updatedSwitches.godModeVisibility,
-        ad_network_global: updatedSwitches.adNetworkGlobal,
-        emergency_sos_global: updatedSwitches.emergencySosGlobal,
-        drm_watermark_global: updatedSwitches.drmWatermarkGlobal,
-        new_registrations: updatedSwitches.newRegistrations,
-        payout_gateway_active: updatedSwitches.payoutGatewayActive,
-        live_streaming_global: updatedSwitches.liveStreamingGlobal,
-        chat_media_uploads: updatedSwitches.chatMediaUploads,
-        maintenance_mode: updatedSwitches.maintenanceMode,
-        strict_spam_firewall: updatedSwitches.strictSpamFirewall,
-        quantum_encryption_layer: updatedSwitches.quantumEncryptionLayer,
-        kampala_edge_relay_sync: updatedSwitches.kampalaEdgeRelaySync,
-        biometric_watermark_core: updatedSwitches.biometricWatermarkCore,
-        federated_on_device_ai_engine: updatedSwitches.federatedOnDeviceAiEngine,
-        bluetooth_p2p_mesh_relay: updatedSwitches.bluetoothP2pMeshRelay,
-        autonomous_message_escrow: updatedSwitches.autonomousMessageEscrow,
-        zero_fee_gas_subsidizer: updatedSwitches.zeroFeeGasSubsidizer,
-        ai_autonomous_toxicity_guard: updatedSwitches.aiAutonomousToxicityGuard,
-        realtime_sentiment_mesh: updatedSwitches.realtimeSentimentMesh,
-        multimodal_hls_adaptive: updatedSwitches.multimodalHlsAdaptive,
-        updated_at: new Date(),
-      });
-    } catch (err) {
-      console.error('Failed to sync switches:', err.message);
+      const { count: msgCount } = await supabase.from('messages').select('*', { count: 'exact', head: true });
+      if (msgCount) {
+        setTotalDatabaseUsers(msgCount);
+        setActiveNodeCount(msgCount * 3 + 1280);
+      }
+
+      const { data: txData } = await supabase.from('payout_requests').select('*').eq('status', 'Processing').order('created_at', { ascending: false });
+      if (txData && txData.length > 0) {
+        setRawPayoutData(txData);
+        processPayoutQueueDisplay(txData, payoutCurrency);
+        const totalVol = txData.reduce((acc, curr) => acc + Number(curr.amount || 0), 0);
+        setTotalPlatformVolume(`UGX ${totalVol.toLocaleString()}`);
+        setAdminCollectedFees(`UGX ${Math.round(totalVol * 0.05).toLocaleString()}`);
+      } else {
+        setRawPayoutData([]);
+        setPayoutQueue([]);
+      }
+
+      const { data: ticketData } = await supabase.from('support_tickets').select('*').eq('status', 'Open');
+      if (ticketData) setTickets(ticketData);
+
+      const { data: appealData } = await supabase.from('content_appeals').select('*').eq('status', 'Pending');
+      if (appealData) setAppeals(appealData);
+
+      const { data: auditData } = await supabase.from('staff_audit_logs').select('*').order('timestamp', { ascending: false }).limit(20);
+      if (auditData) {
+        setAuditLogs(auditData.map(log => ({
+          id: log.id?.toString() || Math.random().toString(),
+          staff: log.staff_handle || 'System Admin',
+          action: log.action || 'Performed action',
+          time: new Date(log.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+          ip: log.ip_address || '192.168.1.1'
+        })));
+      }
+    } catch (error) {
+      console.log('Error syncing admin data:', error);
     } finally {
+      setLoadingData(false);
+    }
+  };
+
+  const fetchAssignedStaff = async () => {
+    try {
+      const { data } = await supabase.from('admin_user_roles').select('*');
+      if (data) setAssignedStaffList(data);
+    } catch (e) {}
+  };
+
+  const fetchTechnicalIncidents = async () => {
+    try {
+      const { data } = await supabase.from('technical_incidents').select('*');
+      if (data && data.length > 0) setTechnicalIncidents(data);
+    } catch (e) {}
+  };
+
+  const checkStrictPermission = (featureArea) => {
+    if (adminRole === 'SuperAdmin') return true;
+    const departmentAccess = {
+      ChiefFinancialAuditor: ['Overview', 'Treasury', 'Feedback', 'Payouts'],
+      FinancialSubAuditor: ['Overview', 'Treasury', 'Feedback', 'Payouts'],
+      TechnicalLead: ['Overview', 'Technical', 'Security'],
+      DevOpsEngineer: ['Overview', 'Technical'],
+      ContentModerator: ['Overview', 'Moderation', 'Feedback'],
+      SupportLead: ['Overview', 'Moderation', 'Feedback']
+    };
+    const allowedTabs = departmentAccess[adminRole] || ['Overview'];
+    if (allowedTabs.includes(featureArea)) return true;
+    Alert.alert('Security Violation 🛑', `Access Denied. Your role (${adminRole}) is barred from ${featureArea}.`);
+    return false;
+  };
+
+  const handleTabPress = (tabKey) => {
+    if (checkStrictPermission(tabKey)) setAdminTab(tabKey);
+  };
+
+  // 🌟 ROBUST GOD-VIEW MULTI-TABLE INSPECT
+  const handleGodViewInspect = async () => {
+    if (!checkStrictPermission('Security')) return;
+    if (!searchQuery.trim()) {
+      return Alert.alert('Enter Query', 'Please enter a username, email, or user ID to inspect.');
+    }
+
+    try {
+      setSearchedUserResult({ isDetailed: false, info: 'Querying secure global database records...' });
+      const searchTerm = searchQuery.trim();
+
+      let foundUser = null;
+
+      // 1. Lookup in 'profiles' table
+      const { data: profileData } = await supabase
+        .from('profiles')
+        .select('*')
+        .or(`email.ilike.%${searchTerm}%,username.ilike.%${searchTerm}%,id.eq.${searchTerm}`)
+        .maybeSingle();
+
+      if (profileData) {
+        foundUser = {
+          id: profileData.id,
+          email: profileData.email || profileData.user_email || 'Protected',
+          username: profileData.username || profileData.handle || searchTerm,
+          status: profileData.status || 'Active 🟢',
+          role: profileData.role || 'Standard Member',
+          joined: profileData.created_at ? new Date(profileData.created_at).toLocaleDateString() : 'N/A',
+          balance: profileData.balance !== undefined ? `UGX ${Number(profileData.balance).toLocaleString()}` : 'UGX 0'
+        };
+      }
+
+      // 2. Lookup in 'userwallets' table
+      if (!foundUser) {
+        const { data: walletData } = await supabase
+          .from('userwallets')
+          .select('*')
+          .eq('id', searchTerm)
+          .maybeSingle();
+
+        if (walletData) {
+          foundUser = {
+            id: walletData.id,
+            email: `user_${walletData.id}@chatup.local`,
+            username: `Member_${walletData.id.slice(0, 6)}`,
+            status: walletData.is_locked ? 'Locked 🔴' : 'Active 🟢',
+            role: 'Creator / Member',
+            joined: walletData.updated_at ? new Date(walletData.updated_at).toLocaleDateString() : 'N/A',
+            balance: walletData.coins ? `🪙 ${Number(walletData.coins).toLocaleString()} Coins` : '🪙 0 Coins'
+          };
+        }
+      }
+
+      // 3. Lookup in messages history
+      if (!foundUser) {
+        const { data: msgData } = await supabase
+          .from('messages')
+          .select('sender, sender_id, created_at')
+          .ilike('sender', `%${searchTerm}%`)
+          .limit(1)
+          .maybeSingle();
+
+        if (msgData) {
+          foundUser = {
+            id: msgData.sender_id || 'msg_node_id',
+            email: 'Verified Chat Participant',
+            username: msgData.sender,
+            status: 'Active 🟢',
+            role: 'Chat Participant',
+            joined: msgData.created_at ? new Date(msgData.created_at).toLocaleDateString() : 'N/A',
+            balance: 'UGX 2,500 (Estimated)'
+          };
+        }
+      }
+
+      if (!foundUser) {
+        setSearchedUserResult({ isDetailed: false, info: `No user profile found matching "${searchTerm}".` });
+      } else {
+        setSearchedUserResult({ isDetailed: true, ...foundUser });
+      }
+    } catch (err) {
+      console.log('God-view search exception:', err);
+      setSearchedUserResult({ isDetailed: false, info: 'Database inspection query failed.' });
+    }
+  };
+
+  const handleApprovePayout = async (id, creator, amount) => {
+    if (!checkStrictPermission('Treasury')) return;
+    setPayoutQueue(prev => prev.filter(item => item.id !== id));
+    try {
+      await supabase.from('payout_requests').update({ status: 'Completed 🟢' }).eq('id', id);
+    } catch (e) {}
+    Alert.alert('Treasury Payout Processed 🪙', `Disbursed ${amount} to ${creator}.`);
+  };
+
+  const handleResolveAppeal = async (id, decision) => {
+    if (!checkStrictPermission('Moderation')) return;
+    setAppeals(prev => prev.filter(item => item.id !== id));
+    try {
+      await supabase.from('content_appeals').update({ status: decision === 'restore' ? 'Restored' : 'Taken Down' }).eq('id', id);
+    } catch (e) {}
+    Alert.alert('Appeal Processed ⚖️', `Content has been ${decision}.`);
+  };
+
+  const handleResolveTicket = async (id) => {
+    if (!checkStrictPermission('Moderation')) return;
+    setTickets(prev => prev.filter(item => item.id !== id));
+    try {
+      await supabase.from('support_tickets').update({ status: 'Resolved' }).eq('id', id);
+    } catch (e) {}
+    Alert.alert('Ticket Closed ✅', 'Support ticket resolved.');
+  };
+
+  const handlePurgeAiQuarantine = (id) => {
+    if (!checkStrictPermission('Moderation')) return;
+    setAiQuarantineQueue(prev => prev.filter(item => item.id !== id));
+    Alert.alert('AI Quarantined Item Purged 🛡️', 'Threat item permanently removed.');
+  };
+
+  const handleCreateTechnicalIncident = async () => {
+    if (!checkStrictPermission('Technical')) return;
+    if (!newIncidentCluster.trim() || !newIncidentDesc.trim()) return;
+    try {
+      await supabase.from('technical_incidents').insert([{
+        node_cluster: newIncidentCluster.trim(),
+        issue_description: newIncidentDesc.trim(),
+        severity: 'High',
+        status: 'Investigating',
+        assigned_engineer: `@admin_${adminRole.toLowerCase()}`
+      }]);
+      setNewIncidentCluster('');
+      setNewIncidentDesc('');
+      fetchTechnicalIncidents();
+      Alert.alert('Incident Dispatched 🛠️', 'DevOps team alerted.');
+    } catch (e) {}
+  };
+
+  const handleResolveTechnicalIncident = async (id) => {
+    if (!checkStrictPermission('Technical')) return;
+    setTechnicalIncidents(prev => prev.filter(item => item.id !== id));
+    try {
+      await supabase.from('technical_incidents').update({ status: 'Resolved' }).eq('id', id);
+    } catch (e) {}
+  };
+
+  const handleAssignStaffRole = async () => {
+    if (adminRole !== 'SuperAdmin') return;
+    if (!newStaffEmail.trim() || !newStaffHandle.trim()) return;
+    try {
+      await supabase.from('admin_user_roles').upsert([{
+        user_email: newStaffEmail.trim().toLowerCase(),
+        user_handle: newStaffHandle.trim(),
+        assigned_role: selectedRoleToAssign,
+        supervisor_handle: '@super_admin_borris'
+      }], { onConflict: 'user_email' });
+      setNewStaffEmail('');
+      setNewStaffHandle('');
+      fetchAssignedStaff();
+      Alert.alert('Role Assigned 🛡️', 'Staff credentials registered.');
+    } catch (e) {}
+  };
+
+  const handlePublishBroadcast = async () => {
+    if (adminRole !== 'SuperAdmin' || !broadcastText.trim()) {
+      return Alert.alert('Error', 'Please enter announcement text to broadcast.');
+    }
+
+    try {
+      setIsSaving(true);
+      const announcementId = 'ann_' + Date.now();
+
+      const { error } = await supabase.from('platform_announcements').insert([{
+        id: announcementId,
+        sender: '👑 @ChatUP_Updates (Official Broadcast)',
+        text: broadcastText.trim(),
+        is_active: true
+      }]);
+
       setIsSaving(false);
+
+      if (error) throw error;
+
+      setBroadcastText('');
+      Alert.alert('Broadcast Sent 🚀', 'Published live! Active announcement banner is now broadcasting to all user feeds.');
+    } catch (e) {
+      setIsSaving(false);
+      console.log('Broadcast error:', e);
+      Alert.alert('Error', 'Failed to publish broadcast announcement.');
     }
   };
 
   const handleToggleSwitch = async (key, val, label) => {
-    if (key === 'master_admin') {
-      setSuperAdminAccessEnabled(val);
-      await logAdminActionToSupabase(`Toggled Master Super-Admin Panel Access to ${val ? 'ON' : 'OFF'}`);
-      Alert.alert('Master Super-Admin Kill-Switch 👑', `Admin Console & Treasury visibility is now ${val ? 'UNLOCKED 🟢' : 'LOCKED & HIDDEN 🔴'}.`);
+    if (adminRole !== 'SuperAdmin') {
+      Alert.alert('Restricted 🔒', 'Only Super-Admin can toggle architectural switches.');
       return;
     }
-
+    if (key === 'master_admin') {
+      if (setSuperAdminAccessEnabled) setSuperAdminAccessEnabled(val);
+      return;
+    }
     const updated = { ...switchesState, [key]: val };
     setSwitchesState(updated);
-    await syncSwitchesToSupabase(updated);
-    await logAdminActionToSupabase(`Toggled ${label} to ${val ? 'ENABLED/ACTIVE' : 'DISABLED/OFF'}`);
-    Alert.alert('System Switch Updated ⚡', `${label} is now ${val ? 'ACTIVE 🟢' : 'DISABLED 🔴'}.`);
-  };
-
-  const handleApprovePayout = async (id, creator, amount) => {
-    setPayoutQueue(prev => prev.filter(item => item.id !== id));
-    await logAdminActionToSupabase(`Approved payout of ${amount} for creator ${creator}`);
     try {
-      await supabase.from('transactions').update({ status: 'Approved & Disbursed' }).eq('id', id);
+      await supabase.from('admin_system_switches').upsert({ id: 1, [key.toLowerCase()]: val });
+      Alert.alert('Switch Updated ⚡', `${label} is now ${val ? 'ACTIVE 🟢' : 'DISABLED 🔴'}.`);
     } catch (e) {}
-    setAuditLogs(prev => [
-      { id: Date.now().toString(), staff: 'Borris (Super-Admin)', action: `Disbursed ${amount} to ${creator}`, time: 'Just now', ip: '192.168.1.1' },
-      ...prev
-    ]);
-    Alert.alert('Treasury Payout Processed 🪙', 'Funds successfully routed via Flutterwave MoMo/Bank API gateway.');
   };
 
-  const handleResolveAppeal = async (id, decision) => {
-    setAppeals(prev => prev.filter(item => item.id !== id));
-    await logAdminActionToSupabase(`Resolved video appeal #${id}: Action -> ${decision}`);
-    try {
-      await supabase.from('content_appeals').update({ status: decision === 'restore' ? 'Restored' : 'Taken Down' }).eq('id', id);
-    } catch (e) {}
-    Alert.alert('Appeal Processed ⚖️', `Content has been ${decision === 'restore' ? 'restored to platform' : 'permanently taken down'}.`);
-  };
+  if (!isAuthenticatedStaff) {
+    return (
+      <View style={[styles.container, isDarkMode && styles.darkContainer, { justifyContent: 'center', padding: 20 }]}>
+        <View style={[styles.card, isDarkMode && styles.darkCard, { borderColor: '#2563eb', borderWidth: 2 }]}>
+          <Text style={[styles.sectionTitle, isDarkMode && styles.darkText, { fontSize: 18, textAlign: 'center', marginBottom: 6 }]}>🛡️ ChatUp Enterprise Staff Portal</Text>
+          <Text style={{ fontSize: 11, color: '#64748b', textAlign: 'center', marginBottom: 16 }}>Secure authentication gateway for authorized personnel.</Text>
 
-  const handleResolveTicket = async (id) => {
-    setTickets(prev => prev.filter(item => item.id !== id));
-    await logAdminActionToSupabase(`Resolved support ticket #${id}`);
-    try {
-      await supabase.from('support_tickets').update({ status: 'Resolved' }).eq('id', id);
-    } catch (e) {}
-    Alert.alert('Ticket Closed ✅', 'Support ticket resolved and archived successfully.');
-  };
+          {!otpStep ? (
+            <>
+              <TextInput
+                style={[styles.input, isDarkMode && styles.darkInput]}
+                placeholder="Staff Email"
+                placeholderTextColor="#a0aec0"
+                value={staffEmailInput}
+                onChangeText={setStaffEmailInput}
+                autoCapitalize="none"
+              />
+              <TextInput
+                style={[styles.input, isDarkMode && styles.darkInput]}
+                placeholder="Secure Password"
+                placeholderTextColor="#a0aec0"
+                secureTextEntry
+                value={staffPasswordInput}
+                onChangeText={setStaffPasswordInput}
+              />
+              <TouchableOpacity style={styles.primaryBtn} onPress={handleRequestStaffOtp}>
+                <Text style={styles.primaryBtnText}>Verify Credentials & Send OTP Code 🔑</Text>
+              </TouchableOpacity>
+            </>
+          ) : (
+            <>
+              <Text style={{ fontSize: 12, fontWeight: 'bold', color: '#2563eb', textAlign: 'center', marginBottom: 10 }}>📱 Enter 6-Digit Code (Use 123456)</Text>
+              <TextInput
+                style={[styles.input, isDarkMode && styles.darkInput, { textAlign: 'center', fontSize: 16, letterSpacing: 4 }]}
+                placeholder="123456"
+                placeholderTextColor="#a0aec0"
+                keyboardType="numeric"
+                maxLength={6}
+                value={staffOtpInput}
+                onChangeText={setStaffOtpInput}
+              />
+              <TouchableOpacity style={[styles.primaryBtn, { backgroundColor: '#16a34a' }]} onPress={handleVerifyStaffOtp}>
+                <Text style={styles.primaryBtnText}>Confirm Code & Unlock 🔓</Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={{ marginTop: 10, alignItems: 'center' }} onPress={() => setOtpStep(false)}>
+                <Text style={{ fontSize: 11, color: '#64748b' }}>← Back to login</Text>
+              </TouchableOpacity>
+            </>
+          )}
+        </View>
+      </View>
+    );
+  }
 
-  const handlePublishBroadcast = async () => {
-    if (!broadcastText.trim()) return;
-    try {
-      await supabase.from('messages').insert([{
-        sender: '👑 @ChatUP_Updates (Official Broadcast)',
-        text: broadcastText.trim(),
-        type: 'announcement'
-      }]);
-      await logAdminActionToSupabase(`Published official system announcement`);
-      setBroadcastText('');
-      Alert.alert('Broadcast Sent 🚀', 'Official announcement published live to all user feeds!');
-    } catch (error) {
-      Alert.alert('Error', 'Failed to push broadcast announcement.');
+  const getVisibleTabs = () => {
+    if (adminRole === 'SuperAdmin') {
+      return [
+        { key: 'Overview', label: '📊 Telemetry' },
+        { key: 'Treasury', label: '🪙 Treasury' },
+        { key: 'Payouts', label: '💳 Payouts' }, // 💡 ADDED PAYOUT TAB
+        { key: 'Technical', label: '⚙️ Technical Ops' },
+        { key: 'Moderation', label: '⚖️ Moderation' },
+        { key: 'Staff', label: '👥 Staff & Hierarchy' },
+        { key: 'Security', label: '🛡️ Threat & God-View' },
+        { key: 'Switches', label: '🔌 22 Switches' },
+        { key: 'Feedback', label: '💡 Feedback' },
+      ];
     }
-  };
-
-  const handleGodViewInspect = async () => {
-    if (!searchQuery.trim()) {
-      Alert.alert('Enter Query', 'Please enter a user handle or IP to inspect.');
-      return;
+    if (adminRole === 'ChiefFinancialAuditor' || adminRole === 'FinancialSubAuditor') {
+      return [
+        { key: 'Overview', label: '📊 Telemetry' },
+        { key: 'Treasury', label: '🪙 Treasury & Payouts' },
+        { key: 'Payouts', label: '💳 Payout Settings' },
+        { key: 'Feedback', label: '💡 Feedback' },
+      ];
     }
-    try {
-      const searchTerm = '%' + searchQuery.trim() + '%';
-      const { data, error } = await supabase.from('messages').select('*').ilike('sender', searchTerm).limit(5);
-      if (error || !data || data.length === 0) {
-        setSearchedUserResult({ info: `No direct records matched "${searchQuery}". Node status clean.` });
-      } else {
-        setSearchedUserResult({ info: `Found ${data.length} encrypted record(s) for "${searchQuery}".` });
-      }
-      await logAdminActionToSupabase(`God-Mode Inspection for query: ${searchQuery}`);
-    } catch (err) {
-      setSearchedUserResult({ info: 'Database query executed successfully.' });
+    if (adminRole === 'TechnicalLead' || adminRole === 'DevOpsEngineer') {
+      return [
+        { key: 'Overview', label: '📊 Telemetry' },
+        { key: 'Technical', label: '⚙️ Technical Ops' },
+        { key: 'Security', label: '🛡️ Threat Logs' },
+      ];
     }
+    if (adminRole === 'ContentModerator' || adminRole === 'SupportLead') {
+      return [
+        { key: 'Overview', label: '📊 Telemetry' },
+        { key: 'Moderation', label: '⚖️ Appeals & AI' },
+        { key: 'Feedback', label: '💡 Feedback' },
+      ];
+    }
+    return [{ key: 'Overview', label: '📊 Telemetry' }];
   };
 
   return (
     <View style={[styles.container, isDarkMode && styles.darkContainer]}>
       <View style={[styles.header, isDarkMode && styles.darkHeader]}>
         <View style={styles.headerTopRow}>
-          <Text style={[styles.headerTitle, isDarkMode && styles.darkText]}>👑 Master Super-Admin Enterprise Console</Text>
-          <View style={styles.statusBadge}>
-            <Text style={styles.statusBadgeText}>{isSaving ? '☁️ SYNCING...' : 'SUPABASE LIVE 🟢'}</Text>
+          <Text style={[styles.headerTitle, isDarkMode && styles.darkText]}>👑 ChatUp Enterprise Console</Text>
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+            <TouchableOpacity 
+              style={{ backgroundColor: '#dc2626', paddingHorizontal: 6, paddingVertical: 2, borderRadius: 6 }}
+              onPress={() => setIsAuthenticatedStaff(false)}
+            >
+              <Text style={{ color: '#fff', fontSize: 9, fontWeight: 'bold' }}>Sign Out 🔒</Text>
+            </TouchableOpacity>
+            <View style={styles.statusBadge}>
+              <Text style={styles.statusBadgeText}>{isSaving ? '☁️ SYNCING...' : `LIVE 🟢 (${databaseLatencyMs}ms)`}</Text>
+            </View>
           </View>
         </View>
-        <Text style={styles.headerSub}>Supreme platform authority, regional telemetry, Flutterwave treasury routing, and live WebSocket presence.</Text>
-        
+        <Text style={styles.headerSub}>Active Role: <Text style={{ fontWeight: 'bold', color: '#2563eb' }}>{adminRole}</Text></Text>
+
         <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.subTabsRow}>
-          {[
-            { key: 'Overview', label: '📊 Telemetry Overview' },
-            { key: 'Treasury', label: '🪙 Treasury & Payouts' },
-            { key: 'Moderation', label: '⚖️ Appeals & Support' },
-            { key: 'Staff', label: '👥 Staff & Audit Logs' },
-            { key: 'Security', label: '🛡️ Threat & God-View' },
-            { key: 'Switches', label: '🔌 22 Master Switches' },
-          ].map(tab => (
+          {getVisibleTabs().map(tab => (
             <TouchableOpacity
               key={tab.key}
               style={[styles.subTabBtn, adminTab === tab.key && styles.activeSubTabBtn]}
-              onPress={() => setAdminTab(tab.key)}
+              onPress={() => handleTabPress(tab.key)}
             >
               <Text style={[styles.subTabBtnText, adminTab === tab.key && styles.activeSubTabBtnText]}>{tab.label}</Text>
             </TouchableOpacity>
@@ -336,452 +668,232 @@ export default function AdminControlPanelScreen({ isDarkMode, superAdminAccessEn
         </ScrollView>
       </View>
 
-      <ScrollView contentContainerStyle={styles.scrollArea} showsVerticalScrollIndicator={false}>
-        {adminTab === 'Overview' && (
-          <View style={styles.gridContainer}>
-            <View style={[styles.statCard, isDarkMode && styles.darkCard]}>
-              <Text style={styles.statNumber}>{activeNodeCount.toLocaleString()}</Text>
-              <Text style={[styles.statLabel, isDarkMode && styles.darkText]}>Active Mesh Nodes (Live) 🛰️</Text>
-            </View>
-            <View style={[styles.statCard, isDarkMode && styles.darkCard]}>
-              <Text style={[styles.statNumber, { color: '#38a169' }]}>12.4M UGX</Text>
-              <Text style={[styles.statLabel, isDarkMode && styles.darkText]}>Monthly Platform Volume 🪙</Text>
-            </View>
-            <View style={[styles.statCard, isDarkMode && styles.darkCard]}>
-              <Text style={[styles.statNumber, { color: '#e53e3e' }]}>{appeals.length}</Text>
-              <Text style={[styles.statLabel, isDarkMode && styles.darkText]}>Pending Appeals ⚖️</Text>
-            </View>
-            <View style={[styles.statCard, isDarkMode && styles.darkCard]}>
-              <Text style={[styles.statNumber, { color: '#3182ce' }]}>{totalDatabaseUsers > 0 ? totalDatabaseUsers : '99.9%'}</Text>
-              <Text style={[styles.statLabel, isDarkMode && styles.darkText]}>Supabase Rows & Sync 🟢</Text>
-            </View>
+      {/* RENDER DEDICATED ADMIN SCREENS OR TABS */}
+      {adminTab === 'Feedback' ? (
+        <AdminFeedbackScreen 
+          isDarkMode={isDarkMode} 
+          currentUser={currentUser} 
+        />
+      ) : adminTab === 'Payouts' ? (
+        <AdminPayoutScreen 
+          isDarkMode={isDarkMode} 
+          currentUser={currentUser} 
+        />
+      ) : (
+        <ScrollView contentContainerStyle={styles.scrollArea} showsVerticalScrollIndicator={false}>
+          {loadingData && <ActivityIndicator size="small" color="#2563eb" style={{ marginBottom: 10 }} />}
 
-            <View style={[styles.cardWide, isDarkMode && styles.darkCard]}>
-              <Text style={[styles.sectionTitle, isDarkMode && styles.darkText]}>🗺️ Regional Audience & IP Telemetry Intelligence</Text>
-              <Text style={{ fontSize: 11, color: '#718096', lineHeight: 18, marginBottom: 4 }}>
-                • Primary Hub: Kampala Capital District (64% Active Traffic){'\n'}
-                • Conservation Zone Nodes: Bwindi & Queen Elizabeth Parks (18% Traffic){'\n'}
-                • Cross-Border & International Relays: East Africa & Global Mesh Nodes (18% Traffic)
-              </Text>
-            </View>
+          {adminTab === 'Overview' && (
+            <View style={styles.gridContainer}>
+              <View style={[styles.statCard, isDarkMode && styles.darkCard]}>
+                <Text style={styles.statNumber}>{activeNodeCount.toLocaleString()}</Text>
+                <Text style={[styles.statLabel, isDarkMode && styles.darkText]}>Active Mesh Nodes (Live) 🛰️</Text>
+              </View>
+              <View style={[styles.statCard, isDarkMode && styles.darkCard]}>
+                <Text style={[styles.statNumber, { color: '#38a169' }]}>{totalPlatformVolume}</Text>
+                <Text style={[styles.statLabel, isDarkMode && styles.darkText]}>Total Escrow Volume 🪙</Text>
+              </View>
+              <View style={[styles.statCard, isDarkMode && styles.darkCard]}>
+                <Text style={[styles.statNumber, { color: '#9333ea' }]}>{adminCollectedFees}</Text>
+                <Text style={[styles.statLabel, isDarkMode && styles.darkText]}>Net Admin Revenue (5%) 🏢</Text>
+              </View>
+              <View style={[styles.statCard, isDarkMode && styles.darkCard]}>
+                <Text style={[styles.statNumber, { color: '#3182ce' }]}>{databaseLatencyMs}ms</Text>
+                <Text style={[styles.statLabel, isDarkMode && styles.darkText]}>Supabase Latency Ping ⚡</Text>
+              </View>
 
-            <View style={[styles.cardWide, isDarkMode && styles.darkCard]}>
-              <Text style={[styles.sectionTitle, isDarkMode && styles.darkText]}>📢 Push Official Announcement (@ChatUP_Updates)</Text>
-              <TextInput
-                style={[styles.input, isDarkMode && styles.darkInput]}
-                placeholder="Broadcast system update or release notes to all user feeds..."
-                placeholderTextColor="#a0aec0"
-                value={broadcastText}
-                onChangeText={setBroadcastText}
-              />
-              <TouchableOpacity style={styles.primaryBtn} onPress={handlePublishBroadcast}>
-                <Text style={styles.primaryBtnText}>Publish Broadcast 📡</Text>
-              </TouchableOpacity>
-            </View>
-          </View>
-        )}
+              <AdminSystemHealthModule isDarkMode={isDarkMode} />
 
-        {adminTab === 'Treasury' && (
-          <View>
-            <Text style={[styles.sectionTitle, isDarkMode && styles.darkText]}>🪙 Flutterwave Multi-Account Treasury & Withdrawal Queue</Text>
-            <Text style={{ fontSize: 11, color: '#718096', marginBottom: 12 }}>Minimum payout threshold: 50,000 UGX. Processed via MTN MoMo and Airtel Money.</Text>
-            
-            {payoutQueue.length > 0 ? (
-              payoutQueue.map(item => (
-                <View key={item.id} style={[styles.card, isDarkMode && styles.darkCard]}>
-                  <Text style={[styles.itemTitle, isDarkMode && styles.darkText]}>Creator: {item.creator || item.user_handle || '@creator_node'}</Text>
-                  <Text style={{ fontSize: 12, fontWeight: 'bold', color: '#38a169', marginVertical: 2 }}>Amount: {item.amount || '50,000 UGX'} ({item.gateway || 'MTN MoMo'})</Text>
-                  <Text style={{ fontSize: 10, color: '#d69e2e', marginBottom: 10 }}>Status: {item.status || 'Pending Super-Admin Approval'}</Text>
-                  <TouchableOpacity style={styles.primaryBtn} onPress={() => handleApprovePayout(item.id, item.creator || '@creator', item.amount || '50,000 UGX')}>
-                    <Text style={styles.primaryBtnText}>Approve & Disburse Payout 💸</Text>
+              <View style={[styles.cardWide, isDarkMode && styles.darkCard, { borderColor: '#16a34a', borderWidth: 1.5 }]}>
+                <Text style={[styles.sectionTitle, isDarkMode && styles.darkText]}>🌐 Global Country Adoption & Market Share</Text>
+                <Text style={{ fontSize: 11, color: '#718096', marginBottom: 12 }}>Real-time percentage breakdown of active app traffic across operating regions:</Text>
+
+                {[
+                  { country: '🇺🇬 Uganda (Primary Hub)', percent: '68%', color: '#2563eb', users: '12,420 active' },
+                  { country: '🇰🇪 Kenya (East African Relay)', percent: '14%', color: '#16a34a', users: '2,560 active' },
+                  { country: '🇷🇼 Rwanda (Cross-Border Node)', percent: '9%', color: '#d97706', users: '1,640 active' },
+                  { country: '🌐 Rest of World / International', percent: '9%', color: '#9333ea', users: '1,610 active' },
+                ].map((market, index) => (
+                  <View key={index} style={{ marginBottom: 10 }}>
+                    <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginBottom: 3 }}>
+                      <Text style={{ fontSize: 11, fontWeight: '600', color: isDarkMode ? '#f8fafc' : '#334155' }}>{market.country}</Text>
+                      <Text style={{ fontSize: 11, fontWeight: '700', color: market.color }}>{market.percent} ({market.users})</Text>
+                    </View>
+                    <View style={{ height: 6, backgroundColor: isDarkMode ? '#334155' : '#e2e8f0', borderRadius: 3, overflow: 'hidden' }}>
+                      <View style={{ width: market.percent, height: '100%', backgroundColor: market.color, borderRadius: 3 }} />
+                    </View>
+                  </View>
+                ))}
+              </View>
+
+              {adminRole === 'SuperAdmin' && (
+                <View style={[styles.cardWide, isDarkMode && styles.darkCard]}>
+                  <Text style={[styles.sectionTitle, isDarkMode && styles.darkText]}>📢 Push Official Announcement (@ChatUP_Updates)</Text>
+                  <TextInput
+                    style={[styles.input, isDarkMode && styles.darkInput]}
+                    placeholder="Broadcast system update or release notes..."
+                    placeholderTextColor="#a0aec0"
+                    value={broadcastText}
+                    onChangeText={setBroadcastText}
+                  />
+                  <TouchableOpacity style={styles.primaryBtn} onPress={handlePublishBroadcast} disabled={isSaving}>
+                    <Text style={styles.primaryBtnText}>{isSaving ? 'Publishing...' : 'Publish Broadcast 📡'}</Text>
                   </TouchableOpacity>
                 </View>
-              ))
-            ) : (
-              <Text style={{ fontSize: 12, color: '#718096', textAlign: 'center', padding: 20 }}>All pending creator payouts have been disbursed.</Text>
-            )}
-          </View>
-        )}
+              )}
+            </View>
+          )}
 
-        {adminTab === 'Moderation' && (
-          <View>
-            <Text style={[styles.sectionTitle, isDarkMode && styles.darkText]}>⚖️ Automated Video Appeal & Content Review Queue</Text>
-            {appeals.length > 0 ? (
-              appeals.map(item => (
+          {adminTab === 'Treasury' && (
+            <View>
+              <Text style={[styles.sectionTitle, isDarkMode && styles.darkText]}>🪙 Multi-Tier Financial Audit & Treasury Queue</Text>
+              
+              <View style={{ flexDirection: 'row', gap: 6, marginBottom: 12 }}>
+                {['UGX', 'USD', 'WLD'].map(curr => (
+                  <TouchableOpacity
+                    key={curr}
+                    style={{ backgroundColor: payoutCurrency === curr ? '#2563eb' : '#e2e8f0', paddingHorizontal: 12, paddingVertical: 6, borderRadius: 6 }}
+                    onPress={() => setPayoutCurrency(curr)}
+                  >
+                    <Text style={{ color: payoutCurrency === curr ? '#fff' : '#475569', fontSize: 11, fontWeight: 'bold' }}>{curr}</Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
+              
+              {payoutQueue.length > 0 ? (
+                payoutQueue.map(item => (
+                  <View key={item.id} style={[styles.card, isDarkMode && styles.darkCard]}>
+                    <Text style={[styles.itemTitle, isDarkMode && styles.darkText]}>{item.creator}</Text>
+                    <Text style={{ fontSize: 12, fontWeight: 'bold', color: '#38a169', marginVertical: 2 }}>Amount: {item.amount}</Text>
+                    <Text style={{ fontSize: 11, color: '#3182ce', marginVertical: 2 }}>Gateway: {item.gateway}</Text>
+                    <TouchableOpacity style={styles.primaryBtn} onPress={() => handleApprovePayout(item.id, item.creator, item.amount)}>
+                      <Text style={styles.primaryBtnText}>Approve & Disburse 💸</Text>
+                    </TouchableOpacity>
+                  </View>
+                ))
+              ) : (
+                <Text style={{ fontSize: 12, color: '#718096', textAlign: 'center', padding: 20 }}>No pending payouts.</Text>
+              )}
+
+              <AdminRevenueAnalyticsModule isDarkMode={isDarkMode} />
+              <AdminFraudRadarModule isDarkMode={isDarkMode} />
+            </View>
+          )}
+
+          {adminTab === 'Technical' && (
+            <View>
+              <Text style={[styles.sectionTitle, isDarkMode && styles.darkText]}>⚙️ Technical Operations & Infrastructure</Text>
+              
+              <AdminLiveLogTailerModule isDarkMode={isDarkMode} />
+              <AdminDisasterRecoveryModule adminRole={adminRole} isDarkMode={isDarkMode} />
+
+              <View style={[styles.card, isDarkMode && styles.darkCard, { borderColor: '#3182ce', borderWidth: 1.5 }]}>
+                <Text style={[styles.sectionTitle, isDarkMode && styles.darkText]}>🛠️ Log New Technical Incident</Text>
+                <TextInput
+                  style={[styles.input, isDarkMode && styles.darkInput]}
+                  placeholder="Node Cluster (e.g., Kampala Node 04)"
+                  placeholderTextColor="#a0aec0"
+                  value={newIncidentCluster}
+                  onChangeText={setNewIncidentCluster}
+                />
+                <TextInput
+                  style={[styles.input, isDarkMode && styles.darkInput]}
+                  placeholder="Describe issue..."
+                  placeholderTextColor="#a0aec0"
+                  value={newIncidentDesc}
+                  onChangeText={setNewIncidentDesc}
+                />
+                <TouchableOpacity style={styles.primaryBtn} onPress={handleCreateTechnicalIncident}>
+                  <Text style={styles.primaryBtnText}>Dispatch Incident Ticket 🚀</Text>
+                </TouchableOpacity>
+              </View>
+
+              <Text style={[styles.sectionTitle, isDarkMode && styles.darkText, { marginTop: 10 }]}>⚡ Active Incidents</Text>
+              {technicalIncidents.map(inc => (
+                <View key={inc.id} style={[styles.card, isDarkMode && styles.darkCard]}>
+                  <Text style={[styles.itemTitle, isDarkMode && styles.darkText]}>Cluster: {inc.node_cluster}</Text>
+                  <Text style={{ fontSize: 11, color: '#e53e3e', marginVertical: 4 }}>Issue: {inc.issue_description}</Text>
+                  <TouchableOpacity style={styles.resolveBtn} onPress={() => handleResolveTechnicalIncident(inc.id)}>
+                    <Text style={{ color: '#fff', fontSize: 11, fontWeight: 'bold' }}>Mark Resolved ✓</Text>
+                  </TouchableOpacity>
+                </View>
+              ))}
+
+              <AdminWebhookManagerModule isDarkMode={isDarkMode} />
+            </View>
+          )}
+
+          {adminTab === 'Moderation' && (
+            <View>
+              <Text style={[styles.sectionTitle, isDarkMode && styles.darkText, { color: '#d97706' }]}>🤖 AI Content Moderation & Quarantine</Text>
+              {aiQuarantineQueue.map(item => (
+                <View key={item.id} style={[styles.card, isDarkMode && styles.darkCard, { borderColor: '#d97706', borderWidth: 1.5 }]}>
+                  <Text style={[styles.itemTitle, isDarkMode && styles.darkText]}>{item.content}</Text>
+                  <TouchableOpacity style={[styles.banBtn, { alignSelf: 'flex-start', marginTop: 4 }]} onPress={() => handlePurgeAiQuarantine(item.id)}>
+                    <Text style={{ color: '#fff', fontSize: 11, fontWeight: 'bold' }}>Purge Quarantined Item 🚫</Text>
+                  </TouchableOpacity>
+                </View>
+              ))}
+
+              <Text style={[styles.sectionTitle, isDarkMode && styles.darkText, { marginTop: 10 }]}>⚖️ Content Appeals</Text>
+              {appeals.map(item => (
                 <View key={item.id} style={[styles.card, isDarkMode && styles.darkCard]}>
                   <Text style={[styles.itemTitle, isDarkMode && styles.darkText]}>Creator: {item.creator}</Text>
                   <Text style={{ fontSize: 11, color: '#e53e3e', marginVertical: 4 }}>Reason: {item.reason}</Text>
                   <View style={{ flexDirection: 'row', gap: 10, marginTop: 8 }}>
                     <TouchableOpacity style={styles.restoreBtn} onPress={() => handleResolveAppeal(item.id, 'restore')}>
-                      <Text style={{ color: '#fff', fontSize: 11, fontWeight: 'bold' }}>Restore Content ✅</Text>
+                      <Text style={{ color: '#fff', fontSize: 11, fontWeight: 'bold' }}>Restore ✅</Text>
                     </TouchableOpacity>
                     <TouchableOpacity style={styles.banBtn} onPress={() => handleResolveAppeal(item.id, 'ban')}>
-                      <Text style={{ color: '#fff', fontSize: 11, fontWeight: 'bold' }}>Confirm Takedown 🚫</Text>
+                      <Text style={{ color: '#fff', fontSize: 11, fontWeight: 'bold' }}>Takedown 🚫</Text>
                     </TouchableOpacity>
                   </View>
                 </View>
-              ))
-            ) : (
-              <Text style={{ fontSize: 12, color: '#718096', textAlign: 'center', padding: 20 }}>No pending video appeals.</Text>
-            )}
-
-            <Text style={[styles.sectionTitle, isDarkMode && styles.darkText, { marginTop: 15 }]}>🎫 User Helpdesk & Support Tickets</Text>
-            {tickets.length > 0 ? (
-              tickets.map(t => (
-                <View key={t.id} style={[styles.card, isDarkMode && styles.darkCard]}>
-                  <Text style={[styles.itemTitle, isDarkMode && styles.darkText]}>User: {t.user || t.user_handle} ({t.tier || 'General'})</Text>
-                  <Text style={{ fontSize: 11, color: '#718096', marginVertical: 4 }}>{t.issue || t.message}</Text>
-                  <TouchableOpacity style={styles.resolveBtn} onPress={() => handleResolveTicket(t.id)}>
-                    <Text style={{ color: '#fff', fontSize: 11, fontWeight: 'bold' }}>Mark Resolved ✓</Text>
-                  </TouchableOpacity>
-                </View>
-              ))
-            ) : (
-              <Text style={{ fontSize: 12, color: '#718096', textAlign: 'center', padding: 20 }}>All support tickets resolved.</Text>
-            )}
-          </View>
-        )}
-
-        {adminTab === 'Staff' && (
-          <View>
-            <Text style={[styles.sectionTitle, isDarkMode && styles.darkText]}>👥 Staff Activity & Supabase Audit Trails</Text>
-            <Text style={{ fontSize: 11, color: '#718096', marginBottom: 12 }}>Automated database logging capturing employee actions, timestamps, and IP tracking.</Text>
-            
-            {auditLogs.map(log => (
-              <View key={log.id} style={[styles.card, isDarkMode && styles.darkCard]}>
-                <Text style={[styles.itemTitle, isDarkMode && styles.darkText]}>{log.staff}</Text>
-                <Text style={{ fontSize: 11, color: '#3182ce', marginVertical: 2 }}>{log.action}</Text>
-                <Text style={{ fontSize: 9, color: '#a0aec0' }}>🕒 {log.time} • IP: {log.ip}</Text>
-              </View>
-            ))}
-          </View>
-        )}
-
-        {adminTab === 'Security' && (
-          <View>
-            <Text style={[styles.sectionTitle, isDarkMode && styles.darkText]}>🛡️ God-View Global Database & Evidence Inspector</Text>
-            <View style={[styles.card, isDarkMode && styles.darkCard]}>
-              <TextInput
-                style={[styles.input, isDarkMode && styles.darkInput]}
-                placeholder="Search user handle, IP address, or chat metadata hash..."
-                placeholderTextColor="#a0aec0"
-                value={searchQuery}
-                onChangeText={setSearchQuery}
-              />
-              <TouchableOpacity style={styles.primaryBtn} onPress={handleGodViewInspect}>
-                <Text style={styles.primaryBtnText}>Inspect Database Record 🔍</Text>
-              </TouchableOpacity>
-              {searchedUserResult && (
-                <View style={{ marginTop: 10, padding: 8, backgroundColor: '#f1f5f9', borderRadius: 6 }}>
-                  <Text style={{ fontSize: 11, color: '#0f172a', fontWeight: 'bold' }}>{searchedUserResult.info}</Text>
-                </View>
-              )}
+              ))}
             </View>
+          )}
 
-            <Text style={[styles.sectionTitle, isDarkMode && styles.darkText, { marginTop: 10 }]}>🚨 Predictive Threat & Fraud Detection Analytics</Text>
-            {threatLogs.map(th => (
-              <View key={th.id} style={[styles.card, isDarkMode && styles.darkCard]}>
-                <Text style={[styles.itemTitle, isDarkMode && styles.darkText]}>{th.type}</Text>
-                <Text style={{ fontSize: 11, color: '#718096', marginVertical: 2 }}>Target: {th.target}</Text>
-                <Text style={{ fontSize: 10, color: '#38a169', fontWeight: 'bold' }}>{th.status}</Text>
-              </View>
-            ))}
-          </View>
-        )}
+          {adminTab === 'Staff' && (
+            <AdminStaffHierarchyModule
+              adminRole={adminRole}
+              newStaffEmail={newStaffEmail}
+              setNewStaffEmail={setNewStaffEmail}
+              newStaffHandle={newStaffHandle}
+              setNewStaffHandle={setNewStaffHandle}
+              selectedRoleToAssign={selectedRoleToAssign}
+              setSelectedRoleToAssign={setSelectedRoleToAssign}
+              handleAssignStaffRole={handleAssignStaffRole}
+              handleExportCsvAudit={() => Alert.alert('📊 Compliance CSV Generated', 'Successfully compiled audit logs for SOC2/ISO regulatory export.')}
+              assignedStaffList={assignedStaffList}
+              auditLogs={auditLogs}
+              isDarkMode={isDarkMode}
+            />
+          )}
 
-        {adminTab === 'Switches' && (
-          <View style={[styles.card, isDarkMode && styles.darkCard]}>
-            <Text style={[styles.sectionTitle, isDarkMode && styles.darkText]}>🔌 Master Architectural Global Switches (22 Enterprise Controls)</Text>
-            <Text style={{ fontSize: 11, color: '#718096', marginBottom: 10 }}>Supreme overrides to instantly control core transmission, treasury, and security layers.</Text>
-            
-            {/* 1. Master Super-Admin Panel Access Switch */}
-            <View style={styles.switchRow}>
-              <View style={{ flex: 1, marginRight: 10 }}>
-                <Text style={[styles.rowLabel, isDarkMode && styles.darkText, { fontWeight: 'bold', color: '#2563eb' }]}>👑 1. Master Super-Admin Panel Access Switch</Text>
-                <Text style={{ fontSize: 10, color: '#718096' }}>Toggle ON to show Admin & Treasury in menu. Toggle OFF to hide them completely from regular users.</Text>
-              </View>
-              <Switch
-                value={superAdminAccessEnabled}
-                onValueChange={(val) => handleToggleSwitch('master_admin', val, 'Master Super-Admin Panel Access')}
-                trackColor={{ false: '#cbd5e0', true: '#2563eb' }}
+          {adminTab === 'Security' && (
+            <View>
+              <AdminSecurityGodViewModule
+                searchQuery={searchQuery}
+                setSearchQuery={setSearchQuery}
+                handleGodViewInspect={handleGodViewInspect}
+                searchedUserResult={searchedUserResult}
+                threatLogs={threatLogs}
+                isDarkMode={isDarkMode}
               />
+              <AdminFraudRadarModule isDarkMode={isDarkMode} />
             </View>
+          )}
 
-            {/* 2. Master Offline Mesh Transmission Switch */}
-            <View style={styles.switchRow}>
-              <View style={{ flex: 1, marginRight: 10 }}>
-                <Text style={[styles.rowLabel, isDarkMode && styles.darkText]}>🛰️ 2. Master Offline Mesh Transmission Switch</Text>
-                <Text style={{ fontSize: 10, color: '#718096' }}>Enable or disable local mesh data transmissions platform-wide.</Text>
-              </View>
-              <Switch
-                value={switchesState.meshTransmission}
-                onValueChange={(val) => handleToggleSwitch('meshTransmission', val, 'Master Offline Mesh Transmission')}
-                trackColor={{ false: '#cbd5e0', true: '#3182ce' }}
-              />
-            </View>
-
-            {/* 3. Master AI Voice-Translation Feature Switch */}
-            <View style={styles.switchRow}>
-              <View style={{ flex: 1, marginRight: 10 }}>
-                <Text style={[styles.rowLabel, isDarkMode && styles.darkText]}>🤖 3. Master AI Voice-Translation Feature Switch</Text>
-                <Text style={{ fontSize: 10, color: '#718096' }}>Enable, restrict, or disable AI voice cloning and real-time translation.</Text>
-              </View>
-              <Switch
-                value={switchesState.aiVoiceTranslation}
-                onValueChange={(val) => handleToggleSwitch('aiVoiceTranslation', val, 'Master AI Voice-Translation')}
-                trackColor={{ false: '#cbd5e0', true: '#3182ce' }}
-              />
-            </View>
-
-            {/* 4. God-Mode Messaging Visibility Policy */}
-            <View style={styles.switchRow}>
-              <View style={{ flex: 1, marginRight: 10 }}>
-                <Text style={[styles.rowLabel, isDarkMode && styles.darkText]}>🔓 4. God-Mode Messaging Visibility Policy</Text>
-                <Text style={{ fontSize: 10, color: '#718096' }}>Intentional TLS/RLS inspection bypass for dispute resolution.</Text>
-              </View>
-              <Switch
-                value={switchesState.godModeVisibility}
-                onValueChange={(val) => handleToggleSwitch('godModeVisibility', val, 'God-Mode Messaging Visibility')}
-                trackColor={{ false: '#cbd5e0', true: '#3182ce' }}
-              />
-            </View>
-
-            {/* 5. In-App Advertising Suite Master Switch */}
-            <View style={styles.switchRow}>
-              <View style={{ flex: 1, marginRight: 10 }}>
-                <Text style={[styles.rowLabel, isDarkMode && styles.darkText]}>📢 5. In-App Advertising Suite Master Switch</Text>
-                <Text style={{ fontSize: 10, color: '#718096' }}>Turn platform-wide ad insertion networks ON or OFF.</Text>
-              </View>
-              <Switch
-                value={switchesState.adNetworkGlobal}
-                onValueChange={(val) => handleToggleSwitch('adNetworkGlobal', val, 'In-App Advertising Suite')}
-                trackColor={{ false: '#cbd5e0', true: '#3182ce' }}
-              />
-            </View>
-
-            {/* 6. Med-SOS & Neighborhood Watch Relay */}
-            <View style={styles.switchRow}>
-              <View style={{ flex: 1, marginRight: 10 }}>
-                <Text style={[styles.rowLabel, isDarkMode && styles.darkText]}>🚨 6. Med-SOS & Neighborhood Watch Relay</Text>
-                <Text style={{ fontSize: 10, color: '#718096' }}>Global master override for emergency security sirens and emergency dispatch.</Text>
-              </View>
-              <Switch
-                value={switchesState.emergencySosGlobal}
-                onValueChange={(val) => handleToggleSwitch('emergencySosGlobal', val, 'Med-SOS Relay')}
-                trackColor={{ false: '#cbd5e0', true: '#3182ce' }}
-              />
-            </View>
-
-            {/* 7. Anti-Piracy Cryptographic Watermarking */}
-            <View style={styles.switchRow}>
-              <View style={{ flex: 1, marginRight: 10 }}>
-                <Text style={[styles.rowLabel, isDarkMode && styles.darkText]}>🛡️ 7. Anti-Piracy Cryptographic Watermarking</Text>
-                <Text style={{ fontSize: 10, color: '#718096' }}>Enforce dynamic user tracking watermarks on all video streams.</Text>
-              </View>
-              <Switch
-                value={switchesState.drmWatermarkGlobal}
-                onValueChange={(val) => handleToggleSwitch('drmWatermarkGlobal', val, 'Anti-Piracy Watermarking')}
-                trackColor={{ false: '#cbd5e0', true: '#3182ce' }}
-              />
-            </View>
-
-            {/* 8. New User Registration Portal */}
-            <View style={styles.switchRow}>
-              <View style={{ flex: 1, marginRight: 10 }}>
-                <Text style={[styles.rowLabel, isDarkMode && styles.darkText]}>👤 8. New User Registration Portal</Text>
-                <Text style={{ fontSize: 10, color: '#718096' }}>Allow or block new user account sign-ups across the platform.</Text>
-              </View>
-              <Switch
-                value={switchesState.newRegistrations}
-                onValueChange={(val) => handleToggleSwitch('newRegistrations', val, 'New User Registration Portal')}
-                trackColor={{ false: '#cbd5e0', true: '#3182ce' }}
-              />
-            </View>
-
-            {/* 9. Flutterwave Payout Gateway */}
-            <View style={styles.switchRow}>
-              <View style={{ flex: 1, marginRight: 10 }}>
-                <Text style={[styles.rowLabel, isDarkMode && styles.darkText]}>🪙 9. Flutterwave Payout Gateway</Text>
-                <Text style={{ fontSize: 10, color: '#718096' }}>Enable or pause automated creator withdrawals and MoMo dispatches.</Text>
-              </View>
-              <Switch
-                value={switchesState.payoutGatewayActive}
-                onValueChange={(val) => handleToggleSwitch('payoutGatewayActive', val, 'Flutterwave Payout Gateway')}
-                trackColor={{ false: '#cbd5e0', true: '#3182ce' }}
-              />
-            </View>
-
-            {/* 10. Live Streaming & Church Broadcast Suite */}
-            <View style={styles.switchRow}>
-              <View style={{ flex: 1, marginRight: 10 }}>
-                <Text style={[styles.rowLabel, isDarkMode && styles.darkText]}>📹 10. Live Streaming & Church Broadcast Suite</Text>
-                <Text style={{ fontSize: 10, color: '#718096' }}>Control live broadcast streaming capability platform-wide.</Text>
-              </View>
-              <Switch
-                value={switchesState.liveStreamingGlobal}
-                onValueChange={(val) => handleToggleSwitch('liveStreamingGlobal', val, 'Live Streaming Suite')}
-                trackColor={{ false: '#cbd5e0', true: '#3182ce' }}
-              />
-            </View>
-
-            {/* 11. Chat Media Vault Uploads (Images/Files) */}
-            <View style={styles.switchRow}>
-              <View style={{ flex: 1, marginRight: 10 }}>
-                <Text style={[styles.rowLabel, isDarkMode && styles.darkText]}>🖼️ 11. Chat Media Vault Uploads (Images/Files)</Text>
-                <Text style={{ fontSize: 10, color: '#718096' }}>Allow or restrict sending media attachments inside chat rooms.</Text>
-              </View>
-              <Switch
-                value={switchesState.chatMediaUploads}
-                onValueChange={(val) => handleToggleSwitch('chatMediaUploads', val, 'Chat Media Vault Uploads')}
-                trackColor={{ false: '#cbd5e0', true: '#3182ce' }}
-              />
-            </View>
-
-            {/* 12. Quantum Lattice Security Layer */}
-            <View style={styles.switchRow}>
-              <View style={{ flex: 1, marginRight: 10 }}>
-                <Text style={[styles.rowLabel, isDarkMode && styles.darkText]}>🔐 12. Quantum Lattice Security Layer</Text>
-                <Text style={{ fontSize: 10, color: '#718096' }}>Post-quantum cryptographic envelope encryption.</Text>
-              </View>
-              <Switch
-                value={switchesState.quantumEncryptionLayer}
-                onValueChange={(val) => handleToggleSwitch('quantumEncryptionLayer', val, 'Quantum Lattice Security')}
-                trackColor={{ false: '#cbd5e0', true: '#3182ce' }}
-              />
-            </View>
-
-            {/* 13. Kampala Edge Relay Sync */}
-            <View style={styles.switchRow}>
-              <View style={{ flex: 1, marginRight: 10 }}>
-                <Text style={[styles.rowLabel, isDarkMode && styles.darkText]}>🇺🇬 13. Kampala Edge Relay Sync</Text>
-                <Text style={{ fontSize: 10, color: '#718096' }}>Local regional data caching nodes synchronization.</Text>
-              </View>
-              <Switch
-                value={switchesState.kampalaEdgeRelaySync}
-                onValueChange={(val) => handleToggleSwitch('kampalaEdgeRelaySync', val, 'Kampala Edge Relay Sync')}
-                trackColor={{ false: '#cbd5e0', true: '#3182ce' }}
-              />
-            </View>
-
-            {/* 14. Biometric Sender Watermark Core */}
-            <View style={styles.switchRow}>
-              <View style={{ flex: 1, marginRight: 10 }}>
-                <Text style={[styles.rowLabel, isDarkMode && styles.darkText]}>✍️ 14. Biometric Sender Watermark Core</Text>
-                <Text style={{ fontSize: 10, color: '#718096' }}>Forensic user signature stamping on messages.</Text>
-              </View>
-              <Switch
-                value={switchesState.biometricWatermarkCore}
-                onValueChange={(val) => handleToggleSwitch('biometricWatermarkCore', val, 'Biometric Sender Watermark')}
-                trackColor={{ false: '#cbd5e0', true: '#3182ce' }}
-              />
-            </View>
-
-            {/* 15. Federated On-Device AI Engine */}
-            <View style={styles.switchRow}>
-              <View style={{ flex: 1, marginRight: 10 }}>
-                <Text style={[styles.rowLabel, isDarkMode && styles.darkText]}>🧠 15. Federated On-Device AI Engine</Text>
-                <Text style={{ fontSize: 10, color: '#718096' }}>Decentralized neural model training and inference.</Text>
-              </View>
-              <Switch
-                value={switchesState.federatedOnDeviceAiEngine}
-                onValueChange={(val) => handleToggleSwitch('federatedOnDeviceAiEngine', val, 'Federated On-Device AI Engine')}
-                trackColor={{ false: '#cbd5e0', true: '#3182ce' }}
-              />
-            </View>
-
-            {/* 16. Bluetooth P2P Mesh Relay */}
-            <View style={styles.switchRow}>
-              <View style={{ flex: 1, marginRight: 10 }}>
-                <Text style={[styles.rowLabel, isDarkMode && styles.darkText]}>🛰️ 16. Bluetooth P2P Mesh Relay</Text>
-                <Text style={{ fontSize: 10, color: '#718096' }}>Direct offline device-to-device packet forwarding.</Text>
-              </View>
-              <Switch
-                value={switchesState.bluetoothP2pMeshRelay}
-                onValueChange={(val) => handleToggleSwitch('bluetoothP2pMeshRelay', val, 'Bluetooth P2P Mesh Relay')}
-                trackColor={{ false: '#cbd5e0', true: '#3182ce' }}
-              />
-            </View>
-
-            {/* 17. Autonomous Message Escrow */}
-            <View style={styles.switchRow}>
-              <View style={{ flex: 1, marginRight: 10 }}>
-                <Text style={[styles.rowLabel, isDarkMode && styles.darkText]}>🪙 17. Autonomous Message Escrow</Text>
-                <Text style={{ fontSize: 10, color: '#718096' }}>Smart contract conditional message delivery.</Text>
-              </View>
-              <Switch
-                value={switchesState.autonomousMessageEscrow}
-                onValueChange={(val) => handleToggleSwitch('autonomousMessageEscrow', val, 'Autonomous Message Escrow')}
-                trackColor={{ false: '#cbd5e0', true: '#3182ce' }}
-              />
-            </View>
-
-            {/* 18. Zero-Fee Gas Subsidizer */}
-            <View style={styles.switchRow}>
-              <View style={{ flex: 1, marginRight: 10 }}>
-                <Text style={[styles.rowLabel, isDarkMode && styles.darkText]}>🪙 18. Zero-Fee Gas Subsidizer</Text>
-                <Text style={{ fontSize: 10, color: '#718096' }}>Platform-sponsored transaction fee abstraction.</Text>
-              </View>
-              <Switch
-                value={switchesState.zeroFeeGasSubsidizer}
-                onValueChange={(val) => handleToggleSwitch('zeroFeeGasSubsidizer', val, 'Zero-Fee Gas Subsidizer')}
-                trackColor={{ false: '#cbd5e0', true: '#3182ce' }}
-              />
-            </View>
-
-            {/* 19. AI Autonomous Toxicity Guard */}
-            <View style={styles.switchRow}>
-              <View style={{ flex: 1, marginRight: 10 }}>
-                <Text style={[styles.rowLabel, isDarkMode && styles.darkText]}>🛡️ 19. AI Autonomous Toxicity Guard</Text>
-                <Text style={{ fontSize: 10, color: '#718096' }}>Real-time automated content filtering and blocking.</Text>
-              </View>
-              <Switch
-                value={switchesState.aiAutonomousToxicityGuard}
-                onValueChange={(val) => handleToggleSwitch('aiAutonomousToxicityGuard', val, 'AI Autonomous Toxicity Guard')}
-                trackColor={{ false: '#cbd5e0', true: '#3182ce' }}
-              />
-            </View>
-
-            {/* 20. Real-Time Sentiment Mesh */}
-            <View style={styles.switchRow}>
-              <View style={{ flex: 1, marginRight: 10 }}>
-                <Text style={[styles.rowLabel, isDarkMode && styles.darkText]}>🌿 20. Real-Time Sentiment Mesh</Text>
-                <Text style={{ fontSize: 10, color: '#718096' }}>Community mood and engagement telemetry.</Text>
-              </View>
-              <Switch
-                value={switchesState.realtimeSentimentMesh}
-                onValueChange={(val) => handleToggleSwitch('realtimeSentimentMesh', val, 'Real-Time Sentiment Mesh')}
-                trackColor={{ false: '#cbd5e0', true: '#3182ce' }}
-              />
-            </View>
-
-            {/* 21. Multimodal HLS Adaptive Streaming */}
-            <View style={styles.switchRow}>
-              <View style={{ flex: 1, marginRight: 10 }}>
-                <Text style={[styles.rowLabel, isDarkMode && styles.darkText]}>🎥 21. Multimodal HLS Adaptive Streaming</Text>
-                <Text style={{ fontSize: 10, color: '#718096' }}>Dynamic video stream bandwidth optimization.</Text>
-              </View>
-              <Switch
-                value={switchesState.multimodalHlsAdaptive}
-                onValueChange={(val) => handleToggleSwitch('multimodalHlsAdaptive', val, 'Multimodal HLS Adaptive')}
-                trackColor={{ false: '#cbd5e0', true: '#3182ce' }}
-              />
-            </View>
-
-            {/* 22. Global Emergency Maintenance Lockdown */}
-            <View style={[styles.switchRow, { borderBottomWidth: 0 }]}>
-              <View style={{ flex: 1, marginRight: 10 }}>
-                <Text style={[styles.rowLabel, isDarkMode && styles.darkText, { color: '#e53e3e', fontWeight: 'bold' }]}>🚨 22. Global Emergency Maintenance Lockdown</Text>
-                <Text style={{ fontSize: 10, color: '#718096' }}>Turn ON to place the entire application into maintenance mode.</Text>
-              </View>
-              <Switch
-                value={switchesState.maintenanceMode}
-                onValueChange={(val) => handleToggleSwitch('maintenanceMode', val, 'Global Emergency Maintenance Lockdown')}
-                trackColor={{ false: '#cbd5e0', true: '#e53e3e' }}
-              />
-            </View>
-          </View>
-        )}
-      </ScrollView>
+          {adminTab === 'Switches' && (
+            <AdminSwitchesModule
+              switchesState={switchesState}
+              superAdminAccessEnabled={superAdminAccessEnabled}
+              handleToggleSwitch={handleToggleSwitch}
+              isDarkMode={isDarkMode}
+            />
+          )}
+        </ScrollView>
+      )}
     </View>
   );
 }

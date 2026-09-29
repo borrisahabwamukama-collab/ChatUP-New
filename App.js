@@ -1,11 +1,17 @@
 import React, { useState, useEffect, createContext, useContext } from 'react';
-import { StyleSheet, View, Text, TouchableOpacity, ScrollView, Modal, Pressable, TextInput, Alert, ActivityIndicator, Dimensions } from 'react-native';
+import { StyleSheet, View, Text, TouchableOpacity, ScrollView, Modal, Pressable, Alert, ActivityIndicator } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { supabase } from './Services/supabaseClient'; // Adjusted path to your Supabase client
+import NetInfo from '@react-native-community/netinfo';
+import { supabase } from './Services/supabaseClient';
+import { processOfflineQueue } from './Services/offlineSyncQueue';
+import DashboardScreen from './src/screens/DashboardScreen';
 
-// Core Screens
+// Core Screens & Auth Screens
+import LoginScreen from './src/screens/LoginScreen';
+import SignupScreen from './src/screens/SignupScreen';
 import ChatRoomScreen from './src/screens/ChatRoomScreen';
+import ConversationsListScreen from './src/screens/ConversationsListScreen';
 import SecurityHubScreen from './src/screens/Security/SecurityHubScreen';
 import ReactionsAndBubbles from './src/screens/ReactionsAndBubbles';
 import VoiceAndTranslationScreen from './src/screens/VoiceAndTranslationScreen';
@@ -13,6 +19,9 @@ import DiscoveryWalletScreen from './src/screens/DiscoveryWalletScreen';
 import WalletScreen from './src/screens/WalletScreen'; 
 import LiveStreamScreen from './src/screens/LiveStreamScreen';
 import ReferralRewardsScreen from './src/screens/ReferralRewardsScreen';
+import ReelsScreen from './src/screens/ReelsScreen';
+import DiscoveryUsersScreen from './src/screens/DiscoveryUsersScreen';
+import MessageRequestsScreen from './src/screens/MessageRequestsScreen';
 
 // Master Super-Admin Control Panel, Monetization Treasury & Global AI Supervisor
 import AdminControlPanelScreen from './src/screens/AdminControlPanelScreen';
@@ -28,7 +37,6 @@ import CameraHubScreen from './src/screens/CameraHubScreen';
 import ChurchRegistrationScreen from './src/screens/ChurchRegistrationScreen';
 import InteractiveGamesHub from './src/screens/InteractiveGamesHub';
 import GameArenaScreen from './src/screens/GameArenaScreen';
-import SignupScreen from './src/screens/SignupScreen';
 
 // Additional Feature & Entertainment Screens
 import AnalyticsScreen from './src/screens/AnalyticsScreen';
@@ -49,215 +57,48 @@ export function useMeshNetwork() {
   return useContext(MeshNetworkContext);
 }
 
-// --- FULLY INTEGRATED SHORT-FORM REELS FEED SCREEN ---
-function ReelsFeedScreen({ isDarkMode, coins, setCoins, currentUser }) {
-  const [reelsList, setReelsList] = useState([
-    {
-      id: 'reel_1',
-      title: 'Wildlife Conservation in Queen Elizabeth Park 🐘🌿',
-      creator: 'Borris Ranger Hub',
-      videoUrl: 'https://images.unsplash.com/photo-1534567153574-2b12153a87f0?q=80&w=1000&auto=format&fit=crop',
-      likes: 1420,
-      comments: 94,
-      isLiked: false,
-    },
-    {
-      id: 'reel_2',
-      title: 'Kampala Afrobeat Studio Jam Session 🎶🔥',
-      creator: 'Studio UG Music',
-      videoUrl: 'https://images.unsplash.com/photo-1511671782779-c97d3d27a1d4?q=80&w=1000&auto=format&fit=crop',
-      likes: 3890,
-      comments: 210,
-      isLiked: false,
-    },
-    {
-      id: 'reel_3',
-      title: 'Bwindi Impenetrable Gorilla Trekking Epic 🦍✨',
-      creator: 'Pearl Africa Cinema',
-      videoUrl: 'https://images.unsplash.com/photo-1557050543-4d5f4e07ef46?q=80&w=1000&auto=format&fit=crop',
-      likes: 5120,
-      comments: 430,
-      isLiked: true,
-    }
-  ]);
-  const [activeReelIndex, setActiveReelIndex] = useState(0);
+// 🌟 LIVE GLOBAL ANNOUNCEMENT BANNER COMPONENT
+function GlobalAnnouncementBanner({ isDarkMode }) {
+  const [latestAnnouncement, setLatestAnnouncement] = useState(null);
 
-  const handleLikeReel = (id) => {
-    setReelsList(prev => prev.map(reel => {
-      if (reel.id === id) {
-        const nextLiked = !reel.isLiked;
-        if (nextLiked && setCoins) setCoins(c => c + 5); // Reward for liking reels
-        return { ...reel, isLiked: nextLiked, likes: nextLiked ? reel.likes + 1 : reel.likes - 1 };
+  useEffect(() => {
+    fetchActiveAnnouncement();
+
+    const subscription = supabase
+      .channel('public:platform_announcements')
+      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'platform_announcements' }, payload => {
+        if (payload.new && payload.new.is_active) {
+          setLatestAnnouncement(payload.new.text);
+        }
+      })
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(subscription);
+    };
+  }, []);
+
+  const fetchActiveAnnouncement = async () => {
+    try {
+      const { data } = await supabase
+        .from('platform_announcements')
+        .select('*')
+        .eq('is_active', true)
+        .order('created_at', { ascending: false })
+        .limit(1);
+
+      if (data && data.length > 0) {
+        setLatestAnnouncement(data[0].text);
       }
-      return reel;
-    }));
+    } catch (e) {}
   };
+
+  if (!latestAnnouncement) return null;
 
   return (
-    <ScrollView 
-      style={[styles.container, isDarkMode && styles.darkContainer]} 
-      contentContainerStyle={{ padding: 12, paddingBottom: 100 }}
-    >
-      <View style={[styles.card, isDarkMode && styles.darkCard, { marginBottom: 12 }]}>
-        <Text style={[styles.cardTitle, isDarkMode && styles.darkText]}>📱 ChatUp Short-Form Reels & Video Hub</Text>
-        <Text style={{ fontSize: 11, color: '#718096' }}>Scroll vertical short-form reels, like videos to earn coins (+5 🪙), and share wildlife & creator clips instantly.</Text>
-      </View>
-
-      {reelsList.map((reel, index) => (
-        <View key={reel.id} style={[styles.card, isDarkMode && styles.darkCard, { padding: 0, overflow: 'hidden', marginBottom: 16 }]}>
-          <View style={{ height: 340, backgroundColor: '#000', position: 'relative' }}>
-            <img 
-              src={reel.videoUrl} 
-              alt={reel.title} 
-              style={{ width: '100%', height: '100%', objectFit: 'cover' }} 
-            />
-            
-            <View style={{ position: 'absolute', top: 12, left: 12, backgroundColor: 'rgba(0,0,0,0.7)', paddingHorizontal: 8, paddingVertical: 4, borderRadius: 6 }}>
-              <Text style={{ color: '#fff', fontSize: 10, fontWeight: 'bold' }}>🎬 Reel #{index + 1}</Text>
-            </View>
-
-            <View style={{ position: 'absolute', right: 12, bottom: 20, alignItems: 'center', gap: 14 }}>
-              <TouchableOpacity onPress={() => handleLikeReel(reel.id)} style={{ alignItems: 'center' }}>
-                <Text style={{ fontSize: 28 }}>{reel.isLiked ? '❤️' : '🤍'}</Text>
-                <Text style={{ color: '#fff', fontSize: 11, fontWeight: 'bold', textShadowColor: '#000', textShadowRadius: 2 }}>{reel.likes}</Text>
-              </TouchableOpacity>
-
-              <TouchableOpacity onPress={() => Alert.alert('Reel Comments', `Opening comment thread for "${reel.title}"...`)} style={{ alignItems: 'center' }}>
-                <Text style={{ fontSize: 26 }}>💬</Text>
-                <Text style={{ color: '#fff', fontSize: 11, fontWeight: 'bold', textShadowColor: '#000', textShadowRadius: 2 }}>{reel.comments}</Text>
-              </TouchableOpacity>
-
-              <TouchableOpacity onPress={() => { if (setCoins) setCoins(c => c + 10); Alert.alert('Shared! 🚀 (+10 🪙)', 'Reel link successfully shared to chat inbox.'); }} style={{ alignItems: 'center' }}>
-                <Text style={{ fontSize: 26 }}>↗️</Text>
-                <Text style={{ color: '#fff', fontSize: 10, fontWeight: 'bold' }}>Share</Text>
-              </TouchableOpacity>
-            </View>
-
-            <View style={{ position: 'absolute', bottom: 16, left: 16, right: 70 }}>
-              <Text style={{ color: '#fff', fontSize: 14, fontWeight: 'bold', textShadowColor: '#000', textShadowRadius: 3, marginBottom: 2 }}>{reel.title}</Text>
-              <Text style={{ color: '#cbd5e0', fontSize: 11, textShadowColor: '#000', textShadowRadius: 2 }}>@{reel.creator} • Official Creator</Text>
-            </View>
-          </View>
-        </View>
-      ))}
-    </ScrollView>
-  );
-}
-
-// --- STABLE LOGIN SCREEN WITH SUPABASE EMAIL OTP ---
-function LoginScreen({ onLoginSuccess, onNavigateSignup, isDarkMode }) {
-  const [step, setStep] = useState('email'); 
-  const [email, setEmail] = useState('');
-  const [token, setToken] = useState('');
-  const [loading, setLoading] = useState(false);
-
-  const handleSendOTP = async () => {
-    if (!email.trim()) {
-      Alert.alert('Error', 'Please enter a valid email address.');
-      return;
-    }
-    setLoading(true);
-    const { error } = await supabase.auth.signInWithOtp({ email: email.trim() });
-    setLoading(false);
-
-    if (error) {
-      Alert.alert('Login Error', error.message);
-    } else {
-      setStep('otp');
-      Alert.alert('Code Sent 📩', `A 6-digit verification code has been sent to ${email}.`);
-    }
-  };
-
-  const handleVerifyOTP = async () => {
-    if (!token.trim()) {
-      Alert.alert('Error', 'Please enter the verification code.');
-      return;
-    }
-    setLoading(true);
-
-    const { data, error } = await supabase.auth.verifyOtp({
-      email: email.trim(),
-      token: token.trim(),
-      type: 'email',
-    });
-
-    setLoading(false);
-
-    if (error) {
-      Alert.alert('Verification Failed', error.message);
-    } else {
-      const userSession = {
-        id: data.user.id,
-        email: data.user.email,
-        loggedInAt: new Date().toISOString(),
-      };
-      await AsyncStorage.setItem('@chatup_user_session', JSON.stringify(userSession));
-      onLoginSuccess(userSession);
-    }
-  };
-
-  return (
-    <View style={[styles.loginContainer, isDarkMode && { backgroundColor: '#1a202c' }]}>
-      <View style={[styles.loginCard, isDarkMode && styles.darkHeader]}>
-        <Text style={[styles.loginLogo, isDarkMode && styles.darkText]}>💬 ChatUP</Text>
-        
-        {step === 'email' ? (
-          <>
-            <Text style={[styles.loginSubtitle, isDarkMode && { color: '#a0aec0' }]}>
-              Enter your email address to start your personal ChatUP session.
-            </Text>
-
-            <TextInput
-              style={[styles.loginInput, isDarkMode && styles.darkInput]}
-              placeholder="user@example.com"
-              placeholderTextColor={isDarkMode ? '#718096' : '#a0aec0'}
-              value={email}
-              onChangeText={setEmail}
-              keyboardType="email-address"
-              autoCapitalize="none"
-            />
-
-            <TouchableOpacity style={styles.loginButton} onPress={handleSendOTP} disabled={loading}>
-              {loading ? (
-                <ActivityIndicator color="#fff" />
-              ) : (
-                <Text style={styles.loginButtonText}>Send Code 📩</Text>
-              )}
-            </TouchableOpacity>
-
-            <TouchableOpacity style={{ marginTop: 15 }} onPress={onNavigateSignup}>
-              <Text style={{ color: '#007AFF', fontSize: 13, fontWeight: 'bold' }}>Create New Account 🚀</Text>
-            </TouchableOpacity>
-          </>
-        ) : (
-          <>
-            <Text style={[styles.loginSubtitle, isDarkMode && { color: '#a0aec0' }]}>
-              Enter 6-digit code sent to {email}
-            </Text>
-
-            <TextInput
-              style={[styles.loginInput, isDarkMode && styles.darkInput]}
-              placeholder="123456"
-              placeholderTextColor={isDarkMode ? '#718096' : '#a0aec0'}
-              value={token}
-              onChangeText={setToken}
-              keyboardType="number-pad"
-            />
-
-            <TouchableOpacity style={styles.loginButton} onPress={handleVerifyOTP} disabled={loading}>
-              {loading ? (
-                <ActivityIndicator color="#fff" />
-              ) : (
-                <Text style={styles.loginButtonText}>Start Exploring 🚀</Text>
-              )}
-            </TouchableOpacity>
-
-            <TouchableOpacity style={{ marginTop: 15 }} onPress={() => setStep('email')}>
-              <Text style={{ color: '#007AFF', fontSize: 13, fontWeight: '600' }}>← Change Email Address</Text>
-            </TouchableOpacity>
-          </>
-        )}
-      </View>
+    <View style={[styles.bannerContainer, isDarkMode && styles.darkBannerContainer]}>
+      <Text style={styles.bannerTitle}>👑 Official Broadcast</Text>
+      <Text style={[styles.bannerText, isDarkMode && styles.darkBannerText]} numberOfLines={2}>{latestAnnouncement}</Text>
     </View>
   );
 }
@@ -268,14 +109,24 @@ export default function App() {
   const [authView, setAuthView] = useState('login'); // 'login' or 'signup'
   const [currentUser, setCurrentUser] = useState(null);
 
-  const [activeScreen, setActiveScreen] = useState('ChatRoom');
+  const [activeScreen, setActiveScreen] = useState('Dashboard');
   const [screenParams, setScreenParams] = useState({}); 
   const [isDarkMode, setIsDarkMode] = useState(false);
   const [coins, setCoins] = useState(2500);
   const [menuVisible, setMenuVisible] = useState(false);
-  const [unreadCount, setUnreadCount] = useState(2);
+  
+  // Unread badge count restricted strictly to messaging / chat notifications
+  const [chatUnreadCount, setChatUnreadCount] = useState(0);
 
-  const [superAdminAccessEnabled, setSuperAdminAccessEnabled] = useState(false);
+  // 🛡️ PERMANENTLY UNLOCKED FOR MASTER ADMIN BORRIS
+  const [superAdminAccessEnabled, setSuperAdminAccessEnabled] = useState(true);
+
+  // 🔌 GLOBAL ARCHITECTURAL SWITCHES STATE
+  const [globalSwitches, setGlobalSwitches] = useState({
+    maintenanceMode: false,
+    chatMediaUploads: true,
+    meshTransmission: true,
+  });
 
   const [meshNodeActive, setMeshNodeActive] = useState(true);
   const [meshPeerCount, setMeshPeerCount] = useState(4);
@@ -285,7 +136,6 @@ export default function App() {
   ]);
   const [ghostVaults, setGhostVaults] = useState({});
 
-  // LISTEN TO SUPABASE AUTH SESSION ON LAUNCH & ENSURE PRIVATE ACCOUNT IS ISOLATED
   useEffect(() => {
     supabase.auth.getSession().then(({ data: { session } }) => {
       if (session?.user) {
@@ -313,6 +163,98 @@ export default function App() {
     };
   }, []);
 
+  // 🔌 FETCH & SUBSCRIBE TO GLOBAL SYSTEM SWITCHES FROM SUPABASE
+  useEffect(() => {
+    const fetchSwitches = async () => {
+      try {
+        const { data } = await supabase.from('admin_system_switches').select('*').eq('id', 1).single();
+        if (data) {
+          setGlobalSwitches({
+            maintenanceMode: data.maintenance_mode ?? false,
+            chatMediaUploads: data.chat_media_uploads ?? true,
+            meshTransmission: data.mesh_transmission ?? true,
+          });
+        }
+      } catch (e) {}
+    };
+
+    fetchSwitches();
+
+    const switchSub = supabase
+      .channel('public:admin_system_switches')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'admin_system_switches' }, payload => {
+        if (payload.new) {
+          setGlobalSwitches({
+            maintenanceMode: payload.new.maintenance_mode ?? false,
+            chatMediaUploads: payload.new.chat_media_uploads ?? true,
+            meshTransmission: payload.new.mesh_transmission ?? true,
+          });
+        }
+      })
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(switchSub);
+    };
+  }, []);
+
+  // REAL-TIME GLOBAL CHAT UNREAD LISTENER
+  useEffect(() => {
+    if (!currentUser?.id && !currentUser?.email) return;
+    const myIdOrEmail = currentUser?.id || currentUser?.email;
+
+    const fetchUnreadCount = async () => {
+      const { count, error } = await supabase
+        .from('messages')
+        .select('*', { count: 'exact', head: true })
+        .or(`room_id.ilike.%${myIdOrEmail}%`)
+        .neq('sender_id', myIdOrEmail);
+
+      if (!error && count !== null) {
+        setChatUnreadCount(count);
+      }
+    };
+
+    fetchUnreadCount();
+
+    const channel = supabase
+      .channel('app_global_unread_channel')
+      .on(
+        'postgres_changes',
+        { event: 'INSERT', schema: 'public', table: 'messages' },
+        (payload) => {
+          if (payload.new.sender_id !== myIdOrEmail && payload.new.room_id?.includes(myIdOrEmail)) {
+            setChatUnreadCount((prev) => prev + 1);
+          }
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [currentUser]);
+
+  // AUTOMATIC OFFLINE QUEUE SYNC LISTENER
+  useEffect(() => {
+    let hasSyncedOnConnect = false;
+
+    const unsubscribe = NetInfo.addEventListener(state => {
+      if (state.isConnected && !hasSyncedOnConnect) {
+        hasSyncedOnConnect = true;
+        processOfflineQueue().then(result => {
+          if (result.syncedCount > 0) {
+            Alert.alert('Sync Complete 🚀', `Successfully synchronized ${result.syncedCount} offline messages to Supabase.`);
+          }
+        });
+      } else if (!state.isConnected) {
+        hasSyncedOnConnect = false;
+      }
+    });
+
+    return () => unsubscribe();
+  }, []);
+
   const handleLogout = async () => {
     await supabase.auth.signOut();
     await AsyncStorage.removeItem('@chatup_user_session');
@@ -324,6 +266,10 @@ export default function App() {
 
   const sendMeshPacket = (senderName, messageText) => {
     if (!messageText?.trim()) return;
+    // 🛡️ Enforce Switch #2: Check if mesh transmission is globally enabled
+    if (!globalSwitches.meshTransmission) {
+      return Alert.alert('Mesh Offline 🛰️', 'Offline P2P mesh relay transmissions are currently disabled by system policy.');
+    }
     const newPacket = { id: Date.now().toString(), sender: senderName, text: messageText };
     setLocalChatLog(prev => [...prev, newPacket]);
     Alert.alert('Mesh Relay 🛰️', 'Packet broadcasted across local multi-hop mesh nodes (Zero Internet).');
@@ -340,13 +286,20 @@ export default function App() {
     navigate: (screenName, params = {}) => {
       if (screenName === 'Login') {
         setAuthView('login');
+      } else if (screenName === 'Signup') {
+        setAuthView('signup');
       } else {
         setScreenParams(params);
         setActiveScreen(screenName);
       }
     },
     goBack: () => {
-      setActiveScreen('GroupList');
+      if (activeScreen === 'ChatRoom' && screenParams.recipientId) {
+        setScreenParams({});
+        setActiveScreen('ChatRoom');
+      } else {
+        setActiveScreen('Dashboard');
+      }
     },
   };
 
@@ -354,10 +307,60 @@ export default function App() {
     try {
       const route = { params: screenParams };
       
+      const userIdentifier = currentUser?.email ? currentUser.email.split('@')[0] : 'Workspace Member';
+      const userHandle = `@${currentUser?.id ? currentUser.id.slice(0, 8) : 'me'}`;
+      const userAvatar = currentUser?.email ? currentUser.email[0].toUpperCase() : 'M';
+      
       switch (activeScreen) {
+        case 'Dashboard': 
+          return (
+            <DashboardScreen 
+              isDarkMode={isDarkMode} 
+              coins={coins} 
+              setCoins={setCoins} 
+              currentUser={currentUser} 
+              navigation={navigation} 
+            />
+          );
         case 'ChatRoom': 
         case 'ChatRoomScreen': 
-          return <ChatRoomScreen isDarkMode={isDarkMode} currentUser={currentUser} route={route} navigation={navigation} />;
+          if (screenParams.recipientId || screenParams.recipientName || screenParams.recipientEmail || screenParams.groupId) {
+            return (
+              <ChatRoomScreen 
+                isDarkMode={isDarkMode} 
+                currentUser={currentUser} 
+                contactName={screenParams.recipientName || screenParams.groupName || userIdentifier}
+                contactHandle={screenParams.recipientHandle || userHandle}
+                contactAvatar={screenParams.recipientAvatar || screenParams.groupAvatar || userAvatar}
+                route={route} 
+                navigation={navigation}
+                chatMediaAllowed={globalSwitches.chatMediaUploads}
+                onBack={() => {
+                  setScreenParams({});
+                  setActiveScreen('ChatRoom'); 
+                }}
+              />
+            );
+          }
+          return (
+            <ConversationsListScreen 
+              currentUser={currentUser} 
+              isDarkMode={isDarkMode} 
+              navigation={navigation}
+              onSelectConversation={(conv) => {
+                setScreenParams({
+                  recipientId: conv.recipientId || conv.id,
+                  recipientName: conv.recipientName,
+                  recipientHandle: conv.recipientHandle,
+                  recipientAvatar: conv.recipientAvatar,
+                  id: conv.id,
+                });
+                setActiveScreen('ChatRoom');
+              }} 
+            />
+          );
+        case 'MessageRequests':
+          return <MessageRequestsScreen isDarkMode={isDarkMode} currentUser={currentUser} navigation={navigation} />;
         case 'GroupList': 
           return <GroupListScreen isDarkMode={isDarkMode} navigation={navigation} currentUser={currentUser} />;
         case 'CreateGroupScreen': 
@@ -374,22 +377,28 @@ export default function App() {
           return <GameArenaScreen coins={coins} setCoins={setCoins} currentUser={currentUser} route={route} navigation={navigation} />;
         case 'CameraHub': 
           return <CameraHubScreen isDarkMode={isDarkMode} navigation={navigation} currentUser={currentUser} route={route} />;
+        case 'DiscoveryUsers':
+          return <DiscoveryUsersScreen isDarkMode={isDarkMode} currentUser={currentUser} navigation={navigation} />;
+        
         case 'AdminControl': 
-          return superAdminAccessEnabled ? (
+          return (
             <AdminControlPanelScreen 
               isDarkMode={isDarkMode} 
-              superAdminAccessEnabled={superAdminAccessEnabled} 
+              superAdminAccessEnabled={true} 
               setSuperAdminAccessEnabled={setSuperAdminAccessEnabled} 
             />
-          ) : <ChatRoomScreen isDarkMode={isDarkMode} currentUser={currentUser} route={route} navigation={navigation} />;
+          );
+
         case 'GlobalAISupervisor':
-          return superAdminAccessEnabled ? (
-            <GlobalAISupervisorScreen isDarkMode={isDarkMode} />
-          ) : <ChatRoomScreen isDarkMode={isDarkMode} currentUser={currentUser} route={route} navigation={navigation} />;
+          return (
+            <GlobalAISupervisorScreen isDarkMode={isDarkMode} coins={coins} setCoins={setCoins} />
+          );
+
         case 'MonetizationTreasury': 
-          return superAdminAccessEnabled ? (
+          return (
             <MonetizationTreasuryScreen isDarkMode={isDarkMode} coins={coins} setCoins={setCoins} />
-          ) : <ChatRoomScreen isDarkMode={isDarkMode} currentUser={currentUser} route={route} navigation={navigation} />;
+          );
+
         case 'Notifications': 
           return <NotificationsScreen isDarkMode={isDarkMode} currentUser={currentUser} route={route} navigation={navigation} />;
         case 'SecurityHub': 
@@ -407,25 +416,25 @@ export default function App() {
         case 'LiveStream': 
           return <LiveStreamScreen isDarkMode={isDarkMode} coins={coins} setCoins={setCoins} currentUser={currentUser} route={route} navigation={navigation} />;
         case 'Reels':
-          return <ReelsFeedScreen isDarkMode={isDarkMode} coins={coins} setCoins={setCoins} currentUser={currentUser} />;
+          return <ReelsScreen isDarkMode={isDarkMode} coins={coins} setCoins={setCoins} currentUser={currentUser} />;
         case 'Analytics': 
           return <AnalyticsScreen isDarkMode={isDarkMode} currentUser={currentUser} route={route} navigation={navigation} />;
         case 'Cinema': 
-          return <CinemaScreen isDarkMode={isDarkMode} currentUser={currentUser} route={route} navigation={navigation} />;
+          return <CinemaScreen isDarkMode={isDarkMode} coins={coins} setCoins={setCoins} userRole="admin" onBack={() => setActiveScreen('Dashboard')} />;
         case 'Studio': 
           return <StudioScreen isDarkMode={isDarkMode} currentUser={currentUser} route={route} navigation={navigation} />;
         case 'VirtualTVScreen': 
           return <VirtualTVScreen isDarkMode={isDarkMode} coins={coins} setCoins={setCoins} currentUser={currentUser} route={route} navigation={navigation} />;
         case 'MeshHub': 
-          return <MeshHubScreen isDarkMode={isDarkMode} currentUser={currentUser} route={route} navigation={navigation} />;
+          return <MeshHubScreen isDarkMode={isDarkMode} coins={coins} setCoins={setCoins} userId={currentUser?.id || '1'} />;
         case 'DRMHub': 
-          return <DRMProtectionScreen isDarkMode={isDarkMode} currentUser={currentUser} route={route} navigation={navigation} />;
+          return <DRMProtectionScreen isDarkMode={isDarkMode} />;
         case 'Settings': 
           return (
             <SettingsScreen 
               isDarkMode={isDarkMode} 
               setIsDarkMode={setIsDarkMode} 
-              superAdminAccessEnabled={superAdminAccessEnabled}
+              superAdminAccessEnabled={true}
               setSuperAdminAccessEnabled={setSuperAdminAccessEnabled}
               currentUser={currentUser}
               onLogout={handleLogout}
@@ -434,21 +443,13 @@ export default function App() {
         case 'Profile': 
           return <ProfileScreen isDarkMode={isDarkMode} coins={coins} currentUser={currentUser} onLogout={handleLogout} route={route} navigation={navigation} />;
         case 'Interpreter': 
-          return <UniversalInterpreterModal isDarkMode={isDarkMode} onClose={() => setActiveScreen('ChatRoom')} />;
+          return <UniversalInterpreterModal isDarkMode={isDarkMode} onClose={() => setActiveScreen('Dashboard')} />;
         default: 
-          return <ChatRoomScreen isDarkMode={isDarkMode} currentUser={currentUser} route={route} navigation={navigation} />;
+          return <DashboardScreen isDarkMode={isDarkMode} coins={coins} setCoins={setCoins} currentUser={currentUser} navigation={navigation} />;
       }
     } catch (e) {
       console.error('Screen Render Error:', e);
-      return <GroupListScreen isDarkMode={isDarkMode} navigation={navigation} currentUser={currentUser} />;
-    }
-  };
-
-  const handleSelectScreen = (screenName) => {
-    setActiveScreen(screenName);
-    setMenuVisible(false);
-    if (screenName === 'Notifications') {
-      setUnreadCount(0);
+      return <DashboardScreen isDarkMode={isDarkMode} coins={coins} setCoins={setCoins} currentUser={currentUser} navigation={navigation} />;
     }
   };
 
@@ -462,17 +463,28 @@ export default function App() {
 
   if (!isAuthenticated) {
     if (authView === 'signup') {
-      return <SignupScreen navigation={navigation} isDarkMode={isDarkMode} />;
+      return <SignupScreen navigation={navigation} isDarkMode={isDarkMode} coins={coins} setCoins={setCoins} />;
     }
     return (
       <LoginScreen 
+        navigation={navigation}
         isDarkMode={isDarkMode} 
-        onNavigateSignup={() => setAuthView('signup')}
-        onLoginSuccess={(userObj) => {
-          setCurrentUser(userObj);
-          setIsAuthenticated(true);
-        }} 
+        coins={coins}
+        setCoins={setCoins}
       />
+    );
+  }
+
+  // 🚨 ENFORCE GLOBAL MAINTENANCE LOCKDOWN (Switch #22)
+  if (globalSwitches.maintenanceMode) {
+    return (
+      <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#0f172a', padding: 24 }}>
+        <Text style={{ fontSize: 40, marginBottom: 12 }}>⚠️</Text>
+        <Text style={{ fontSize: 20, fontWeight: 'bold', color: '#f8fafc', textAlign: 'center', marginBottom: 8 }}>System Maintenance Lockdown</Text>
+        <Text style={{ fontSize: 13, color: '#94a3b8', textAlign: 'center', lineHeight: 20 }}>
+          ChatUp enterprise infrastructure is currently undergoing scheduled security patching or emergency maintenance. Please check back shortly.
+        </Text>
+      </View>
     );
   }
 
@@ -488,9 +500,17 @@ export default function App() {
     }}>
       <View style={[styles.container, isDarkMode && { backgroundColor: '#1a202c' }]}>
         
+        {/* HEADER BAR */}
         <View style={[styles.headerBar, isDarkMode && styles.darkHeader]}>
-          {activeScreen !== 'ChatRoom' ? (
-            <TouchableOpacity style={styles.hamburgerButton} onPress={() => setActiveScreen('ChatRoom')}>
+          {activeScreen !== 'Dashboard' ? (
+            <TouchableOpacity style={styles.hamburgerButton} onPress={() => {
+              if (activeScreen === 'ChatRoom' && screenParams.recipientId) {
+                setScreenParams({});
+                setActiveScreen('ChatRoom'); 
+              } else {
+                setActiveScreen('Dashboard');
+              }
+            }}>
               <Text style={[styles.hamburgerText, isDarkMode && styles.darkText]}>←</Text>
             </TouchableOpacity>
           ) : (
@@ -500,7 +520,10 @@ export default function App() {
           )}
 
           <Text style={[styles.headerTitle, isDarkMode && styles.darkText]} numberOfLines={1}>
-            {activeScreen === 'ChatRoom' ? '💬 Chat' : 
+            {activeScreen === 'Dashboard' ? '🚀 Enterprise Command Hub' : 
+             activeScreen === 'ChatRoom' && !screenParams.recipientId ? '💬 Direct Messages & Inbox' :
+             activeScreen === 'ChatRoom' && screenParams.recipientId ? `💬 Chat with ${screenParams.recipientName || 'User'}` :
+             activeScreen === 'MessageRequests' ? '📥 Message Requests Inbox' :
              activeScreen === 'GroupList' ? '👥 Communities & Groups' :
              activeScreen === 'CreateGroupScreen' ? '➕ Create Group Hub' :
              activeScreen === 'ChurchLiveScreen' ? '🙏 Church & Prayer Fellowship' :
@@ -509,6 +532,7 @@ export default function App() {
              activeScreen === 'InteractiveGames' ? '🎮 Live & In-Chat Games' :
              activeScreen === 'GameArena' ? '🏆 Competitive Game Arena' :
              activeScreen === 'CameraHub' ? '🎥 Multi-Camera Hub' :
+             activeScreen === 'DiscoveryUsers' ? '🔍 Discover & Add Users' :
              activeScreen === 'Discovery' ? '🔍 Discovery Feed' :
              activeScreen === 'LiveStream' ? '🔴 Live Stream & Video' :
              activeScreen === 'Reels' ? '📱 Short-Form Reels' :
@@ -524,36 +548,36 @@ export default function App() {
           </Text>
 
           <View style={styles.headerRightIcons}>
-            <TouchableOpacity style={styles.iconButton} onPress={() => handleSelectScreen('Notifications')}>
-              <Text style={{ fontSize: 18 }}>🔔</Text>
-              {unreadCount > 0 && (
-                <View style={styles.badgeContainer}>
-                  <Text style={styles.badgeText}>{unreadCount}</Text>
-                </View>
-              )}
-            </TouchableOpacity>
-
             <TouchableOpacity style={styles.iconButton} onPress={() => setIsDarkMode(!isDarkMode)}>
               <Text style={{ fontSize: 16 }}>{isDarkMode ? '☀️' : '🌙'}</Text>
             </TouchableOpacity>
           </View>
         </View>
 
+        {/* TOP SUB BAR */}
         <View style={[styles.topSubBar, isDarkMode && styles.darkTopSubBar]}>
           <TouchableOpacity 
-            style={[styles.subTabItem, activeScreen === 'Discovery' && styles.activeSubTab]} 
-            onPress={() => setActiveScreen('Discovery')}
+            style={[styles.subTabItem, activeScreen === 'Dashboard' && styles.activeSubTab]} 
+            onPress={() => setActiveScreen('Dashboard')}
           >
-            <Ionicons name="compass-outline" size={15} color={activeScreen === 'Discovery' ? '#007AFF' : (isDarkMode ? '#a0aec0' : '#4a5568')} />
-            <Text style={[styles.subTabText, activeScreen === 'Discovery' && styles.activeSubTabText, isDarkMode && styles.darkText]}>Discovery</Text>
+            <Ionicons name="grid-outline" size={15} color={activeScreen === 'Dashboard' ? '#007AFF' : (isDarkMode ? '#a0aec0' : '#4a5568')} />
+            <Text style={[styles.subTabText, activeScreen === 'Dashboard' && styles.activeSubTabText, isDarkMode && styles.darkText]}>Command Hub</Text>
           </TouchableOpacity>
 
           <TouchableOpacity 
-            style={[styles.subTabItem, activeScreen === 'LiveStream' && styles.activeSubTab]} 
-            onPress={() => setActiveScreen('LiveStream')}
+            style={[styles.subTabItem, activeScreen === 'Notifications' && styles.activeSubTab]} 
+            onPress={() => setActiveScreen('Notifications')}
           >
-            <Ionicons name="videocam-outline" size={15} color={activeScreen === 'LiveStream' ? '#007AFF' : (isDarkMode ? '#a0aec0' : '#4a5568')} />
-            <Text style={[styles.subTabText, activeScreen === 'LiveStream' && styles.activeSubTabText, isDarkMode && styles.darkText]}>Video / Live</Text>
+            <Ionicons name="notifications-outline" size={15} color={activeScreen === 'Notifications' ? '#007AFF' : (isDarkMode ? '#a0aec0' : '#4a5568')} />
+            <Text style={[styles.subTabText, activeScreen === 'Notifications' && styles.activeSubTabText, isDarkMode && styles.darkText]}>Notifications</Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity 
+            style={[styles.subTabItem, activeScreen === 'MessageRequests' && styles.activeSubTab]} 
+            onPress={() => setActiveScreen('MessageRequests')}
+          >
+            <Ionicons name="mail-unread-outline" size={15} color={activeScreen === 'MessageRequests' ? '#007AFF' : (isDarkMode ? '#a0aec0' : '#4a5568')} />
+            <Text style={[styles.subTabText, activeScreen === 'MessageRequests' && styles.activeSubTabText, isDarkMode && styles.darkText]}>Requests</Text>
           </TouchableOpacity>
 
           <TouchableOpacity 
@@ -564,148 +588,245 @@ export default function App() {
             <Text style={[styles.subTabText, activeScreen === 'Reels' && styles.activeSubTabText, isDarkMode && styles.darkText]}>Reels 📱</Text>
           </TouchableOpacity>
 
-          {superAdminAccessEnabled && (
-            <TouchableOpacity 
-              style={[styles.subTabItem, activeScreen === 'GlobalAISupervisor' && styles.activeSubTab]} 
-              onPress={() => setActiveScreen('GlobalAISupervisor')}
-            >
-              <Ionicons name="shield-checkmark-outline" size={15} color={activeScreen === 'GlobalAISupervisor' ? '#38a169' : (isDarkMode ? '#a0aec0' : '#4a5568')} />
-              <Text style={[styles.subTabText, activeScreen === 'GlobalAISupervisor' && styles.activeSubTabText, isDarkMode && styles.darkText]}>AI Ops</Text>
-            </TouchableOpacity>
-          )}
+          <TouchableOpacity 
+            style={[styles.subTabItem, activeScreen === 'GlobalAISupervisor' && styles.activeSubTab]} 
+            onPress={() => setActiveScreen('GlobalAISupervisor')}
+          >
+            <Ionicons name="shield-checkmark-outline" size={15} color={activeScreen === 'GlobalAISupervisor' ? '#38a169' : (isDarkMode ? '#a0aec0' : '#4a5568')} />
+            <Text style={[styles.subTabText, activeScreen === 'GlobalAISupervisor' && styles.activeSubTabText, isDarkMode && styles.darkText]}>AI Ops</Text>
+          </TouchableOpacity>
         </View>
 
-        <Modal visible={menuVisible} animationType="fade" transparent={true}>
+        {/* ENTERPRISE DRAWER MENU */}
+        <Modal visible={menuVisible} animationType="slide" transparent={true}>
           <Pressable style={styles.modalOverlay} onPress={() => setMenuVisible(false)}>
             <View style={[styles.drawerContent, isDarkMode && styles.darkDrawer]}>
-              <View style={styles.drawerHeaderRow}>
-                <Text style={[styles.drawerHeaderTitle, isDarkMode && styles.darkText]}>📂 Menu</Text>
-                <TouchableOpacity onPress={() => setMenuVisible(false)}>
-                  <Text style={[styles.closeText, isDarkMode && styles.darkText]}>✕</Text>
+              
+              <View style={[styles.drawerUserHeader, isDarkMode && { borderBottomColor: '#4a5568' }]}>
+                <View style={styles.drawerAvatarCircle}>
+                  <Text style={{ color: '#fff', fontSize: 16, fontWeight: 'bold' }}>
+                    {currentUser?.email ? currentUser.email[0].toUpperCase() : 'M'}
+                  </Text>
+                </View>
+                <View style={{ flex: 1, marginLeft: 10 }}>
+                  <Text style={[styles.drawerUserName, isDarkMode && styles.darkText]} numberOfLines={1}>
+                    {currentUser?.email ? currentUser.email.split('@')[0] : 'Workspace Member'}
+                  </Text>
+                  <Text style={{ fontSize: 11, color: '#38a169', fontWeight: '600' }}>● Super-Admin Active</Text>
+                </View>
+                <TouchableOpacity onPress={() => setMenuVisible(false)} style={styles.drawerCloseCircle}>
+                  <Ionicons name="close" size={18} color={isDarkMode ? '#fff' : '#4a5568'} />
                 </TouchableOpacity>
               </View>
 
-              <ScrollView style={{ marginTop: 10 }}>
-                {superAdminAccessEnabled && (
-                  <>
-                    <Text style={styles.sectionLabel}>MASTER ADMIN</Text>
-                    <TouchableOpacity style={styles.drawerItem} onPress={() => handleSelectScreen('AdminControl')}>
-                      <Text style={[styles.drawerItemText, { color: '#3182ce', fontWeight: 'bold' }]}>👑 Super-Admin Panel</Text>
-                    </TouchableOpacity>
-                    <TouchableOpacity style={styles.drawerItem} onPress={() => handleSelectScreen('GlobalAISupervisor')}>
-                      <Text style={[styles.drawerItemText, { color: '#38a169', fontWeight: 'bold' }]}>🤖 Global AI Supervisor & SOC</Text>
-                    </TouchableOpacity>
-                  </>
-                )}
-
-                <Text style={styles.sectionLabel}>COMMUNICATION & FELLOWSHIP</Text>
-                <TouchableOpacity style={styles.drawerItem} onPress={() => handleSelectScreen('ChatRoom')}>
-                  <Text style={styles.drawerItemText}>💬 Inbox / Direct Chat</Text>
-                </TouchableOpacity>
-                <TouchableOpacity style={styles.drawerItem} onPress={() => handleSelectScreen('GroupList')}>
-                  <Text style={[styles.drawerItemText, { color: '#2563eb', fontWeight: 'bold' }]}>👥 Groups & Communities</Text>
-                </TouchableOpacity>
-                <TouchableOpacity style={styles.drawerItem} onPress={() => handleSelectScreen('ChurchLiveScreen')}>
-                  <Text style={[styles.drawerItemText, { color: '#16a34a', fontWeight: 'bold' }]}>🙏 Church & Prayer Hub</Text>
-                </TouchableOpacity>
-                <TouchableOpacity style={styles.drawerItem} onPress={() => handleSelectScreen('ChurchTestimonies')}>
-                  <Text style={[styles.drawerItemText, { color: '#2563eb', fontWeight: 'bold' }]}>✨ Testimonies & Praise</Text>
-                </TouchableOpacity>
-                <TouchableOpacity style={styles.drawerItem} onPress={() => handleSelectScreen('ChurchRegistration')}>
-                  <Text style={[styles.drawerItemText, { color: '#ca8a04', fontWeight: 'bold' }]}>⛪ Request Church Ownership</Text>
-                </TouchableOpacity>
-                <TouchableOpacity style={styles.drawerItem} onPress={() => handleSelectScreen('LiveStream')}>
-                  <Text style={styles.drawerItemText}>🔴 Live Streams</Text>
-                </TouchableOpacity>
-                <TouchableOpacity style={styles.drawerItem} onPress={() => handleSelectScreen('Reels')}>
-                  <Text style={[styles.drawerItemText, { color: '#d97706', fontWeight: 'bold' }]}>📱 Short-Form Reels</Text>
-                </TouchableOpacity>
-                <TouchableOpacity style={styles.drawerItem} onPress={() => handleSelectScreen('InteractiveGames')}>
-                  <Text style={[styles.drawerItemText, { color: '#9333ea', fontWeight: 'bold' }]}>🎮 Live & In-Chat Games</Text>
-                </TouchableOpacity>
-                <TouchableOpacity style={styles.drawerItem} onPress={() => handleSelectScreen('MeshHub')}>
-                  <Text style={styles.drawerItemText}>🛰️ Zero-Net & Ghost Vault</Text>
-                </TouchableOpacity>
-
-                <Text style={styles.sectionLabel}>MEDIA & STUDIO</Text>
-                <TouchableOpacity style={styles.drawerItem} onPress={() => handleSelectScreen('GameArena')}>
-                  <Text style={[styles.drawerItemText, { color: '#d97706', fontWeight: 'bold' }]}>🏆 Competitive Game Arena</Text>
-                </TouchableOpacity>
-                <TouchableOpacity style={styles.drawerItem} onPress={() => handleSelectScreen('CameraHub')}>
-                  <Text style={[styles.drawerItemText, { color: '#dc2626', fontWeight: 'bold' }]}>🎥 Multi-Camera Hub</Text>
-                </TouchableOpacity>
-                <TouchableOpacity style={styles.drawerItem} onPress={() => handleSelectScreen('VirtualTVScreen')}>
-                  <Text style={styles.drawerItemText}>📺 TV</Text>
-                </TouchableOpacity>
-                <TouchableOpacity style={styles.drawerItem} onPress={() => handleSelectScreen('Studio')}>
-                  <Text style={styles.drawerItemText}>🎬 Studio</Text>
-                </TouchableOpacity>
-                <TouchableOpacity style={styles.drawerItem} onPress={() => handleSelectScreen('Cinema')}>
-                  <Text style={styles.drawerItemText}>🍿 Cinema</Text>
-                </TouchableOpacity>
-                <TouchableOpacity style={styles.drawerItem} onPress={() => handleSelectScreen('DRMHub')}>
-                  <Text style={styles.drawerItemText}>🛡️ DRM & Copyright</Text>
-                </TouchableOpacity>
-
-                <Text style={styles.sectionLabel}>WALLET & TOOLS</Text>
-                <TouchableOpacity style={styles.drawerItem} onPress={() => handleSelectScreen('Wallet')}>
-                  <Text style={styles.drawerItemText}>🪙 Wallet & Treasury</Text>
-                </TouchableOpacity>
-                <TouchableOpacity style={styles.drawerItem} onPress={() => handleSelectScreen('Referrals')}>
-                  <Text style={[styles.drawerItemText, { color: '#d69e2e', fontWeight: 'bold' }]}>🎁 Referrals & QR Rewards</Text>
-                </TouchableOpacity>
+              <ScrollView style={{ marginTop: 8 }} showsVerticalScrollIndicator={false}>
                 
-                {superAdminAccessEnabled && (
-                  <TouchableOpacity style={styles.drawerItem} onPress={() => handleSelectScreen('MonetizationTreasury')}>
-                    <Text style={[styles.drawerItemText, { color: '#16a34a', fontWeight: 'bold' }]}>🪙 Treasury, Escrow & Splits</Text>
+                <View style={[styles.drawerSectionBox, isDarkMode && styles.darkDrawerCard, { backgroundColor: isDarkMode ? '#2b6cb0' : '#ebf8ff', borderColor: '#3182ce' }]}>
+                  <TouchableOpacity style={[styles.drawerRowItem, { borderBottomWidth: 0 }]} onPress={() => { setActiveScreen('Dashboard'); setMenuVisible(false); }}>
+                    <Ionicons name="grid-outline" size={20} color="#3182ce" />
+                    <Text style={[styles.drawerRowText, { color: '#3182ce', fontWeight: 'bold', fontSize: 13 }]}>🚀 Enterprise Command Hub</Text>
                   </TouchableOpacity>
-                )}
+                </View>
 
-                <TouchableOpacity style={styles.drawerItem} onPress={() => handleSelectScreen('Discovery')}>
-                  <Text style={styles.drawerItemText}>🔍 Discovery</Text>
-                </TouchableOpacity>
-                <TouchableOpacity style={styles.drawerItem} onPress={() => handleSelectScreen('Analytics')}>
-                  <Text style={styles.drawerItemText}>📈 Analytics</Text>
-                </TouchableOpacity>
-                <TouchableOpacity style={styles.drawerItem} onPress={() => handleSelectScreen('Voice')}>
-                  <Text style={styles.drawerItemText}>🎙️ Voice</Text>
-                </TouchableOpacity>
-                <TouchableOpacity style={styles.drawerItem} onPress={() => handleSelectScreen('Interpreter')}>
-                  <Text style={styles.drawerItemText}>🌐 Interpreter</Text>
-                </TouchableOpacity>
-                <TouchableOpacity style={styles.drawerItem} onPress={() => handleSelectScreen('Reactions')}>
-                  <Text style={styles.drawerItemText}>✨ Effects</Text>
-                </TouchableOpacity>
-                <TouchableOpacity style={styles.drawerItem} onPress={() => handleSelectScreen('SecurityHub')}>
-                  <Text style={styles.drawerItemText}>🛡️ Security</Text>
-                </TouchableOpacity>
+                <View style={[styles.drawerSectionBox, isDarkMode && styles.darkDrawerCard]}>
+                  <Text style={styles.drawerSectionHeader}>MASTER ADMINISTRATION</Text>
+                  
+                  <TouchableOpacity style={styles.drawerRowItem} onPress={() => { setActiveScreen('AdminControl'); setMenuVisible(false); }}>
+                    <Ionicons name="shield-outline" size={18} color="#3182ce" />
+                    <Text style={[styles.drawerRowText, { color: '#3182ce', fontWeight: 'bold' }]}>Super-Admin Panel</Text>
+                  </TouchableOpacity>
 
-                <Text style={styles.sectionLabel}>PREFERENCES</Text>
-                <TouchableOpacity style={styles.drawerItem} onPress={() => handleSelectScreen('Profile')}>
-                  <Text style={styles.drawerItemText}>👤 Profile</Text>
-                </TouchableOpacity>
-                <TouchableOpacity style={styles.drawerItem} onPress={() => handleSelectScreen('Settings')}>
-                  <Text style={styles.drawerItemText}>⚙️ Settings</Text>
-                </TouchableOpacity>
+                  <TouchableOpacity style={styles.drawerRowItem} onPress={() => { setActiveScreen('GlobalAISupervisor'); setMenuVisible(false); }}>
+                    <Ionicons name="hardware-chip-outline" size={18} color="#38a169" />
+                    <Text style={[styles.drawerRowText, { color: '#38a169', fontWeight: 'bold' }]}>Global AI Supervisor SOC</Text>
+                  </TouchableOpacity>
 
-                <TouchableOpacity style={[styles.drawerItem, { marginTop: 15 }]} onPress={handleLogout}>
-                  <Text style={[styles.drawerItemText, { color: '#e53e3e', fontWeight: 'bold' }]}>🚪 Log Out</Text>
-                </TouchableOpacity>
+                  <TouchableOpacity style={styles.drawerRowItem} onPress={() => { setActiveScreen('MonetizationTreasury'); setMenuVisible(false); }}>
+                    <Ionicons name="wallet-outline" size={18} color="#16a34a" />
+                    <Text style={[styles.drawerRowText, { color: '#16a34a', fontWeight: 'bold' }]}>Treasury, Escrow & Splits</Text>
+                  </TouchableOpacity>
+                </View>
+
+                <View style={[styles.drawerSectionBox, isDarkMode && styles.darkDrawerCard]}>
+                  <Text style={styles.drawerSectionHeader}>COMMUNICATION & COMMUNITY</Text>
+                  
+                  <TouchableOpacity style={styles.drawerRowItem} onPress={() => { setActiveScreen('DiscoveryUsers'); setMenuVisible(false); }}>
+                    <Ionicons name="person-add-outline" size={18} color="#3182ce" />
+                    <Text style={[styles.drawerRowText, { color: '#3182ce', fontWeight: 'bold' }]}>🔍 Discover & Add Users</Text>
+                  </TouchableOpacity>
+
+                  <TouchableOpacity style={styles.drawerRowItem} onPress={() => { setActiveScreen('MessageRequests'); setMenuVisible(false); }}>
+                    <Ionicons name="mail-unread-outline" size={18} color="#3182ce" />
+                    <Text style={[styles.drawerRowText, { color: '#3182ce', fontWeight: 'bold' }]}>📥 Message Requests Inbox</Text>
+                  </TouchableOpacity>
+
+                  <TouchableOpacity style={styles.drawerRowItem} onPress={() => { setScreenParams({}); setActiveScreen('ChatRoom'); setMenuVisible(false); }}>
+                    <Ionicons name="chatbubbles-outline" size={18} color="#007AFF" />
+                    <Text style={[styles.drawerRowText, isDarkMode && styles.darkText]}>Direct Chats & Inbox</Text>
+                  </TouchableOpacity>
+
+                  <TouchableOpacity style={styles.drawerRowItem} onPress={() => { setActiveScreen('GroupList'); setMenuVisible(false); }}>
+                    <Ionicons name="people-outline" size={18} color="#2563eb" />
+                    <Text style={[styles.drawerRowText, isDarkMode && styles.darkText]}>Groups & Communities</Text>
+                  </TouchableOpacity>
+
+                  <TouchableOpacity style={styles.drawerRowItem} onPress={() => { setActiveScreen('ChurchLiveScreen'); setMenuVisible(false); }}>
+                    <Ionicons name="tv-outline" size={18} color="#16a34a" />
+                    <Text style={[styles.drawerRowText, isDarkMode && styles.darkText]}>Church & Prayer Hub</Text>
+                  </TouchableOpacity>
+
+                  <TouchableOpacity style={styles.drawerRowItem} onPress={() => { setActiveScreen('ChurchTestimonies'); setMenuVisible(false); }}>
+                    <Ionicons name="sparkles-outline" size={18} color="#2563eb" />
+                    <Text style={[styles.drawerRowText, isDarkMode && styles.darkText]}>Testimonies & Praise</Text>
+                  </TouchableOpacity>
+
+                  <TouchableOpacity style={styles.drawerRowItem} onPress={() => { setActiveScreen('ChurchRegistration'); setMenuVisible(false); }}>
+                    <Ionicons name="business-outline" size={18} color="#ca8a04" />
+                    <Text style={[styles.drawerRowText, isDarkMode && styles.darkText]}>Request Church Ownership</Text>
+                  </TouchableOpacity>
+
+                  <TouchableOpacity style={styles.drawerRowItem} onPress={() => { setActiveScreen('LiveStream'); setMenuVisible(false); }}>
+                    <Ionicons name="videocam-outline" size={18} color="#e53e3e" />
+                    <Text style={[styles.drawerRowText, isDarkMode && styles.darkText]}>Live Streams</Text>
+                  </TouchableOpacity>
+
+                  <TouchableOpacity style={styles.drawerRowItem} onPress={() => { setActiveScreen('Reels'); setMenuVisible(false); }}>
+                    <Ionicons name="film-outline" size={18} color="#d97706" />
+                    <Text style={[styles.drawerRowText, isDarkMode && styles.darkText]}>Short-Form Reels</Text>
+                  </TouchableOpacity>
+
+                  <TouchableOpacity style={styles.drawerRowItem} onPress={() => { setActiveScreen('InteractiveGames'); setMenuVisible(false); }}>
+                    <Ionicons name="game-controller-outline" size={18} color="#9333ea" />
+                    <Text style={[styles.drawerRowText, isDarkMode && styles.darkText]}>Live & In-Chat Games</Text>
+                  </TouchableOpacity>
+                </View>
+
+                <View style={[styles.drawerSectionBox, isDarkMode && styles.darkDrawerCard]}>
+                  <Text style={styles.drawerSectionHeader}>MEDIA, STUDIO & VAULT</Text>
+                  
+                  <TouchableOpacity style={styles.drawerRowItem} onPress={() => { setActiveScreen('GameArena'); setMenuVisible(false); }}>
+                    <Ionicons name="trophy-outline" size={18} color="#d97706" />
+                    <Text style={[styles.drawerRowText, isDarkMode && styles.darkText]}>Competitive Game Arena</Text>
+                  </TouchableOpacity>
+
+                  <TouchableOpacity style={styles.drawerRowItem} onPress={() => { setActiveScreen('CameraHub'); setMenuVisible(false); }}>
+                    <Ionicons name="aperture-outline" size={18} color="#dc2626" />
+                    <Text style={[styles.drawerRowText, isDarkMode && styles.darkText]}>Multi-Camera Hub</Text>
+                  </TouchableOpacity>
+
+                  <TouchableOpacity style={styles.drawerRowItem} onPress={() => { setActiveScreen('VirtualTVScreen'); setMenuVisible(false); }}>
+                    <Ionicons name="desktop-outline" size={18} color="#3182ce" />
+                    <Text style={[styles.drawerRowText, isDarkMode && styles.darkText]}>Virtual TV</Text>
+                  </TouchableOpacity>
+
+                  <TouchableOpacity style={styles.drawerRowItem} onPress={() => { setActiveScreen('Studio'); setMenuVisible(false); }}>
+                    <Ionicons name="mic-outline" size={18} color="#805ad5" />
+                    <Text style={[styles.drawerRowText, isDarkMode && styles.darkText]}>Studio & Production</Text>
+                  </TouchableOpacity>
+
+                  <TouchableOpacity style={styles.drawerRowItem} onPress={() => { setActiveScreen('Cinema'); setMenuVisible(false); }}>
+                    <Ionicons name="film-outline" size={18} color="#e53e3e" />
+                    <Text style={[styles.drawerRowText, isDarkMode && styles.darkText]}>Virtual Cinema Hall</Text>
+                  </TouchableOpacity>
+
+                  <TouchableOpacity style={styles.drawerRowItem} onPress={() => { setActiveScreen('MeshHub'); setMenuVisible(false); }}>
+                    <Ionicons name="radio-outline" size={18} color="#319795" />
+                    <Text style={[styles.drawerRowText, isDarkMode && styles.darkText]}>Zero-Net & Ghost Vault</Text>
+                  </TouchableOpacity>
+                </View>
+
+                <View style={[styles.drawerSectionBox, isDarkMode && styles.darkDrawerCard]}>
+                  <Text style={styles.drawerSectionHeader}>WALLET & TOOLS</Text>
+                  
+                  <TouchableOpacity style={styles.drawerRowItem} onPress={() => { setActiveScreen('Wallet'); setMenuVisible(false); }}>
+                    <Ionicons name="card-outline" size={18} color="#16a34a" />
+                    <Text style={[styles.drawerRowText, isDarkMode && styles.darkText]}>Wallet & Treasury</Text>
+                  </TouchableOpacity>
+
+                  <TouchableOpacity style={styles.drawerRowItem} onPress={() => { setActiveScreen('Referrals'); setMenuVisible(false); }}>
+                    <Ionicons name="gift-outline" size={18} color="#d69e2e" />
+                    <Text style={[styles.drawerRowText, isDarkMode && styles.darkText]}>Referrals & QR Rewards</Text>
+                  </TouchableOpacity>
+
+                  <TouchableOpacity style={styles.drawerRowItem} onPress={() => { setActiveScreen('Discovery'); setMenuVisible(false); }}>
+                    <Ionicons name="compass-outline" size={18} color="#007AFF" />
+                    <Text style={[styles.drawerRowText, isDarkMode && styles.darkText]}>Discovery Feed</Text>
+                  </TouchableOpacity>
+
+                  <TouchableOpacity style={styles.drawerRowItem} onPress={() => { setActiveScreen('Analytics'); setMenuVisible(false); }}>
+                    <Ionicons name="stats-chart-outline" size={18} color="#3182ce" />
+                    <Text style={[styles.drawerRowText, isDarkMode && styles.darkText]}>Analytics Dashboard</Text>
+                  </TouchableOpacity>
+
+                  <TouchableOpacity style={styles.drawerRowItem} onPress={() => { setActiveScreen('Interpreter'); setMenuVisible(false); }}>
+                    <Ionicons name="globe-outline" size={18} color="#805ad5" />
+                    <Text style={[styles.drawerRowText, isDarkMode && styles.darkText]}>Global AI Interpreter</Text>
+                  </TouchableOpacity>
+                </View>
+
+                <View style={[styles.drawerSectionBox, isDarkMode && styles.darkDrawerCard, { marginBottom: 30 }]}>
+                  <Text style={styles.drawerSectionHeader}>PREFERENCES</Text>
+                  
+                  <TouchableOpacity style={styles.drawerRowItem} onPress={() => { setActiveScreen('Profile'); setMenuVisible(false); }}>
+                    <Ionicons name="person-outline" size={18} color="#4a5568" />
+                    <Text style={[styles.drawerRowText, isDarkMode && styles.darkText]}>My Profile</Text>
+                  </TouchableOpacity>
+
+                  <TouchableOpacity style={styles.drawerRowItem} onPress={() => { setActiveScreen('Settings'); setMenuVisible(false); }}>
+                    <Ionicons name="settings-outline" size={18} color="#4a5568" />
+                    <Text style={[styles.drawerRowText, isDarkMode && styles.darkText]}>App Settings</Text>
+                  </TouchableOpacity>
+
+                  <TouchableOpacity style={[styles.drawerRowItem, { borderBottomWidth: 0, marginTop: 4, backgroundColor: isDarkMode ? '#2d3748' : '#fff5f5', borderRadius: 8, paddingHorizontal: 6 }]} onPress={handleLogout}>
+                    <Ionicons name="log-out-outline" size={18} color="#e53e3e" />
+                    <Text style={[styles.drawerRowText, { color: '#e53e3e', fontWeight: 'bold' }]}>Log Out Securely</Text>
+                  </TouchableOpacity>
+                </View>
+
               </ScrollView>
             </View>
           </Pressable>
         </Modal>
 
         <View style={{ flex: 1 }}>
+          {/* 🌟 Live Announcement Banner Rendered Above Screens */}
+          <GlobalAnnouncementBanner isDarkMode={isDarkMode} />
           {renderCurrentScreen()}
         </View>
 
+        {/* BOTTOM TAB BAR */}
         <View style={[styles.bottomTabBar, isDarkMode && styles.darkBottomBar]}>
           <TouchableOpacity 
             style={styles.tabItem} 
-            onPress={() => setActiveScreen('ChatRoom')}
+            onPress={() => setActiveScreen('Dashboard')}
           >
-            <Ionicons name={activeScreen === 'ChatRoom' ? 'chatbubbles' : 'chatbubbles-outline'} size={22} color={activeScreen === 'ChatRoom' ? '#007AFF' : (isDarkMode ? '#a0aec0' : 'gray')} />
+            <Ionicons name={activeScreen === 'Dashboard' ? 'grid' : 'grid-outline'} size={22} color={activeScreen === 'Dashboard' ? '#007AFF' : (isDarkMode ? '#a0aec0' : 'gray')} />
+            <Text style={[styles.tabText, activeScreen === 'Dashboard' && styles.activeTabText, isDarkMode && styles.darkText]} numberOfLines={1}>Hub</Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity 
+            style={styles.tabItem} 
+            onPress={() => setActiveScreen('DiscoveryUsers')}
+          >
+            <Ionicons name={activeScreen === 'DiscoveryUsers' ? 'person-add' : 'person-add-outline'} size={22} color={activeScreen === 'DiscoveryUsers' ? '#007AFF' : (isDarkMode ? '#a0aec0' : 'gray')} />
+            <Text style={[styles.tabText, activeScreen === 'DiscoveryUsers' && styles.activeTabText, isDarkMode && styles.darkText]} numberOfLines={1}>Find Users</Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity 
+            style={styles.tabItem} 
+            onPress={() => {
+              setScreenParams({});
+              setActiveScreen('ChatRoom');
+            }}
+          >
+            <View style={{ position: 'relative' }}>
+              <Ionicons name={activeScreen === 'ChatRoom' ? 'chatbubbles' : 'chatbubbles-outline'} size={22} color={activeScreen === 'ChatRoom' ? '#007AFF' : (isDarkMode ? '#a0aec0' : 'gray')} />
+              {chatUnreadCount > 0 && activeScreen !== 'ChatRoom' && (
+                <View style={styles.badgeContainer}>
+                  <Text style={styles.badgeText}>{chatUnreadCount}</Text>
+                </View>
+              )}
+            </View>
             <Text style={[styles.tabText, activeScreen === 'ChatRoom' && styles.activeTabText, isDarkMode && styles.darkText]} numberOfLines={1}>Chats</Text>
           </TouchableOpacity>
 
@@ -719,26 +840,10 @@ export default function App() {
 
           <TouchableOpacity 
             style={styles.tabItem} 
-            onPress={() => setActiveScreen('ChurchLiveScreen')}
-          >
-            <Ionicons name={activeScreen === 'ChurchLiveScreen' ? 'tv' : 'tv-outline'} size={22} color={activeScreen === 'ChurchLiveScreen' ? '#007AFF' : (isDarkMode ? '#a0aec0' : 'gray')} />
-            <Text style={[styles.tabText, activeScreen === 'ChurchLiveScreen' && styles.activeTabText, isDarkMode && styles.darkText]} numberOfLines={1}>Church & TV</Text>
-          </TouchableOpacity>
-
-          <TouchableOpacity 
-            style={styles.tabItem} 
             onPress={() => setActiveScreen('Reels')}
           >
             <Ionicons name={activeScreen === 'Reels' ? 'film' : 'film-outline'} size={22} color={activeScreen === 'Reels' ? '#007AFF' : (isDarkMode ? '#a0aec0' : 'gray')} />
             <Text style={[styles.tabText, activeScreen === 'Reels' && styles.activeTabText, isDarkMode && styles.darkText]} numberOfLines={1}>Reels</Text>
-          </TouchableOpacity>
-
-          <TouchableOpacity 
-            style={styles.tabItem} 
-            onPress={() => setActiveScreen('Wallet')}
-          >
-            <Ionicons name={activeScreen === 'Wallet' ? 'wallet' : 'wallet-outline'} size={22} color={activeScreen === 'Wallet' ? '#007AFF' : (isDarkMode ? '#a0aec0' : 'gray')} />
-            <Text style={[styles.tabText, activeScreen === 'Wallet' && styles.activeTabText, isDarkMode && styles.darkText]} numberOfLines={1}>Wallet</Text>
           </TouchableOpacity>
         </View>
 
@@ -763,30 +868,29 @@ const styles = StyleSheet.create({
   darkText: { color: '#fff' },
   headerRightIcons: { flexDirection: 'row', alignItems: 'center' },
   iconButton: { padding: 6, position: 'relative', marginLeft: 8 },
-  badgeContainer: { position: 'absolute', top: 2, right: 2, backgroundColor: '#e53e3e', borderRadius: 8, width: 16, height: 16, justifyContent: 'center', alignItems: 'center' },
+  badgeContainer: { position: 'absolute', top: -4, right: -8, backgroundColor: '#e53e3e', borderRadius: 8, width: 16, height: 16, justifyContent: 'center', alignItems: 'center' },
   badgeText: { color: '#fff', fontSize: 9, fontWeight: 'bold' },
   modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'flex-start' },
-  drawerContent: { width: '65%', height: '100%', backgroundColor: '#fff', padding: 15, paddingTop: 40, shadowColor: '#000', shadowOpacity: 0.25, shadowRadius: 5, elevation: 5 },
+  drawerContent: { width: '75%', height: '100%', backgroundColor: '#f8fafc', padding: 12, paddingTop: 40, shadowColor: '#000', shadowOpacity: 0.25, shadowRadius: 8, elevation: 6 },
   darkDrawer: { backgroundColor: '#1a202c' },
-  drawerHeaderRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', borderBottomWidth: 1, borderBottomColor: '#e2e8f0', paddingBottom: 10 },
-  drawerHeaderTitle: { fontSize: 14, fontWeight: 'bold', color: '#2d3748' },
-  closeText: { fontSize: 18, fontWeight: 'bold', color: '#718096' },
-  sectionLabel: { fontSize: 9, fontWeight: 'bold', color: '#a0aec0', marginTop: 12, marginBottom: 4, letterSpacing: 1 },
-  drawerItem: { paddingVertical: 8, borderBottomWidth: 1, borderBottomColor: '#edf2f7' },
-  drawerItemText: { fontSize: 13, fontWeight: 'bold', color: '#4a5568' },
+  drawerUserHeader: { flexDirection: 'row', alignItems: 'center', paddingBottom: 12, borderBottomWidth: 1, borderBottomColor: '#e2e8f0', marginBottom: 8 },
+  drawerAvatarCircle: { width: 36, height: 36, borderRadius: 18, backgroundColor: '#007AFF', justifyContent: 'center', alignItems: 'center' },
+  drawerUserName: { fontSize: 13, fontWeight: 'bold', color: '#2d3748' },
+  drawerCloseCircle: { padding: 4 },
+  drawerSectionBox: { backgroundColor: '#fff', borderRadius: 10, padding: 8, marginBottom: 10, borderWidth: 1, borderColor: '#e2e8f0' },
+  darkDrawerCard: { backgroundColor: '#2d3748', borderColor: '#4a5568' },
+  drawerSectionHeader: { fontSize: 9, fontWeight: 'bold', color: '#a0aec0', marginBottom: 6, letterSpacing: 0.8 },
+  drawerRowItem: { flexDirection: 'row', alignItems: 'center', paddingVertical: 8, paddingHorizontal: 6, borderBottomWidth: 1, borderBottomColor: '#f1f5f9' },
+  drawerRowText: { fontSize: 12, marginLeft: 10, color: '#2d3748', fontWeight: '500' },
   bottomTabBar: { height: 60, backgroundColor: '#fff', borderTopWidth: 1, borderTopColor: '#e2e8f0', flexDirection: 'row', justifyContent: 'space-around', alignItems: 'center', paddingBottom: 5 },
   darkBottomBar: { backgroundColor: '#2d3748', borderTopColor: '#4a5568' },
   tabItem: { flex: 1, alignItems: 'center', justifyContent: 'center' },
   tabText: { fontSize: 10, color: 'gray', marginTop: 2 },
   activeTabText: { color: '#007AFF', fontWeight: 'bold' },
   loginContainer: { flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#f7fafc', padding: 20 },
-  loginCard: { width: '100%', maxWidth: 380, backgroundColor: '#fff', padding: 25, borderRadius: 16, shadowColor: '#000', shadowOpacity: 0.1, shadowRadius: 10, elevation: 5, alignItems: 'center' },
-  loginLogo: { fontSize: 28, fontWeight: 'bold', color: '#007AFF', marginBottom: 10 },
-  loginSubtitle: { fontSize: 14, color: '#4a5568', textAlign: 'center', marginBottom: 20 },
-  loginInput: { width: '100%', height: 48, borderWidth: 1, borderColor: '#cbd5e0', borderRadius: 8, paddingHorizontal: 15, fontSize: 15, backgroundColor: '#fff', marginBottom: 15, color: '#2d3748' },
-  darkInput: { backgroundColor: '#2d3748', borderColor: '#4a5568', color: '#fff' },
-  loginButton: { width: '100%', height: 48, backgroundColor: '#007AFF', justifyContent: 'center', alignItems: 'center', borderRadius: 8 },
-  loginButtonText: { color: '#fff', fontSize: 16, fontWeight: 'bold' },
-  card: { backgroundColor: '#fff', borderRadius: 12, padding: 15, marginBottom: 12, borderWidth: 1, borderColor: '#e2e8f0' },
-  cardTitle: { fontSize: 13, fontWeight: 'bold', color: '#2d3748', marginBottom: 6 },
+  bannerContainer: { backgroundColor: '#eff6ff', borderWidth: 1, borderColor: '#bfdbfe', borderRadius: 8, padding: 10, marginHorizontal: 12, marginTop: 8, marginBottom: 4 },
+  darkBannerContainer: { backgroundColor: '#1e3a8a', borderColor: '#3b82f6' },
+  bannerTitle: { fontSize: 10, fontWeight: 'bold', color: '#1d4ed8', marginBottom: 2 },
+  bannerText: { fontSize: 12, color: '#1e3a8a', fontWeight: '500' },
+  darkBannerText: { color: '#bfdbfe' },
 });

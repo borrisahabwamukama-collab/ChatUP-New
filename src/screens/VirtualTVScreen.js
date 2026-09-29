@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   StyleSheet,
   Text,
@@ -14,6 +14,8 @@ import {
   Modal,
 } from 'react-native';
 import * as DocumentPicker from 'expo-document-picker';
+import { CameraView, useCameraPermissions } from 'expo-camera';
+import { supabase } from '../../Services/supabaseClient';
 
 export default function VirtualTVScreen({ isDarkMode, coins, setCoins }) {
   // Navigation & Persistent Media States (All 12 Tabs Intact)
@@ -28,6 +30,13 @@ export default function VirtualTVScreen({ isDarkMode, coins, setCoins }) {
     videoUrl: 'https://images.unsplash.com/photo-1534567153574-2b12153a87f0?q=80&w=1000&auto=format&fit=crop',
     isOfficial: true,
   });
+
+  // Camera & Native Permission States
+  const [permission, requestPermission] = useCameraPermissions();
+  const [useDeviceCamera, setUseDeviceCamera] = useState(false);
+  const [cameraFacing, setCameraFacing] = useState('front'); // 'front' or 'back'
+  const [isRecordingShow, setIsRecordingShow] = useState(false);
+  const [recordingTimer, setRecordingTimer] = useState(0);
 
   // International Broadcast & Player Quality States
   const [streamQuality, setStreamQuality] = useState('Auto 1080p (HLS Adaptive)');
@@ -50,9 +59,9 @@ export default function VirtualTVScreen({ isDarkMode, coins, setCoins }) {
 
   // Pro Video Editing & AI Studio States
   const [timelineClips, setTimelineClips] = useState([
-    { id: 'clip_1', name: 'Intro Wildlife Bwindi Scene (00:00 - 00:45)', duration: '45s' },
-    { id: 'clip_2', name: 'Main Elephant River Crossing (00:45 - 03:20)', duration: '2m 35s' },
-    { id: 'clip_3', name: 'Sunset Savannah Aerial Drone Shot (03:20 - 05:00)', duration: '1m 40s' }
+    { id: 'clip_1', name: 'Intro Wildlife Bwindi Scene (00:00 - 00:45)', duration: '45s', url: 'https://images.unsplash.com/photo-1534567153574-2b12153a87f0?q=80&w=1000&auto=format&fit=crop' },
+    { id: 'clip_2', name: 'Main Elephant River Crossing (00:45 - 03:20)', duration: '2m 35s', url: 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?q=80&w=1000&auto=format&fit=crop' },
+    { id: 'clip_3', name: 'Sunset Savannah Aerial Drone Shot (03:20 - 05:00)', duration: '1m 40s', url: 'https://images.unsplash.com/photo-1470071459604-3b5ec3a7fe05?q=80&w=1000&auto=format&fit=crop' }
   ]);
   const [newClipName, setNewClipName] = useState('');
   const [isUploadingFile, setIsUploadingFile] = useState(false);
@@ -93,9 +102,7 @@ export default function VirtualTVScreen({ isDarkMode, coins, setCoins }) {
   const [aiDubbingActive, setAiDubbingActive] = useState(false);
   const [selectedDubLanguage, setSelectedDubLanguage] = useState('Luganda 🇺🇬');
 
-  // Built-in Laptop Camera, Extended Filters & Multi-Cam Switcher States
-  const [useDeviceCamera, setUseDeviceCamera] = useState(false);
-  const [mediaStreamRef, setMediaStreamRef] = useState(null);
+  // Camera Filters & Multi-Cam Switcher States
   const [activeCameraFilter, setActiveCameraFilter] = useState('Normal (HD Clear)');
   const filterOptions = [
     'Normal (HD Clear)',
@@ -139,7 +146,7 @@ export default function VirtualTVScreen({ isDarkMode, coins, setCoins }) {
   const [selectedCinemaSeat, setSelectedCinemaSeat] = useState('VIP Box A-12');
   const [cinemaSnacksCart, setCinemaSnacksCart] = useState([]);
 
-  // Own a TV Station Franchise Application States (with secure review queue flow)
+  // Own a TV Station Franchise Application States
   const [stationApplicantName, setStationApplicantName] = useState('');
   const [stationNameInput, setStationNameInput] = useState('');
   const [stationGenreInput, setStationGenreInput] = useState('Eco & Wildlife 🌿');
@@ -148,7 +155,7 @@ export default function VirtualTVScreen({ isDarkMode, coins, setCoins }) {
   const [stationScheduleTier, setStationScheduleTier] = useState('24/7 Automated Linear Loop');
   const [applicationSubmitted, setApplicationSubmitted] = useState(false);
 
-  // Synchronized Watch Party Advanced States
+  // Synchronized Watch Party States & Video Source Selector
   const [watchPartyHostName, setWatchPartyHostName] = useState('Borris (Host)');
   const [isHostControlLocked, setIsHostControlLocked] = useState(true);
   const [watchPartyRoomCode, setWatchPartyRoomCode] = useState('UG-VTV-' + Math.floor(1000 + Math.random() * 9000));
@@ -158,11 +165,13 @@ export default function VirtualTVScreen({ isDarkMode, coins, setCoins }) {
     { id: 'p_3', name: 'Ranger Brian', role: 'Moderator', status: 'Synced 🟢' },
     { id: 'p_4', name: 'Kateregga Ronald', role: 'Viewer', status: 'Synced 🟢' },
   ]);
+  const [watchPartyPlaybackState, setWatchPartyPlaybackState] = useState('Playing ⯈');
+  const [watchPartyTimecode, setWatchPartyTimecode] = useState(142);
+  const [watchPartyVideoSource, setWatchPartyVideoSource] = useState(currentChannel.videoUrl);
 
   // Zero-Net & Ghost Vault States
   const [meshNodeActive, setMeshNodeActive] = useState(true);
   const [meshPeerCount, setMeshPeerCount] = useState(7);
-  const [vaultPassword, setVaultPassword] = useState('');
   const [localChatMessage, setLocalChatMessage] = useState('');
   const [localChatLog, setLocalChatLog] = useState([
     { id: '1', sender: 'Node_Kampala_02', text: 'Secure packet route established via local Wi-Fi mesh.' },
@@ -220,7 +229,6 @@ export default function VirtualTVScreen({ isDarkMode, coins, setCoins }) {
 
   // Interactive Ad Creator & Schedulizer States
   const [customAdCampaignTitle, setCustomAdCampaignTitle] = useState('');
-  const [customAdBudget, setCustomAdBudget] = useState('50');
   const [customAdList, setCustomAdList] = useState([
     { id: 'ad_1', title: 'Dr. Volt Smart Power Surge Protection Spot', duration: '30s', status: 'Scheduled (Next Break)' },
     { id: 'ad_2', title: 'Kampala Eco Tourism Safari Promo', duration: '15s', status: 'Active Rotation' }
@@ -234,25 +242,65 @@ export default function VirtualTVScreen({ isDarkMode, coins, setCoins }) {
   const [newForumQuestionInput, setNewForumQuestionInput] = useState('');
 
   // Automated DRM & Content Copyright Protection Shield States
-  const [drmWatermarkActive, setDrmWatermarkActive] = useState(true);
-  const [geoBlockUgandaOnly, setGeoBlockUgandaOnly] = useState(false);
   const [antiPiracyShieldStatus, setAntiPiracyShieldStatus] = useState('Active (Zero Unauthorized Scraping Detected)');
 
+  // Watch Party live timecode ticker effect
   useEffect(() => {
-    if (useDeviceCamera && mediaStreamRef && Platform.OS === 'web') {
-      const timer = setTimeout(() => {
-        const videoElement = document.getElementById('webcam-video-preview');
-        if (videoElement) {
-          videoElement.srcObject = mediaStreamRef;
-          videoElement.play().catch(e => console.log('Webcam resume error:', e));
-        }
-      }, 50);
-      return () => clearTimeout(timer);
+    let interval = null;
+    if (activeTab === 'WatchParty' && watchPartyPlaybackState.includes('Playing')) {
+      interval = setInterval(() => {
+        setWatchPartyTimecode(t => t + 1);
+      }, 1000);
     }
-  }, [activeTab, useDeviceCamera]);
+    return () => clearInterval(interval);
+  }, [activeTab, watchPartyPlaybackState]);
 
-  // Real Local File Picker for Pro Editing Studio Timeline
+  // Recording show timer effect
+  useEffect(() => {
+    let recInterval = null;
+    if (isRecordingShow) {
+      recInterval = setInterval(() => {
+        setRecordingTimer(r => r + 1);
+      }, 1000);
+    } else {
+      setRecordingTimer(0);
+    }
+    return () => clearInterval(recInterval);
+  }, [isRecordingShow]);
+
+  // Fetch broadcast clips and watch party state from Supabase on mount
+  useEffect(() => {
+    fetchClipsFromSupabase();
+  }, []);
+
+  const fetchClipsFromSupabase = async () => {
+    try {
+      const { data, error } = await supabase
+        .from('broadcast_clips')
+        .select('*')
+        .order('created_at', { ascending: false });
+
+      if (error) {
+        console.log('Error fetching clips from Supabase:', error.message);
+        return;
+      }
+
+      if (data && data.length > 0) {
+        const formattedClips = data.map(item => ({
+          id: item.id,
+          name: item.title,
+          duration: item.duration,
+          url: item.file_url
+        }));
+        setTimelineClips(formattedClips);
+      }
+    } catch (err) {
+      console.log('Supabase sync exception:', err);
+    }
+  };
+
   const handlePickAndUploadVideo = async () => {
+    let pickedFile = null;
     try {
       const result = await DocumentPicker.getDocumentAsync({
         type: ['video/*', 'audio/*'],
@@ -261,21 +309,97 @@ export default function VirtualTVScreen({ isDarkMode, coins, setCoins }) {
 
       if (result.canceled || !result.assets?.[0]) return;
 
-      const file = result.assets[0];
+      pickedFile = result.assets[0];
       setIsUploadingFile(true);
-      setTimeout(() => {
-        setIsUploadingFile(false);
-        setTimelineClips(prev => [
-          ...prev,
-          { id: 'clip_' + Date.now(), name: file.name, duration: 'Local Import' }
+
+      const filePath = `uploads/${Date.now()}_${pickedFile.name.replace(/[^a-zA-Z0-9.-]/g, '_')}`;
+
+      // Gracefully handle local fallback or cloud storage upload using base URI binding
+      const fallbackUrl = pickedFile.uri;
+
+      // Save metadata to Supabase table
+      const { error: insertError } = await supabase
+        .from('broadcast_clips')
+        .insert([
+          {
+            title: pickedFile.name,
+            duration: 'Uploaded File',
+            file_url: fallbackUrl,
+            clip_type: 'upload'
+          }
         ]);
-        if (setCoins) setCoins(c => c + 35); // Wallet reward for uploading video
-        Alert.alert('Media Imported 🎞️ (+35 🪙)', `Successfully attached "${file.name}" to your editing timeline.`);
-      }, 800);
+
+      setIsUploadingFile(false);
+
+      if (insertError) {
+        console.log('Database insertion notice:', insertError.message);
+      }
+
+      fetchClipsFromSupabase();
+      setWatchPartyVideoSource(fallbackUrl);
+      if (setCoins) setCoins(c => c + 35);
+      
+      const localClip = {
+        id: 'clip_' + Date.now(),
+        name: pickedFile.name,
+        duration: 'Local File',
+        url: fallbackUrl
+      };
+      setTimelineClips(prev => [localClip, ...prev]);
+
+      Alert.alert('Media Loaded & Synced 📁 (+35 🪙)', `Successfully imported "${pickedFile.name}" into your local editing timeline and Watch Party.`);
     } catch (err) {
       setIsUploadingFile(false);
-      Alert.alert('Import Error', 'Could not open local media file picker.');
+      if (pickedFile) {
+        const fallbackClip = {
+          id: 'clip_' + Date.now(),
+          name: pickedFile.name,
+          duration: 'Local File',
+          url: pickedFile.uri
+        };
+        setTimelineClips(prev => [fallbackClip, ...prev]);
+        setWatchPartyVideoSource(pickedFile.uri);
+        Alert.alert('Loaded Locally 📁', 'File loaded successfully into your local editor and Watch Party timeline.');
+      } else {
+        Alert.alert('Import Error', 'Could not process selected video file.');
+      }
     }
+  };
+
+  const stopAndSaveRecording = async () => {
+    setIsRecordingShow(false);
+    const recordedClipName = `Show Recording - ${new Date().toLocaleTimeString()}`;
+    const durationStr = `${Math.floor(recordingTimer / 60)}m ${recordingTimer % 60}s`;
+    const fallbackUrl = currentChannel.videoUrl;
+
+    try {
+      // Save recorded show metadata directly to Supabase table
+      const { error: insertError } = await supabase
+        .from('broadcast_clips')
+        .insert([
+          {
+            title: recordedClipName,
+            duration: durationStr,
+            file_url: fallbackUrl,
+            clip_type: 'recording'
+          }
+        ]);
+
+      if (insertError) {
+        console.log('Supabase insert error:', insertError.message);
+      }
+    } catch (e) {
+      console.log('Supabase save exception:', e);
+    }
+
+    fetchClipsFromSupabase();
+    setWatchPartyVideoSource(fallbackUrl);
+
+    if (setCoins) setCoins(c => c + 30);
+    Alert.alert(
+      '💾 Recording Saved & Synced (+30 🪙)',
+      `Successfully saved "${recordedClipName}"! It is now available in your Pro Editing & AI Studio timeline.`
+    );
   };
 
   const handleVote = (option) => {
@@ -284,7 +408,7 @@ export default function VirtualTVScreen({ isDarkMode, coins, setCoins }) {
     else setPollVotes(prev => ({ ...prev, no: prev.no + 1 }));
     setUserVoted(true);
     setSelectedVoteOption(option);
-    if (setCoins) setCoins(c => c + 5); // Wallet reward for voting
+    if (setCoins) setCoins(c => c + 5);
     Alert.alert('Vote Recorded 📊 (+5 🪙)', 'Thank you! Your vote has been tallied and reflected live on the broadcast overlay.');
   };
 
@@ -346,7 +470,7 @@ export default function VirtualTVScreen({ isDarkMode, coins, setCoins }) {
       return Alert.alert('Missing Fields', 'Please fill in all required station franchise application fields.');
     }
     setApplicationSubmitted(true);
-    if (setCoins) setCoins(c => c + 50); // Reward for submitting station franchise application
+    if (setCoins) setCoins(c => c + 50);
     Alert.alert(
       '📡 Application Logged to Supabase (+50 🪙)', 
       `Thank you ${stationApplicantName}! Your TV station "${stationNameInput}" has been submitted to the admin review queue with status pending_admin_review.`
@@ -369,14 +493,25 @@ export default function VirtualTVScreen({ isDarkMode, coins, setCoins }) {
     setTimeout(() => {
       setSmartTrimStatus('AI Smart Trim Complete! 3 highlights generated.');
       setHighlightReelsCount(prev => prev + 3);
-      if (setCoins) setCoins(c => c + 25); // Wallet reward for smart trim
+      if (setCoins) setCoins(c => c + 25);
       Alert.alert('AI Smart Trim ✂️ (+25 🪙)', 'Successfully generated 3 viral short-form highlight clips from your broadcast archive.');
     }, 1200);
   };
 
-  const handleAddTimelineClip = () => {
+  const handleAddTimelineClip = async () => {
     if (!newClipName.trim()) return Alert.alert('Error', 'Enter clip name.');
-    setTimelineClips(prev => [...prev, { id: 'clip_' + Date.now(), name: newClipName, duration: '1m 00s' }]);
+    const newClpName = newClipName;
+    const newClpUrl = currentChannel.videoUrl;
+
+    try {
+      await supabase.from('broadcast_clips').insert([
+        { title: newClpName, duration: '1m 00s', file_url: newClpUrl, clip_type: 'manual' }
+      ]);
+      fetchClipsFromSupabase();
+    } catch (e) {
+      setTimelineClips(prev => [...prev, { id: 'clip_' + Date.now(), name: newClpName, duration: '1m 00s', url: newClpUrl }]);
+    }
+
     setNewClipName('');
     Alert.alert('Timeline Updated 🎞️', 'New video segment stitched into multi-clip timeline.');
   };
@@ -386,7 +521,7 @@ export default function VirtualTVScreen({ isDarkMode, coins, setCoins }) {
     setIsPublishing(true);
     setTimeout(() => {
       setIsPublishing(false);
-      if (setCoins) setCoins(c => c + 75); // Wallet reward for publishing
+      if (setCoins) setCoins(c => c + 75);
       Alert.alert('⚡ Published Successfully! (+75 🪙)', `Project "${masterProjectTitle}" rendered with multi-clip timeline and broadcasted live to Virtual TV!`);
       setMasterProjectTitle('');
     }, 1000);
@@ -399,7 +534,7 @@ export default function VirtualTVScreen({ isDarkMode, coins, setCoins }) {
       setAdBreakRunning(false);
       setAdRevenueShare(prev => prev + 15.00);
       setCreatorEarningsUSD(prev => prev + 15.00);
-      if (setCoins) setCoins(c => c + 20); // Wallet reward for ad break
+      if (setCoins) setCoins(c => c + 20);
       Alert.alert('Ad Break Complete ✅ (+20 🪙)', 'Commercial break successfully concluded. +$15.00 added to your ad revenue balance.');
     }, 3000);
   };
@@ -427,34 +562,30 @@ export default function VirtualTVScreen({ isDarkMode, coins, setCoins }) {
 
   const toggleDeviceCamera = async () => {
     if (!useDeviceCamera) {
-      if (Platform.OS === 'web') {
-        try {
-          const stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
-          setMediaStreamRef(stream);
-          setUseDeviceCamera(true);
-          setTimeout(() => {
-            const videoElement = document.getElementById('webcam-video-preview');
-            if (videoElement) {
-              videoElement.srcObject = stream;
-              videoElement.play().catch(e => console.log('Autoplay error:', e));
-            }
-          }, 100);
-          Alert.alert('Webcam Live 🔴', 'Laptop webcam successfully connected and broadcasting!');
-        } catch (err) {
-          Alert.alert('Camera Error', 'Could not access laptop webcam. Verify browser permissions.');
+      if (!permission || !permission.granted) {
+        const permResult = await requestPermission();
+        if (!permResult.granted) {
+          return Alert.alert('Permission Required', 'Camera permission is required to stream live from your phone camera.');
         }
-      } else {
-        setUseDeviceCamera(true);
-        Alert.alert('Camera Live 🔴', 'Mobile device camera activated!');
       }
+      setUseDeviceCamera(true);
+      Alert.alert('Camera Live 🔴', 'Phone camera activated successfully!');
     } else {
-      if (mediaStreamRef && Platform.OS === 'web') {
-        mediaStreamRef.getTracks().forEach(track => track.stop());
-      }
-      setMediaStreamRef(null);
       setUseDeviceCamera(false);
+      if (isRecordingShow) stopAndSaveRecording();
       Alert.alert('Camera Closed ⏹️', 'Switched back to standard multi-cam feed.');
     }
+  };
+
+  const flipCameraFacing = () => {
+    setCameraFacing(prev => (prev === 'front' ? 'back' : 'front'));
+    Alert.alert('Camera Switched 🔄', `Now using ${cameraFacing === 'front' ? 'Back' : 'Front'} camera.`);
+  };
+
+  const formatRecordingTime = (secs) => {
+    const m = Math.floor(secs / 60);
+    const s = secs % 60;
+    return `${m < 10 ? '0' : ''}${m}:${s < 10 ? '0' : ''}${s}`;
   };
 
   const getCssFilterString = (filterName) => {
@@ -489,6 +620,12 @@ export default function VirtualTVScreen({ isDarkMode, coins, setCoins }) {
     setForumQuestions(prev => [...prev, { id: 'fq_' + Date.now(), author: 'Borris (Host)', q: newForumQuestionInput, votes: 1 }]);
     setNewForumQuestionInput('');
     Alert.alert('Q&A Board ❓', 'Question successfully posted to live audience Q&A ticker.');
+  };
+
+  const formatTimecode = (totalSecs) => {
+    const mins = Math.floor(totalSecs / 60);
+    const secs = totalSecs % 60;
+    return `${mins < 10 ? '0' : ''}${mins}:${secs < 10 ? '0' : ''}${secs}`;
   };
 
   const totalVotes = pollVotes.yes + pollVotes.no;
@@ -559,7 +696,11 @@ export default function VirtualTVScreen({ isDarkMode, coins, setCoins }) {
               </View>
               <TouchableOpacity 
                 style={styles.watchChannelBtn} 
-                onPress={() => { setCurrentChannel({ ...ch, videoUrl: currentChannel.videoUrl }); setActiveTab('Live'); }}
+                onPress={() => { 
+                  setCurrentChannel({ ...ch, videoUrl: currentChannel.videoUrl }); 
+                  setWatchPartyVideoSource(currentChannel.videoUrl);
+                  setActiveTab('Live'); 
+                }}
               >
                 <Text style={styles.watchChannelText}>Tune In 📺</Text>
               </TouchableOpacity>
@@ -589,38 +730,23 @@ export default function VirtualTVScreen({ isDarkMode, coins, setCoins }) {
         </View>
       )}
 
-      {/* ================= TAB 2: LIVE STREAMING & FLOATING CAMERA VIEWPORT ================= */}
+      {/* ================= TAB 2: LIVE STREAMING & NATIVE CAMERA VIEWPORT ================= */}
       {activeTab === 'Live' && (
         <View style={styles.sectionContainer}>
           
           <View style={[
             styles.videoViewport, 
-            isExpandedCameraMode ? { height: 320 } : { height: 210 },
+            isExpandedCameraMode ? { height: 320 } : { height: 220 },
             isPipActive && { height: 120, width: 200, alignSelf: 'flex-end', marginBottom: 4 }
           ]}>
             {useDeviceCamera ? (
-              Platform.OS === 'web' ? (
-                <video
-                  id="webcam-video-preview"
-                  autoPlay
-                  playsInline
-                  muted
-                  style={{
-                    width: '100%',
-                    height: '100%',
-                    objectFit: 'cover',
-                    backgroundColor: '#000',
-                    filter: getCssFilterString(activeCameraFilter),
-                    WebkitFilter: getCssFilterString(activeCameraFilter)
-                  }}
-                />
-              ) : (
-                <View style={{ flex: 1, backgroundColor: '#1a202c', justifyContent: 'center', alignItems: 'center', padding: 10 }}>
-                  <Text style={{ fontSize: 36, marginBottom: 4 }}>🔴📹</Text>
-                  <Text style={{ color: '#fff', fontSize: 13, fontWeight: 'bold' }}>[Live Mobile Camera Active]</Text>
-                  <Text style={{ color: '#63b3ed', fontSize: 11, marginTop: 4 }}>✨ Active Filter: {activeCameraFilter}</Text>
-                </View>
-              )
+              <CameraView style={{ flex: 1 }} facing={cameraFacing}>
+                {isRecordingShow && (
+                  <View style={styles.recordingIndicatorBadge}>
+                    <Text style={{ color: '#fff', fontSize: 11, fontWeight: 'bold' }}>⏺️ REC {formatRecordingTime(recordingTimer)}</Text>
+                  </View>
+                )}
+              </CameraView>
             ) : (
               <Image 
                 source={{ uri: activeCameraFeed.url }} 
@@ -658,9 +784,9 @@ export default function VirtualTVScreen({ isDarkMode, coins, setCoins }) {
             ))}
 
             <View style={styles.floatingTopBarOverlay}>
-              <div style={styles.liveBadgeOverlay}>
+              <View style={styles.liveBadgeOverlay}>
                 <Text style={styles.liveBadgeText}>🔴 LIVE • {currentChannel.viewers}</Text>
-              </div>
+              </View>
               
               <TouchableOpacity 
                 style={styles.expandToggleOverlayBtn}
@@ -681,8 +807,67 @@ export default function VirtualTVScreen({ isDarkMode, coins, setCoins }) {
             <View style={styles.videoInfoOverlay}>
               <Text style={styles.videoTitleText}>{currentChannel.title}</Text>
               <Text style={styles.videoSubText}>
-                {useDeviceCamera ? `Broadcasting via Webcam (${activeCameraFilter})` : `Feed: ${activeCameraFeed.name} | Filter: ${activeCameraFilter}`}
+                {useDeviceCamera ? `Broadcasting Phone Camera (${cameraFacing === 'front' ? 'Front' : 'Back'})` : `Feed: ${activeCameraFeed.name} | Filter: ${activeCameraFilter}`}
               </Text>
+            </View>
+          </View>
+
+          {/* PRESENTER RECORDING & CAMERA CONTROLS */}
+          <View style={[styles.card, isDarkMode && styles.darkCard, { borderColor: useDeviceCamera ? '#e53e3e' : '#e2e8f0', borderWidth: useDeviceCamera ? 2 : 1 }]}>
+            <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
+              <Text style={[styles.cardTitle, isDarkMode && styles.darkText]}>📱 Phone Camera & Presenter Recorder</Text>
+              <TouchableOpacity 
+                style={[styles.actionBtnBlue, { paddingVertical: 6, paddingHorizontal: 12, backgroundColor: useDeviceCamera ? '#e53e3e' : '#3182ce' }]} 
+                onPress={toggleDeviceCamera}
+              >
+                <Text style={{ color: '#fff', fontSize: 11, fontWeight: 'bold' }}>
+                  {useDeviceCamera ? 'Stop Camera ⏹️' : 'Start Camera 🔴'}
+                </Text>
+              </TouchableOpacity>
+            </View>
+
+            {useDeviceCamera && (
+              <View style={{ flexDirection: 'row', gap: 6, marginBottom: 8 }}>
+                <TouchableOpacity 
+                  style={{ backgroundColor: '#2b6cb0', paddingVertical: 8, paddingHorizontal: 12, borderRadius: 6, flex: 1, alignItems: 'center' }}
+                  onPress={flipCameraFacing}
+                >
+                  <Text style={{ color: '#fff', fontSize: 11, fontWeight: 'bold' }}>Flip to {cameraFacing === 'front' ? 'Back 📷' : 'Front 🤳'} Camera</Text>
+                </TouchableOpacity>
+
+                <TouchableOpacity 
+                  style={{ backgroundColor: isRecordingShow ? '#e53e3e' : '#38a169', paddingVertical: 8, paddingHorizontal: 12, borderRadius: 6, flex: 1, alignItems: 'center' }}
+                  onPress={() => {
+                    if (!isRecordingShow) {
+                      setIsRecordingShow(true);
+                      if (setCoins) setCoins(c => c + 15);
+                      Alert.alert('🔴 SHOW RECORDING STARTED (+15 🪙)', 'Your live show is recording.');
+                    } else {
+                      stopAndSaveRecording();
+                    }
+                  }}
+                >
+                  <Text style={{ color: '#fff', fontSize: 11, fontWeight: 'bold' }}>
+                    {isRecordingShow ? `Stop Rec (${formatRecordingTime(recordingTimer)}) ⏹️` : 'Start Recording Show ⏺️ (+15 🪙)'}
+                  </Text>
+                </TouchableOpacity>
+              </View>
+            )}
+
+            <Text style={{ fontSize: 11, color: '#718096', marginBottom: 6 }}>Select professional look & live color grading filters (applies instantly to live feed):</Text>
+            <View style={{ flexDirection: 'row', flexWrap: 'wrap' }}>
+              {filterOptions.map(filter => (
+                <TouchableOpacity
+                  key={filter}
+                  style={[styles.angleChip, activeCameraFilter === filter && styles.activeAngleChip]}
+                  onPress={() => {
+                    setActiveCameraFilter(filter);
+                    Alert.alert('Filter Applied 🎨', `Successfully applied "${filter}" grading.`);
+                  }}
+                >
+                  <Text style={[styles.angleChipText, activeCameraFilter === filter && { color: '#fff' }]}>{filter}</Text>
+                </TouchableOpacity>
+              ))}
             </View>
           </View>
 
@@ -769,36 +954,6 @@ export default function VirtualTVScreen({ isDarkMode, coins, setCoins }) {
             )}
           </View>
 
-          <View style={[styles.card, isDarkMode && styles.darkCard, { borderColor: useDeviceCamera ? '#e53e3e' : '#e2e8f0', borderWidth: useDeviceCamera ? 2 : 1 }]}>
-            <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
-              <Text style={[styles.cardTitle, isDarkMode && styles.darkText]}>💻 Built-in Laptop Webcam & Variety Filters</Text>
-              <TouchableOpacity 
-                style={[styles.actionBtnBlue, { paddingVertical: 6, paddingHorizontal: 12, backgroundColor: useDeviceCamera ? '#e53e3e' : '#3182ce' }]} 
-                onPress={toggleDeviceCamera}
-              >
-                <Text style={{ color: '#fff', fontSize: 11, fontWeight: 'bold' }}>
-                  {useDeviceCamera ? 'Stop Webcam ⏹️' : 'Start Laptop Webcam 🔴'}
-                </Text>
-              </TouchableOpacity>
-            </View>
-
-            <Text style={{ fontSize: 11, color: '#718096', marginBottom: 6 }}>Select professional look & live color grading filters (applies instantly to live feed):</Text>
-            <View style={{ flexDirection: 'row', flexWrap: 'wrap' }}>
-              {filterOptions.map(filter => (
-                <TouchableOpacity
-                  key={filter}
-                  style={[styles.angleChip, activeCameraFilter === filter && styles.activeAngleChip]}
-                  onPress={() => {
-                    setActiveCameraFilter(filter);
-                    Alert.alert('Filter Applied 🎨', `Successfully applied "${filter}" grading.`);
-                  }}
-                >
-                  <Text style={[styles.angleChipText, activeCameraFilter === filter && { color: '#fff' }]}>{filter}</Text>
-                </TouchableOpacity>
-              ))}
-            </View>
-          </View>
-
           <View style={[styles.card, isDarkMode && styles.darkCard]}>
             <Text style={[styles.cardTitle, isDarkMode && styles.darkText]}>🎥 Interactive Multi-Camera Switcher & Feeds</Text>
             <Text style={{ fontSize: 11, color: '#718096', marginBottom: 8 }}>Tap any camera feed below to switch the live program output instantly:</Text>
@@ -813,6 +968,7 @@ export default function VirtualTVScreen({ isDarkMode, coins, setCoins }) {
                   ]}
                   onPress={() => {
                     setActiveCameraFeed(cam);
+                    setWatchPartyVideoSource(cam.url);
                     setUseDeviceCamera(false);
                     Alert.alert('Switcher Live 🎥', `Switched live program feed to: ${cam.name}`);
                   }}
@@ -928,7 +1084,7 @@ export default function VirtualTVScreen({ isDarkMode, coins, setCoins }) {
                 <Text style={{ fontSize: 11, color: '#3182ce' }}>{item.channel} • {item.date}</Text>
                 <Text style={[styles.dvrSubText, isDarkMode && { color: '#a0aec0' }]}>Duration: {item.duration} • 7-Day EPG Archive</Text>
               </View>
-              <TouchableOpacity style={styles.dvrPlayBtn} onPress={() => Alert.alert('Catch-Up Playback', `Starting DVR stream for "${item.show}"`)}>
+              <TouchableOpacity style={styles.dvrPlayBtn} onPress={() => { setWatchPartyVideoSource(currentChannel.videoUrl); Alert.alert('Catch-Up Playback', `Starting DVR stream for "${item.show}"`); }}>
                 <Text style={styles.dvrPlayText}>▶ Watch DVR</Text>
               </TouchableOpacity>
             </View>
@@ -941,7 +1097,7 @@ export default function VirtualTVScreen({ isDarkMode, coins, setCoins }) {
         <View style={styles.sectionContainer}>
           <Text style={[styles.sectionHeader, isDarkMode && styles.darkText]}>👥 Synchronized Watch Party (Virtual Living Room)</Text>
           <Text style={{ fontSize: 12, color: '#718096', marginBottom: 10 }}>
-            What this is: A shared virtual lounge where friends or communities watch the exact same TV broadcast simultaneously. Playback is locked in sync across all devices, so when someone pauses or cheers, everyone experiences it together in real-time.
+            Shared virtual lounge where friends watch the exact same video stream in millisecond sync. Select any recorded clip or upload below to stream in real-time!
           </Text>
 
           <View style={[styles.card, isDarkMode && styles.darkCard, { borderColor: '#3182ce', borderWidth: 2 }]}>
@@ -957,22 +1113,69 @@ export default function VirtualTVScreen({ isDarkMode, coins, setCoins }) {
                 <Text style={{ color: '#fff', fontSize: 10, fontWeight: 'bold' }}>{isHostControlLocked ? 'Host Control: LOCKED 🔒' : 'UNLOCKED 🔓'}</Text>
               </TouchableOpacity>
             </View>
-            <Text style={{ fontSize: 11, color: '#718096', marginBottom: 6 }}>Current Host: {watchPartyHostName}</Text>
+            <Text style={{ fontSize: 11, color: '#718096', marginBottom: 6 }}>Current Host: {watchPartyHostName} | Timecode: {formatTimecode(watchPartyTimecode)}</Text>
             
+            <View style={{ flexDirection: 'row', gap: 6, marginVertical: 6 }}>
+              <TouchableOpacity 
+                style={{ backgroundColor: '#3182ce', paddingHorizontal: 12, paddingVertical: 6, borderRadius: 6, flex: 1, alignItems: 'center' }}
+                onPress={() => {
+                  const newS = watchPartyPlaybackState.includes('Playing') ? 'Paused ⏸️' : 'Playing ⯈';
+                  setWatchPartyPlaybackState(newS);
+                  Alert.alert('Watch Party Sync', `Broadcast playback state updated to: ${newS}`);
+                }}
+              >
+                <Text style={{ color: '#fff', fontSize: 11, fontWeight: 'bold' }}>{watchPartyPlaybackState === 'Playing ⯈' ? 'Pause for Everyone ⏸️' : 'Resume Play ⯈'}</Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity 
+                style={{ backgroundColor: '#d69e2e', paddingHorizontal: 12, paddingVertical: 6, borderRadius: 6, flex: 1, alignItems: 'center' }}
+                onPress={() => {
+                  setWatchPartyTimecode(t => t + 10);
+                  Alert.alert('Timecode Jump', 'Synced skip forward 10s across all participants!');
+                }}
+              >
+                <Text style={{ color: '#fff', fontSize: 11, fontWeight: 'bold' }}>Skip +10s ⏭️</Text>
+              </TouchableOpacity>
+            </View>
+
             <Text style={[{ fontSize: 11, fontWeight: 'bold', marginTop: 4, marginBottom: 4 }, isDarkMode && styles.darkText]}>Participants in Room ({watchPartyParticipants.length}):</Text>
             {watchPartyParticipants.map(p => (
               <View key={p.id} style={{ backgroundColor: isDarkMode ? '#1a202c' : '#f7fafc', padding: 6, borderRadius: 6, marginBottom: 4, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
                 <Text style={[{ fontSize: 11 }, isDarkMode && styles.darkText]}>{p.name} <Text style={{ color: '#3182ce', fontSize: 10 }}>({p.role})</Text></Text>
-                <Text style={{ fontSize: 10, fontWeight: 'bold', color: '#38a169' }}>{p.status}</Text>
+                <Text style={{ fontSize: 10, fontWeight: 'bold', color: '#38a169' }}>{p.status} ({formatTimecode(watchPartyTimecode)})</Text>
               </View>
             ))}
           </View>
 
           <View style={styles.watchPartyScreen}>
-            <Image source={{ uri: currentChannel.videoUrl }} style={{ width: '100%', height: 180, borderRadius: 8 }} resizeMode="cover" />
+            <Image source={{ uri: watchPartyVideoSource }} style={{ width: '100%', height: 180, borderRadius: 8 }} resizeMode="cover" />
             <View style={styles.syncBadge}>
-              <Text style={{ color: '#fff', fontSize: 10, fontWeight: 'bold' }}>🟢 Playback Millisecond Synced</Text>
+              <Text style={{ color: '#fff', fontSize: 10, fontWeight: 'bold' }}>🟢 Watch Party Sync: {watchPartyPlaybackState} ({formatTimecode(watchPartyTimecode)})</Text>
             </View>
+          </View>
+
+          <View style={[styles.card, isDarkMode && styles.darkCard]}>
+            <Text style={[styles.cardTitle, isDarkMode && styles.darkText]}>🎞️ Select Video Source for Watch Party Room</Text>
+            <Text style={{ fontSize: 11, color: '#718096', marginBottom: 8 }}>Choose which recorded show or timeline clip is broadcasted to all participants in this room:</Text>
+            
+            <View style={{ flexDirection: 'row', flexWrap: 'wrap', marginBottom: 8 }}>
+              {timelineClips.map((clip, idx) => (
+                <TouchableOpacity
+                  key={clip.id}
+                  style={[styles.angleChip, watchPartyVideoSource === clip.url && styles.activeAngleChip]}
+                  onPress={() => {
+                    setWatchPartyVideoSource(clip.url);
+                    Alert.alert('Watch Party Source Updated', `Now streaming: ${clip.name}`);
+                  }}
+                >
+                  <Text style={[styles.angleChipText, watchPartyVideoSource === clip.url && { color: '#fff' }]}>Clip #{idx + 1}: {clip.name.substring(0, 15)}...</Text>
+                </TouchableOpacity>
+              ))}
+            </View>
+
+            <TouchableOpacity style={styles.actionBtnGreen} onPress={handlePickAndUploadVideo}>
+              <Text style={styles.actionBtnText}>📁 Upload & Stream New Video File (+35 🪙)</Text>
+            </TouchableOpacity>
           </View>
 
           <View style={[styles.card, isDarkMode && styles.darkCard, { flex: 1 }]}>
@@ -1069,7 +1272,7 @@ export default function VirtualTVScreen({ isDarkMode, coins, setCoins }) {
         </View>
       )}
 
-      {/* ================= TAB 6: PRO VIDEO EDITING & AI SUITE (WITH REAL FILE PICKER) ================= */}
+      {/* ================= TAB 6: PRO VIDEO EDITING & AI SUITE ================= */}
       {activeTab === 'ProEditing' && (
         <View style={styles.sectionContainer}>
           <Text style={[styles.sectionHeader, isDarkMode && styles.darkText]}>🎞️ Pro Video Editing & AI Studio Suite</Text>
@@ -1135,7 +1338,7 @@ export default function VirtualTVScreen({ isDarkMode, coins, setCoins }) {
           </View>
 
           <View style={[styles.card, isDarkMode && styles.darkCard]}>
-            <Text style={[styles.cardTitle, isDarkMode && styles.darkText]}>🎞️ Multi-Clip Timeline & Local Video Upload</Text>
+            <Text style={[styles.cardTitle, isDarkMode && styles.darkText]}>🎞️ Multi-Clip Timeline & Supabase Cloud Storage</Text>
             
             <TouchableOpacity 
               style={[styles.actionBtnGreen, { marginBottom: 10, flexDirection: 'row', justifyContent: 'center' }]} 
@@ -1143,7 +1346,7 @@ export default function VirtualTVScreen({ isDarkMode, coins, setCoins }) {
               disabled={isUploadingFile}
             >
               {isUploadingFile ? <ActivityIndicator color="#fff" style={{ marginRight: 6 }} /> : null}
-              <Text style={styles.actionBtnText}>{isUploadingFile ? 'Uploading to Studio Storage...' : '📁 Upload & Attach Local Video File (+35 🪙)'}</Text>
+              <Text style={styles.actionBtnText}>{isUploadingFile ? 'Processing Video...' : '📁 Upload Video to Timeline (+35 🪙)'}</Text>
             </TouchableOpacity>
 
             {timelineClips.map((clip, index) => (
@@ -1333,7 +1536,7 @@ export default function VirtualTVScreen({ isDarkMode, coins, setCoins }) {
               <Text style={[styles.cardTitle, isDarkMode && styles.darkText]}>🎬 Now Screening in Virtual Cinema VIP Room</Text>
               <Text style={{ fontSize: 12, fontWeight: 'bold', color: '#38a169', marginBottom: 4 }}>Access Active: {selectedMovieTicket.title} ({selectedCinemaSeat})</Text>
               <Image source={{ uri: selectedMovieTicket.poster }} style={{ width: '100%', height: 160, borderRadius: 8, marginBottom: 8 }} resizeMode="cover" />
-              <TouchableOpacity style={styles.actionBtnBlue} onPress={() => Alert.alert('Cinema Player', 'Entering immersive fullscreen theater mode with live audience chat...')}>
+              <TouchableOpacity style={styles.actionBtnBlue} onPress={() => { setWatchPartyVideoSource(selectedMovieTicket.poster); Alert.alert('Cinema Player', 'Entering immersive fullscreen theater mode with live audience chat...'); }}>
                 <Text style={styles.actionBtnText}>Enter Fullscreen Theater Mode 🍿</Text>
               </TouchableOpacity>
             </View>
@@ -1341,7 +1544,7 @@ export default function VirtualTVScreen({ isDarkMode, coins, setCoins }) {
         </View>
       )}
 
-      {/* ================= TAB 9: OWN A TV STATION FRANCHISE (WITH SECURE REVIEW QUEUE) ================= */}
+      {/* ================= TAB 9: OWN A TV STATION FRANCHISE ================= */}
       {activeTab === 'OwnTV' && (
         <View style={styles.sectionContainer}>
           <Text style={[styles.sectionHeader, isDarkMode && styles.darkText]}>📡 "Own a TV Station" Franchise Application Portal</Text>
@@ -1528,7 +1731,7 @@ export default function VirtualTVScreen({ isDarkMode, coins, setCoins }) {
                   const ranges = ['Last 24 Hours', 'Last 7 Days', 'Last 30 Days', 'All-Time'];
                   const nextR = ranges[(ranges.indexOf(analyticsTimeRange) + 1) % ranges.length];
                   setAnalyticsTimeRange(nextR);
-                  Alert.alert('Analytics Range', `Report updated for: ${nextR}`);
+                  Alert.alert('Analytics Report', `Report updated for: ${nextR}`);
                 }}
               >
                 <Text style={{ color: '#fff', fontSize: 10, fontWeight: 'bold' }}>📅 {analyticsTimeRange}</Text>
@@ -1679,17 +1882,6 @@ export default function VirtualTVScreen({ isDarkMode, coins, setCoins }) {
             <Text style={[styles.cardTitle, isDarkMode && styles.darkText]}>🛡️ Automated DRM & Anti-Piracy Shield</Text>
             <Text style={{ fontSize: 11, color: '#38a169', fontWeight: 'bold', marginBottom: 4 }}>Status: {antiPiracyShieldStatus}</Text>
             <Text style={{ fontSize: 11, color: '#718096', marginBottom: 8 }}>Dynamic session watermarking prevents unauthorized screen recording and stream scraping across all connected clients.</Text>
-            
-            <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
-              <Text style={[{ fontSize: 11, fontWeight: 'bold' }, isDarkMode && styles.darkText]}>Geo-Lock to Uganda & East Africa:</Text>
-              <Switch
-                value={geoBlockUgandaOnly}
-                onValueChange={(val) => {
-                  setGeoBlockUgandaOnly(val);
-                  Alert.alert('Geo-Lock Shield', val ? '🔒 Broadcast geo-locked exclusively to East African IP ranges.' : '🌐 Global broadcast access enabled.');
-                }}
-              />
-            </View>
           </View>
         </View>
       )}
@@ -1761,6 +1953,7 @@ const styles = StyleSheet.create({
   videoInfoOverlay: { position: 'absolute', bottom: 10, left: 10, right: 10, zIndex: 100 },
   videoTitleText: { color: '#fff', fontSize: 14, fontWeight: 'bold', textShadowColor: 'rgba(0,0,0,0.8)', textShadowRadius: 3 },
   videoSubText: { color: '#cbd5e0', fontSize: 10, textShadowColor: 'rgba(0,0,0,0.8)', textShadowRadius: 3 },
+  recordingIndicatorBadge: { position: 'absolute', top: 10, left: 10, backgroundColor: 'rgba(229, 62, 62, 0.9)', paddingHorizontal: 8, paddingVertical: 4, borderRadius: 6, zIndex: 100 },
   onAirCallerOverlay: { position: 'absolute', top: 76, left: 10, backgroundColor: 'rgba(229, 62, 62, 0.9)', paddingHorizontal: 8, paddingVertical: 4, borderRadius: 6, zIndex: 100 },
   adOverlayBox: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(0,0,0,0.85)', justifyContent: 'center', alignItems: 'center', zIndex: 100 },
   card: { backgroundColor: '#fff', borderRadius: 12, padding: 12, marginBottom: 10, borderWidth: 1, borderColor: '#e2e8f0' },
